@@ -14,8 +14,8 @@ Markdown table ready to copy into SFDC.
 HOW TO USE IT
 -------------
 1. Go to the "EA Activity" tab in the app header.
-2. Select the account folder you want to report on (e.g. "L3Harris",
-   "Northrop Grumman", "Frontgrade").
+2. Select the account folder you want to report on (e.g. "Beacon Systems",
+   "Cardinal Defense", "Delta Microsystems").
 3. Click "Scan Folder" — the app loads all notes dated within the past
    3 months.
 4. (Optional) Review the keyword scrub panel. Any lines flagged as
@@ -72,7 +72,7 @@ TYPE: Internal Alignment & Collaboration
 
 TYPE: Onboarding & Kick-Off
   (EA Admins = customer-side IT contacts who manage the EA, e.g. at
-   Frontgrade, LM, NGC, L3Harris — NOT NI employees)
+   Delta, Acme, Cardinal, Beacon — NOT NI employees)
   Subtypes: EA Admin Onboarding | EA End-User Kick-Off | Other
 
 TYPE: Strategic Relationship Management

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatCost } from "@/lib/pricing";
+import { formatCost } from "@/lib/models";
 import { rowsToMarkdown } from "@/lib/activityRows";
 
 const COMMENT_LIMIT = 800;

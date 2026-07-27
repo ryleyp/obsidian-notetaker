@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { DEFAULT_ACCOUNTS } from "@/lib/accounts";
 import { apiFetch, approveLocalPaths } from "@/lib/apiClient";
+import ModelPicker from "@/components/ModelPicker";
 
 const CONFIG_VERSION = 1;
 
@@ -27,6 +28,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
     transcriptsPath: settings.transcriptsPath || "",
     apiKey: settings.apiKey || "",
     aiPrivacyScan: settings.aiPrivacyScan !== false,
+    ownerNamesText: (settings.ownerNames || []).join(", "),
     model: settings.model || "claude-haiku-4-5",
     replacements: settings.replacements || [],
     corrections: settings.corrections || [],
@@ -70,7 +72,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
         accounts: JSON.stringify(formAccounts()),
       });
       if (form.transcriptsPath.trim()) params.set("transcriptsPath", form.transcriptsPath.trim());
-      const res = await fetch(`/api/suggest-keywords?${params}`);
+      const res = await apiFetch(`/api/suggest-keywords?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Scan failed");
       setSuggestions(data.suggestions || {});
@@ -233,9 +235,11 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       transcriptsPath: form.transcriptsPath.trim(),
       apiKey: form.apiKey.trim(),
       aiPrivacyScan: form.aiPrivacyScan,
+      ownerNames: form.ownerNamesText.split(",").map((n) => n.trim()).filter(Boolean),
       model: form.model,
       replacements: form.replacements,
       corrections: form.corrections,
+      ownerNames: form.ownerNamesText.split(",").map((n) => n.trim()).filter(Boolean),
       accounts: serializeAccounts(),
     });
   }
@@ -286,6 +290,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           apiKey: typeof cfg.apiKey === "string" && cfg.apiKey ? cfg.apiKey : f.apiKey,
           replacements: Array.isArray(cfg.replacements) ? cfg.replacements : f.replacements,
           corrections: Array.isArray(cfg.corrections) ? cfg.corrections : f.corrections,
+          ownerNamesText: Array.isArray(cfg.ownerNames) ? cfg.ownerNames.join(", ") : f.ownerNamesText,
           accounts: Array.isArray(cfg.accounts) && cfg.accounts.length
             ? cfg.accounts.map(accountToFormRow)
             : f.accounts,
@@ -428,28 +433,25 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
         </label>
 
         <div>
+          <label className="label">Your names (for action-item matching)</label>
+          <p className="text-xs text-gray-500 mb-2">
+            Comma-separated. Action items and next steps naming you — or a Customer Success / CSM role — are collected into the weekly ToDos file. Leave blank to match on role terms only.
+          </p>
+          <input
+            type="text"
+            className="input"
+            placeholder="e.g. Jordan, Jordy"
+            value={form.ownerNamesText}
+            onChange={(e) => handleChange("ownerNamesText", e.target.value)}
+          />
+        </div>
+
+        <div>
           <label className="label">Default Model</label>
           <p className="text-xs text-gray-500 mb-2">
-            Sonnet is more accurate; Haiku is ~3× cheaper (~$0.03/transcript vs ~$0.10).
+            Opus is the most capable; Sonnet balances quality and cost; Haiku is the cheapest and fastest.
           </p>
-          <div className="flex rounded-lg border border-gray-200 bg-white overflow-hidden w-fit">
-            {[
-              { id: "claude-haiku-4-5", label: "Haiku 4.5", sub: "3× cheaper · 200k ctx" },
-              { id: "claude-sonnet-4-6", label: "Sonnet 4.6", sub: "Best quality · 1M ctx" },
-            ].map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => handleChange("model", m.id)}
-                className={`px-4 py-2 text-left transition-colors ${
-                  form.model === m.id ? "bg-obsidian-600 text-white" : "text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                <div className="text-xs font-medium">{m.label}</div>
-                <div className={`text-xs ${form.model === m.id ? "text-obsidian-200" : "text-gray-400"}`}>{m.sub}</div>
-              </button>
-            ))}
-          </div>
+          <ModelPicker model={form.model} setModel={(id) => handleChange("model", id)} />
         </div>
 
         <div>
@@ -482,7 +484,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
             <input
               type="text"
               className="input flex-1"
-              placeholder="Original (e.g. Lockheed)"
+              placeholder="Original (e.g. Acme)"
               value={newOriginal}
               onChange={(e) => setNewOriginal(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addReplacement()}
@@ -572,7 +574,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
                   <input
                     type="text"
                     className="input flex-1"
-                    placeholder="Account name (e.g. Northrop Grumman)"
+                    placeholder="Account name (e.g. Acme Aerospace)"
                     value={a.name}
                     onChange={(e) => updateAccount(i, "name", e.target.value)}
                   />
@@ -589,14 +591,14 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
                 <input
                   type="text"
                   className="input"
-                  placeholder="Archive folder (e.g. NGC Transcripts)"
+                  placeholder="Archive folder (e.g. Acme Transcripts)"
                   value={a.archiveFolder}
                   onChange={(e) => updateAccount(i, "archiveFolder", e.target.value)}
                 />
                 <input
                   type="text"
                   className="input"
-                  placeholder="Aliases, comma-separated (e.g. northrop, ngc)"
+                  placeholder="Aliases, comma-separated (e.g. acme, aac)"
                   value={a.aliasesText}
                   onChange={(e) => updateAccount(i, "aliasesText", e.target.value)}
                 />

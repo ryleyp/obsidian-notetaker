@@ -29,7 +29,7 @@ npm test                                  # 23 vitest unit tests
 
 ## Key architecture
 - **Accounts & aliases** (`src/lib/accounts.js`): `DEFAULT_ACCOUNTS` maps each account to
-  name aliases (e.g. Northrop → `northrop`, `ngc`). Editable in Settings. `detectAccount()`
+  name aliases (e.g. Cardinal → `cardinal`, `cad`). Editable in Settings. `detectAccount()`
   resolves the picked folder → account; `textHasAlias()` does whole-word matching.
 - **Privacy** (`src/lib/sanitize.js`): `applyCorrections` → `applyReplacements` (real→alias)
   before sending to Claude, `reverseReplacements` (alias→real) on the way back. Word-boundary

@@ -14,7 +14,7 @@ export function lineContainsKeyword(line, keywords) {
 }
 
 // Every term tied to another account: its name, aliases, AND keywords.
-// Scrubbing only keywords let lines like "L3Harris asked about X" bleed into
+// Scrubbing only keywords let lines like "Beacon asked about X" bleed into
 // other accounts' reports. Internal reports legitimately span accounts, so
 // nothing is scrubbed there.
 export function getForbiddenKeywords(accountName, allAccounts) {

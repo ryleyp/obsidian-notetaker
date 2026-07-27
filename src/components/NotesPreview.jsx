@@ -3,7 +3,7 @@
 import { Children, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { formatCost } from "@/lib/pricing";
+import { formatCost } from "@/lib/models";
 import { extractReferencedSourceIds, sourceExcerpt } from "@/lib/sourceBundle";
 
 function textFromChildren(children) {

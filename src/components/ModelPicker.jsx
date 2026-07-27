@@ -1,6 +1,6 @@
 "use client";
 
-import { MODEL_OPTIONS } from "@/lib/pricing";
+import { MODEL_OPTIONS } from "@/lib/models";
 
 // Shared model selector. `compact` renders the one-line variant used in the
 // pre-flight header; the default renders label + sublabel stacked.

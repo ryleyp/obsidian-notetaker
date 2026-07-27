@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
+import { assertTrustedRequest } from "@/lib/requestSafety";
+import { firstTextBlock } from "@/lib/models";
 
 const MAX_SOURCE_CHARS = 300_000;
 const MAX_REPORT_CHARS = 60_000;
@@ -10,6 +12,8 @@ const MAX_REPORT_CHARS = 60_000;
 // unsupported, or contradicted claims.
 export async function POST(request) {
   try {
+    assertTrustedRequest(request);
+
     const body = await request.json();
     const { report, notes = [], accountName, allAccounts = [], replacements = [], corrections = [], restoredIds = [], apiKey } = body;
 
@@ -62,7 +66,7 @@ Report at most 10 problems, most serious first.`;
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = msg.content?.[0]?.text || "";
+    const text = firstTextBlock(msg);
     const findings = [];
     for (const line of text.split("\n")) {
       const t = line.trim();

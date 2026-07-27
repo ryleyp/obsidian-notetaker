@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
+import { assertTrustedRequest } from "@/lib/requestSafety";
+import { firstTextBlock } from "@/lib/models";
 
 const MAX_SOURCE_CHARS = 300_000;
 
@@ -10,6 +12,8 @@ const MAX_SOURCE_CHARS = 300_000;
 // rewritten to sound like the current account).
 export async function POST(request) {
   try {
+    assertTrustedRequest(request);
+
     const body = await request.json();
     const { rows = [], notes = [], accountName, allAccounts = [], replacements = [], corrections = [], restoredIds = [], apiKey } = body;
 
@@ -74,7 +78,7 @@ OUTPUT — one JSON object per line (NDJSON), no other text, one line per claim:
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = msg.content?.[0]?.text || "";
+    const text = firstTextBlock(msg);
     const verdicts = [];
     for (const line of text.split("\n")) {
       const t = line.trim();

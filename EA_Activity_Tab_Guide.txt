@@ -23,8 +23,8 @@ HOW ACTIVITIES GET CLASSIFIED
 A few rules drive how the app sorts your notes. Knowing these up front
 helps the output make sense.
 
-EA Admins are customer-side IT administrators (at companies like L3Harris,
-Northrop Grumman, Lockheed Martin, Frontgrade) who manage NI licensing and
+EA Admins are customer-side IT administrators (at companies like Beacon Systems,
+Cardinal Defense, Acme Aerospace, Delta Microsystems) who manage NI licensing and
 EA logistics for their company. They are not NI employees. Meetings with
 EA Admins are always treated as customer-facing, classified as either
 "EA Admin Sync" or "EA Admin Onboarding" depending on context.
@@ -94,8 +94,8 @@ A table with one row per reportable activity:
 
 Example rows:
 
-  | L3Harris | 2026-04-12 | Q2 Licensing Governance Sync | Strategic Relationship Management | EA Admin Sync | Sync with Dana Voss, IT Admin Lead, to lock down true-up ownership ahead of the Q3 renewal. Defined the handoff so the CSM owns the process post-deployment, reducing renewal risk. |
-  | L3Harris | 2026-05-03 | SystemLink Adoption Demo Day | User Groups | Demo Day | L3Harris SystemLink Demo Day | Region: Southeast | Attendees: 22. NI-led walkthrough of new dashboard features for the test engineering team. Outcome: surfaced two expansion conversations and strong engagement from the analytics group. |
+  | Beacon Systems | 2026-04-12 | Q2 Licensing Governance Sync | Strategic Relationship Management | EA Admin Sync | Sync with Dana Voss, IT Admin Lead, to lock down true-up ownership ahead of the Q3 renewal. Defined the handoff so the CSM owns the process post-deployment, reducing renewal risk. |
+  | Beacon Systems | 2026-05-03 | SystemLink Adoption Demo Day | User Groups | Demo Day | Beacon Systems SystemLink Demo Day | Region: Southeast | Attendees: 22. NI-led walkthrough of new dashboard features for the test engineering team. Outcome: surfaced two expansion conversations and strong engagement from the analytics group. |
 
 
 IF SOMETHING GOES WRONG

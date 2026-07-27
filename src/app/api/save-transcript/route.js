@@ -10,14 +10,12 @@ import {
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 
-// Legacy fallback when the caller doesn't send the accounts config.
-function mapFolder(selectedFolder) {
-  const f = (selectedFolder || "").toLowerCase();
-  if (f.includes("lockheed")) return "LM Transcripts";
-  if (f.includes("l3harris") || f.includes("l3 harris")) return "L3 Transcripts";
-  if (f.includes("northrop")) return "NGC Transcripts";
-  if (f.includes("frontgrade")) return "Frontgrade Transcripts";
-  return "Internal Transcripts";
+// Fallback when the caller doesn't send the accounts config. Derives the
+// archive folder from the configured account list rather than a hardcoded
+// customer roster, so no real account names live in source.
+function mapFolder(selectedFolder, accounts) {
+  const { archiveFolder } = detectAccount(selectedFolder, accounts);
+  return archiveFolder || "Internal Transcripts";
 }
 
 export async function POST(request) {
@@ -33,7 +31,7 @@ export async function POST(request) {
     // (editable per account in Settings); hardcoded names are only a
     // fallback for callers that don't send the accounts config.
     const archiveFolder =
-      (accounts?.length ? detectAccount(folder, accounts).archiveFolder : null) || mapFolder(folder);
+      (accounts?.length ? detectAccount(folder, accounts).archiveFolder : null) || mapFolder(folder, accounts);
 
     const resolvedBase = assertAllowedRoot(transcriptsPath, "Transcripts archive path");
     const dir = resolveInsideDirectory(resolvedBase, archiveFolder, "Archive folder");

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { detectAccount } from "@/lib/accounts";
 import { buildScrubReport, redactForbiddenTerms, assessNoteDominance } from "@/lib/scrub";
 import { reverseReplacements } from "@/lib/sanitize";
-import { calcCost } from "@/lib/pricing";
+import { calcCost } from "@/lib/models";
 import { apiFetch } from "@/lib/apiClient";
 
 export const TODAY = new Date().toISOString().split("T")[0];

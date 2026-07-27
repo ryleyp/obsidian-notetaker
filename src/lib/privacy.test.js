@@ -4,7 +4,7 @@ import { aliasesFromReplacements, buildSanitizePrompt, parseEntityList } from "@
 describe("aliasesFromReplacements", () => {
   it("returns only aliases, never original terms", () => {
     const aliases = aliasesFromReplacements([
-      { original: "Lockheed", alias: "ORG_1" },
+      { original: "Acme", alias: "ORG_1" },
       { original: "Jane Doe", alias: "PERSON_1" },
     ]);
 
@@ -17,7 +17,7 @@ describe("buildSanitizePrompt", () => {
     const prompt = buildSanitizePrompt("Met with ORG_1", ["ORG_1"]);
 
     expect(prompt).toContain("ORG_1");
-    expect(prompt).not.toContain("Lockheed");
+    expect(prompt).not.toContain("Acme");
     expect(prompt).toContain("Placeholder aliases");
   });
 });

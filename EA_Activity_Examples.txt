@@ -94,7 +94,7 @@ decision or outcome resulted.
 TYPE: Onboarding & Kick-Off
 -----------------------------
 Onboarding new admins or users. EA Admins are CUSTOMER-SIDE people
-(Frontgrade, LM, NGC, L3Harris, etc.) — not NI employees.
+(Delta, Acme, Cardinal, Beacon, etc.) — not NI employees.
 
   SUBTYPE: EA Admin Onboarding
   (onboarding a new customer-side EA Admin to EA scope, entitlements, governance)

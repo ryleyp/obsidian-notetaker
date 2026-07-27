@@ -45,8 +45,8 @@ outside the table. Each row is one activity.
 
 Column rules:
 - Event Date   the date of the email or meeting (YYYY-MM-DD)
-- Title        short descriptive name, e.g. "LM MFC Training Plan Sync",
-               "NGC CSM/FAE Account Interlock", "L3Harris EA Admin Onboarding"
+- Title        short descriptive name, e.g. "Acme Training Plan Sync",
+               "CAD CSM/FAE Account Interlock", "Beacon Systems EA Admin Onboarding"
 - Type         must exactly match one of the 6 Types in the taxonomy below
 - Subtype      must exactly match the correct Subtype within that Type
 - Comments     max 1,000 characters. CSM is the active subject ("CSM
@@ -61,7 +61,7 @@ For each activity, evaluate ALL 6 Types before selecting. Do not stop at
 the first one that seems to fit.
 
 IMPORTANT: EA Admins are customer-side IT administrators (at companies like
-L3Harris, Northrop Grumman, Lockheed Martin, Frontgrade) who manage NI
+Beacon Systems, Cardinal Defense, Acme Aerospace, Delta Microsystems) who manage NI
 licensing and EA logistics for their company. They are NOT NI employees.
 Any email or meeting involving an EA Admin is customer-facing — never
 classify it as Internal Alignment.
@@ -196,11 +196,11 @@ COMMENT REQUIREMENTS
 
 EXAMPLE INTERACTION
 --------------------
-User: "Generate my EA Activity Report for L3Harris"
+User: "Generate my EA Activity Report for Beacon Systems"
 
-Agent: [searches Outlook for emails involving L3Harris contacts from the
+Agent: [searches Outlook for emails involving Beacon Systems contacts from the
 past 3 months, then outputs the table]
 
 | Event Date | Title | Type | Subtype | Comments |
 |------------|-------|------|---------|----------|
-| 2026-04-12 | L3Harris EA Admin Sync — Q2 Renewal Alignment | Strategic Relationship Management | EA Admin Sync | CSM synced with Dana Voss, IT Admin Lead, to confirm true-up ownership and timeline ahead of Q3 renewal. Defined process handoff to reduce renewal risk. |
+| 2026-04-12 | Beacon Systems EA Admin Sync — Q2 Renewal Alignment | Strategic Relationship Management | EA Admin Sync | CSM synced with Dana Voss, IT Admin Lead, to confirm true-up ownership and timeline ahead of Q3 renewal. Defined process handoff to reduce renewal risk. |

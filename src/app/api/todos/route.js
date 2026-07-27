@@ -21,26 +21,39 @@ function extractDateFromTitle(title) {
   return match ? match[1] : null;
 }
 
-export function isRelevantItem(line) {
-  return /\b(Ryley|Riley|Customer Success|Customer Success Managers?|CSMs?)\b/i.test(line)
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Which action items belong to the note-taker. Role terms are generic, but the
+// personal names have to come from configuration — hardcoding one user's name
+// put personal data in a public repo and made the feature a no-op for everyone
+// else. ownerNames is supplied per request from Settings.
+export function isRelevantItem(line, ownerNames = []) {
+  const names = ownerNames.map((n) => String(n || "").trim()).filter(Boolean);
+  if (names.length) {
+    const namePattern = new RegExp(`\\b(${names.map(escapeRegex).join("|")})\\b`, "i");
+    if (namePattern.test(line)) return true;
+  }
+  return /\b(Customer Success|Customer Success Managers?|CSMs?)\b/i.test(line)
     || /\bCS\b/.test(line);
 }
 
-export function extractItems(notes) {
+export function extractItems(notes, ownerNames = []) {
   const result = { actionItems: [], nextSteps: [] };
 
   const actionMatch = notes.match(/## Action Items\n([\s\S]*?)(?=\n## |\n---\n|$)/);
   if (actionMatch) {
     result.actionItems = actionMatch[1]
       .split("\n")
-      .filter((l) => l.trim().startsWith("- ") && isRelevantItem(l));
+      .filter((l) => l.trim().startsWith("- ") && isRelevantItem(l, ownerNames));
   }
 
   const nextMatch = notes.match(/## Next Steps\n([\s\S]*?)(?=\n## |\n---\n|$)/);
   if (nextMatch) {
     result.nextSteps = nextMatch[1]
       .split("\n")
-      .filter((l) => l.trim().startsWith("- ") && isRelevantItem(l));
+      .filter((l) => l.trim().startsWith("- ") && isRelevantItem(l, ownerNames));
   }
 
   return result;
@@ -110,10 +123,10 @@ export async function POST(request) {
   try {
     assertTrustedRequest(request);
 
-    const { notes, vaultPath, meetingTitle } = await request.json();
+    const { notes, vaultPath, meetingTitle, ownerNames = [] } = await request.json();
     if (!notes || !vaultPath) return NextResponse.json({ ok: true });
 
-    const { actionItems, nextSteps } = extractItems(notes);
+    const { actionItems, nextSteps } = extractItems(notes, ownerNames);
     if (actionItems.length === 0 && nextSteps.length === 0) {
       return NextResponse.json({ ok: true, skipped: true });
     }

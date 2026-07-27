@@ -2,36 +2,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { dateSortValue } from "@/lib/synthesisPolicy";
-
-const MODEL_MAX_OUTPUT = {
-  "claude-opus-4-8": 32_000,
-  "claude-opus-4-7": 32_000,
-  "claude-opus-4-6": 32_000,
-  "claude-opus-4-5": 32_000,
-  "claude-sonnet-4-6": 16_000,
-  "claude-haiku-4-5": 8_192,
-};
-
-const MODEL_CONTEXT = {
-  "claude-opus-4-8": 1_000_000,
-  "claude-opus-4-7": 1_000_000,
-  "claude-opus-4-6": 1_000_000,
-  "claude-opus-4-5": 1_000_000,
-  "claude-sonnet-4-6": 1_000_000,
-  "claude-haiku-4-5": 200_000,
-};
-
-function maxOutputTokens(model) {
-  return MODEL_MAX_OUTPUT[model] || 8_192;
-}
-
-function contextTokens(model) {
-  return MODEL_CONTEXT[model] || 200_000;
-}
+import { DEFAULT_MODEL, budgetChars as modelBudgetChars, maxOutputTokens } from "@/lib/models";
 
 function budgetChars(model) {
-  const usableTokens = Math.floor((contextTokens(model) - maxOutputTokens(model) - 10_000) * 0.95);
-  return usableTokens * 4;
+  return modelBudgetChars(model, 10_000);
 }
 
 function sourceTag(note) {
@@ -247,7 +221,7 @@ export async function POST(request) {
       content: applyReplacements(applyCorrections(n.content, corrections), replacements),
     }));
 
-    const selectedModel = model || "claude-sonnet-4-6";
+    const selectedModel = model || DEFAULT_MODEL;
     const scrubbedNotes = scrubForbiddenKeywords(sanitizedNotes, accountName, allAccounts);
     const newestFirst = [...scrubbedNotes].sort((a, b) => noteDateKey(b).localeCompare(noteDateKey(a)));
     const { kept, dropped } = fitNotes(newestFirst, selectedModel);

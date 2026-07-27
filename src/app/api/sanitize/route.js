@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { buildSanitizePrompt, parseEntityList } from "@/lib/privacy";
 import { assertTrustedRequest } from "@/lib/requestSafety";
+import { firstTextBlock } from "@/lib/models";
 
 export async function POST(request) {
   try {
@@ -29,7 +30,7 @@ export async function POST(request) {
       messages: [{ role: "user", content: prompt }],
     });
 
-    const raw = msg.content[0]?.text?.trim() || "[]";
+    const raw = firstTextBlock(msg).trim() || "[]";
     const entities = parseEntityList(raw, knownAliases);
     return NextResponse.json({ entities });
   } catch {

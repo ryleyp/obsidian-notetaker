@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { assertTrustedRequest } from "@/lib/requestSafety";
+import { firstTextBlock } from "@/lib/models";
 
 const SYSTEM_PROMPT = `You segment raw, undifferentiated meeting transcripts into speaker turns by inferring shifts in who is speaking from conversational context. You have no audio and no ground truth — you are making an informed best-effort guess. Preserve the original wording exactly: never paraphrase, summarize, correct, or omit any text. Output ONLY the segmented transcript in the required format — no preamble, no commentary, no explanation.`;
 
@@ -26,6 +28,8 @@ ${transcript}`;
 
 export async function POST(request) {
   try {
+    assertTrustedRequest(request);
+
     const body = await request.json();
     const { transcript, apiKey, model } = body;
 
@@ -46,7 +50,7 @@ export async function POST(request) {
       messages: [{ role: "user", content: buildPrompt(transcript) }],
     });
 
-    const segmented = msg.content?.[0]?.text || "";
+    const segmented = firstTextBlock(msg);
     return new Response(JSON.stringify({ segmented, usage: msg.usage }), { headers: { "Content-Type": "application/json" } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error?.message || "Speaker detection failed" }), { status: error?.status || 500, headers: { "Content-Type": "application/json" } });

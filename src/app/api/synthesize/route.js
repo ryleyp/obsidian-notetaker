@@ -3,6 +3,13 @@ import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { BATCH_TEMPORAL_RULE, TEMPORAL_ACCURACY_RULE, dateSortValue } from "@/lib/synthesisPolicy";
+import {
+  DEFAULT_MODEL,
+  budgetChars,
+  contextLimit as contextTokens,
+  firstTextBlock,
+  maxOutputTokens,
+} from "@/lib/models";
 
 function buildExclusionList(accountName, allAccounts) {
   if (!allAccounts?.length) return "";
@@ -454,14 +461,14 @@ OUTPUT FORMAT — output ONLY newline-delimited JSON (NDJSON): exactly one JSON 
 Field rules:
 - **eventDate**: the date of the note this activity came from (YYYY-MM-DD, taken from the ### heading of the source)
 - **sourceTitle**: the exact title of the source note this activity came from, copied verbatim from its ### heading (the part after the date). Every row MUST cite its source.
-- **title**: short descriptive name matching the style of these real examples — "L3Harris RF User Group - March 2026", "CSM / FAE NGC Account Interlock", "NI Connect Promotional Email", "LM MFC Proficiency Plan - LabVIEW Core Training Scheduling"
+- **title**: short descriptive name matching the style of these real examples — "Beacon Systems RF User Group - March 2026", "CSM / FAE Cardinal Account Interlock", "NI Connect Promotional Email", "Acme Aerospace Proficiency Plan - LabVIEW Core Training Scheduling"
 - **type** and **subtype**: must exactly match one option from the taxonomy below
 - **comments**: max 800 characters. Write for an executive audience. CSM is the active subject (e.g. "CSM coordinated...", "CSM submitted..."). Name specific contacts and titles. Lead with what happened and why it matters. Connect to adoption, expansion, renewal, or risk.
 - **review**: set to true ONLY when you are genuinely unsure of the type/subtype classification (e.g. a session that could be either Demo Days or User Group), with a short reviewReason explaining the ambiguity. When confident, use false and an empty reviewReason.
 
 CLASSIFICATION PROCESS — for each activity, evaluate ALL 6 Type options before selecting. Do not stop at the first type that seems plausible:
 
-IMPORTANT DEFINITION — **EA Admin**: a customer-side IT administrator (employed by Frontgrade, Lockheed Martin, Northrop Grumman, L3Harris, etc.) who runs the EA or maintains NI licensing on their company's behalf. EA Admins are NOT NI employees. Any meeting with an EA Admin is a customer-facing activity — never Internal Alignment.
+IMPORTANT DEFINITION — **EA Admin**: a customer-side IT administrator (employed by the customer account, not by NI) who runs the EA or maintains NI licensing on their company's behalf. EA Admins are NOT NI employees. Any meeting with an EA Admin is a customer-facing activity — never Internal Alignment.
 NI-side roles are NOT EA Admins: AMs (Account Managers), FAEs (Field Application Engineers), CSMs, and any other NI employee. A meeting attended only by NI-side roles (e.g. a CSM/FAE or CSM/AM sync with no customer contact present) is Internal Alignment & Collaboration, NOT an EA Admin Sync. Only classify something as EA Admin Sync or EA Admin Onboarding when an actual customer-side EA Admin is involved.
 
 1. **Entitlement Awareness & Promotion** — Is this about promoting EA entitlement awareness or usage? (emails, newsletters, training plans, shared portals)
@@ -487,16 +494,16 @@ EA ENGAGEMENT TYPE TAXONOMY — use the EXACT text shown below for both Type and
     Example: "Launched NI Connect promotional email campaign to NGC contacts, targeting registration and identifying potential presenters for the NGC-sponsored session. Campaign supports expansion positioning."
   - MidTerm Reviews — formal midpoint EA review with the customer covering usage and ROI
   - Newsletters — quarterly newsletters to account contacts covering product highlights, events, training, key POCs
-    Example: "Distributed Q1 FY26 EA Quarterly Newsletter to L3Harris contacts. Content included NI product highlights, NI Connect event promotion, L3Harris-specific upcoming events, training resources, and key NI POC information. Reinforced EA value awareness."
+    Example: "Distributed Q1 FY26 EA Quarterly Newsletter to Beacon Systems contacts. Content included NI product highlights, NI Connect event promotion, Beacon-specific upcoming events, training resources, and key NI POC information. Reinforced EA value awareness."
   - Shared Space Set-up/Update — setting up or updating a shared portal or resource hub
   - Training/Support Plans — creating or scheduling a formal training plan across sites/teams
-    Example: "Sync with Jordan (GTS, LM MFC), Nicole, and Angelica (NI Education Services) to scope LabVIEW Core 1 and Core 2 training across MFC sites. MFC holds ~7,600 EA training credits over 3 years. Confirmed in-person, instructor-led format."
+    Example: "Sync with Jordan (GTS, Acme Aerospace), Priya, and Marcus (NI Education Services) to scope LabVIEW Core 1 and Core 2 training across Acme sites. Acme holds ~7,600 EA training credits over 3 years. Confirmed in-person, instructor-led format."
   - Training/Support Webinar — delivering a live training or support session to users
   - Other
 
 **Type: Internal Alignment & Collaboration** — NI-internal sessions (no customer present). Only log if a clear decision or outcome resulted:
   - Account Planning — CSM/FAE interlock, account strategy sessions, NI Connect planning calls, internal alignment that produced a defined outcome
-    Example: "CSM/FAE FY26 account interlock for Northrop Grumman. Reviewed CS focus areas, current usage data trends, and CS execution plan including site-level priorities. Identified specific gaps in FAE workflow where CSM provides strategic coverage."
+    Example: "CSM/FAE FY26 account interlock for Cardinal Defense. Reviewed CS focus areas, current usage data trends, and CS execution plan including site-level priorities. Identified specific gaps in FAE workflow where CSM provides strategic coverage."
   - Account Team Kick-Off — formal kickoff session with the full internal account team (CSM, FAE, AM, etc.)
     Example: "CSM/FAE Interlock for FY 2026, reviewing CS Focus Areas, overview of usage data trends, CS execution plans including site level and event calendar, and brainstorming session on where CS can help fill in gaps in the FAE workflow."
   - Product Feedback — internal session to escalate or document customer product feedback
@@ -504,15 +511,15 @@ EA ENGAGEMENT TYPE TAXONOMY — use the EXACT text shown below for both Type and
 
 **Type: Onboarding & Kick-Off** — onboarding new admins or users:
   - EA Admin Onboarding — onboarding a new customer-side EA Admin (customer IT administrator who runs the EA or maintains NI licensing for their company) to EA scope, entitlements, and governance. This is always a customer-facing meeting.
-    Example: "EA Admin onboarding session for two new L3Harris EA Admins who recently took over the role. Session covered the full scope of the EA (software entitlements, training credits, etc.), admin Q&A, and established understanding of internal processes."
+    Example: "EA Admin onboarding session for two new Beacon Systems EA Admins who recently took over the role. Session covered the full scope of the EA (software entitlements, training credits, etc.), admin Q&A, and established understanding of internal processes."
   - EA End-User Kick-Off — introduction or review of EA terms, entitlements, and inclusions with customer end users
   - Other
 
 **Type: Strategic Relationship Management** — high-touch customer-facing relationship and governance activities:
   - EA Admin Sync — recurring or ad-hoc sync with the customer-side EA Admin (customer IT administrator who runs the EA or maintains NI licensing for their company) or other key customer stakeholders. These contacts are NOT NI employees.
-    Example: "Frontgrade TestStand Pilot Check In and EA Renewal Alignment — Meeting with Marc Pevotaux to review pilot status and align on renewal timeline."
+    Example: "Delta Microsystems TestStand Pilot Check In and EA Renewal Alignment — Meeting with the EA Admin to review pilot status and align on renewal timeline."
   - Escalation/Risk Management — active risk mitigation, escalations, or at-risk situations
-    Example: "Active R&D escalation on behalf of Bret Ridgel (Northrop Grumman) related to a TKM505X IVI driver issue preventing LabVIEW control of the Tektronix MSO46B. Original FAE ticket stalled after R&D contacts left NI. CSM submitted an R&D Advocacy request to unblock."
+    Example: "Active R&D escalation on behalf of a test engineer at Cardinal Defense related to an IVI driver issue preventing LabVIEW control of a bench oscilloscope. Original FAE ticket stalled after R&D contacts left NI. CSM submitted an R&D Advocacy request to unblock."
   - QBRs/EBRs — formal quarterly or executive business review
   - Roadmap Review — session reviewing NI product roadmap with customer stakeholders
   - SLE Governance — SystemLink Enterprise governance meetings
@@ -521,7 +528,7 @@ EA ENGAGEMENT TYPE TAXONOMY — use the EXACT text shown below for both Type and
 **Type: User Groups** — group sessions with multiple attendees. Pick subtype based on who led the session:
   - Demo Days — NI-led session where NI/FAE presents or demos products to the customer
     Comment format: "[Title] — Region: [X], Attendees: [#]. [Description of session content and who led it.] Outcome: [adoption / expansion / risk reduction / customer momentum]"
-    Example: "L3Harris RF User Group — Region: AMER, Attendees: 22. FAE and AM led users through an overview of NI RF Hardware Platforms and demoed InstrumentStudio. Session targeted RF-focused sites. Outcome: Drove direct product exposure across the RF engineering community and generated adoption momentum at targeted sites."
+    Example: "Beacon Systems RF User Group — Region: AMER, Attendees: 22. FAE and AM led users through an overview of NI RF Hardware Platforms and demoed InstrumentStudio. Session targeted RF-focused sites. Outcome: Drove direct product exposure across the RF engineering community and generated adoption momentum at targeted sites."
   - User Group — customer-sponsored recurring session; may include NI content but customer drives cadence/agenda
     Comment format: "[Title] — Region: [X], Attendees: [#]. [Description]. Outcome: [impact]"
     Example: "LMS User Group — Region: AMER, Participants: TBD. Conducted an LMS user group session focused on important updates to the LMS NI EA and entitlements. Maintained customer momentum and reinforced awareness of EA value."
@@ -530,7 +537,7 @@ EA ENGAGEMENT TYPE TAXONOMY — use the EXACT text shown below for both Type and
 
 **Type: Value Realization & Success Stories** — capturing or communicating customer outcomes and ROI:
   - Case Study — written or formal case study in progress or completed
-    Example: "Initiated SystemLink case study with Eric Reek (IT Admin Lead, L3Harris) documenting the successful deployment of SystemLink Server at L3Harris Florida sites. Sessions held 3/11 and 3/12 to capture deployment scope, outcomes, and measurable value."
+    Example: "Initiated SystemLink case study with the IT Admin Lead at Beacon Systems documenting the successful deployment of SystemLink Server at their Florida sites. Sessions held 3/11 and 3/12 to capture deployment scope, outcomes, and measurable value."
   - Customer Testimonial — capturing a customer success quote or formal testimonial
   - Outcome Review — reviewing measured outcomes and value delivered
   - SLE ROI Review — formal ROI review specific to SystemLink Enterprise
@@ -540,7 +547,7 @@ EA ENGAGEMENT TYPE TAXONOMY — use the EXACT text shown below for both Type and
 
 COMMENT REQUIREMENTS:
 - Use "CSM" as the active subject (e.g., "CSM coordinated...", "CSM submitted...", "CSM/FAE interlock...") — never I/we/my
-- Name specific people by name and title when available (e.g., "Eric Reek, IT Admin Lead")
+- Name specific people by name and title when available (e.g., "Dana Whitfield, IT Admin Lead")
 - Every comment must answer: what happened, who was involved, and why it matters — do not just describe logistics
 - State outcomes explicitly: what did this drive? (adoption, expansion signal, renewal positioning, risk reduction, customer momentum)
 - Show CSM ownership and leadership — describe what CSM drove, defined, or decided, not just that a meeting occurred
@@ -555,42 +562,8 @@ SOURCES (${rangeLabel}):
 ${noteBlocks}`;
 }
 
-// Max output tokens per model. Sonnet 4.6 supports 16k; Haiku 4.5 caps at 8k.
-const MODEL_MAX_OUTPUT = {
-  "claude-opus-4-8": 32_000,
-  "claude-opus-4-7": 32_000,
-  "claude-opus-4-6": 32_000,
-  "claude-opus-4-5": 32_000,
-  "claude-sonnet-4-6": 16_000,
-  "claude-haiku-4-5": 8_192,
-};
-
-function maxOutputTokens(model) {
-  return MODEL_MAX_OUTPUT[model] || 8_192;
-}
-
-// Context window per model (input + output tokens). Sonnet 4.6 and the Opus
-// family support 1M tokens; Haiku 4.5 supports 200K. Unknown models fall back
-// to the conservative 200K so we never over-fill the prompt.
-const MODEL_CONTEXT = {
-  "claude-opus-4-8": 1_000_000,
-  "claude-opus-4-7": 1_000_000,
-  "claude-opus-4-6": 1_000_000,
-  "claude-opus-4-5": 1_000_000,
-  "claude-sonnet-4-6": 1_000_000,
-  "claude-haiku-4-5": 200_000,
-};
-
-function contextTokens(model) {
-  return MODEL_CONTEXT[model] || 200_000;
-}
-
-// Char budget for note content: context minus max output minus ~12k template
-// overhead, in tokens, times ~4 chars/token, with a 5% safety margin.
-function budgetChars(model) {
-  const usableTokens = Math.floor((contextTokens(model) - maxOutputTokens(model) - 12_000) * 0.95);
-  return usableTokens * 4;
-}
+// Model capabilities (context, max output, char budget) come from
+// @/lib/models — see the import at the top of this file.
 
 function fitNotes(notes, model) {
   // Per-note cap scales with the model's context — large-context models can
@@ -703,7 +676,7 @@ async function summarizeOverflowNotes(client, model, notes, productFocus, accoun
     const batch = batches[i];
     const msg = await client.messages.create({
       model,
-      max_tokens: Math.min(maxOutputTokens(model), 4096),
+      max_tokens: Math.min(maxOutputTokens(model), 12_000),
       system: "You compress dated meeting notes for a later synthesis step. Preserve dated changes and newest-current facts. Respond with only Markdown.",
       messages: [{ role: "user", content: buildBatchSummaryPrompt(batch, productFocus, accountName) }],
     });
@@ -713,7 +686,7 @@ async function summarizeOverflowNotes(client, model, notes, productFocus, accoun
       filename: `summary-${i + 1}.md`,
       date: batch[batch.length - 1]?.date || batch[0]?.date || "0000-00-00",
       title: `Compressed older context (${noteRangeLabel(batch)})`,
-      content: msg.content[0]?.text || "",
+      content: firstTextBlock(msg),
       source: "summary",
       sourceLabel: "Compressed older notes",
       _summaryCount: batch.length,
@@ -766,7 +739,7 @@ export async function POST(request) {
       return new Response(JSON.stringify({ error: "Anthropic API key is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
-    const selectedModel = model || "claude-sonnet-4-6";
+    const selectedModel = model || DEFAULT_MODEL;
     const client = new Anthropic({ apiKey: key });
     const scrubbedNotes = scrubWithExceptions(sanitizedNotes, accountName, allAccounts, restoredIds);
     let { kept, dropped } = fitNotes(scrubbedNotes, selectedModel);

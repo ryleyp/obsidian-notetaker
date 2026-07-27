@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { detectAccount } from "@/lib/accounts";
+import { assertAllowedRoot } from "@/lib/pathAllowlist";
+import { assertTrustedRequest } from "@/lib/requestSafety";
 
 const MAX_FILES_PER_FOLDER = 300;
 const MAX_FILE_BYTES = 300_000;
@@ -79,6 +81,15 @@ function extractCandidates(text) {
 }
 
 export async function GET(request) {
+  try {
+    assertTrustedRequest(request);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error?.message || "Invalid local session" },
+      { status: error?.status || 403 }
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const vaultPath = searchParams.get("vaultPath");
   const transcriptsPath = searchParams.get("transcriptsPath");
@@ -96,7 +107,20 @@ export async function GET(request) {
     if (text.trim()) corpora[name] = (corpora[name] || "") + text;
   };
 
-  const roots = [vaultPath, transcriptsPath].filter(Boolean).map((p) => path.resolve(p));
+  // Only scan roots the user approved for this session. Without this, any
+  // caller could point the scanner at an arbitrary directory and read back
+  // terms harvested from its .md files.
+  const roots = [];
+  for (const candidate of [vaultPath, transcriptsPath].filter(Boolean)) {
+    try {
+      roots.push(assertAllowedRoot(candidate, "Scan path"));
+    } catch (error) {
+      return NextResponse.json(
+        { error: error?.message || "Path is not approved for this local session" },
+        { status: error?.status || 403 }
+      );
+    }
+  }
   for (const root of roots) {
     let entries;
     try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { continue; }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { assertTrustedRequest } from "@/lib/requestSafety";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 
 const SYSTEM_PROMPT = `You draft concise, customer-ready follow-up emails for an NI Customer Success Manager.
@@ -66,10 +67,10 @@ export async function POST(request) {
     }
 
     const client = new Anthropic({ apiKey: key });
-    const selectedModel = model || "claude-sonnet-4-6";
+    const selectedModel = model || DEFAULT_MODEL;
     const msg = await client.messages.create({
       model: selectedModel,
-      max_tokens: 2200,
+      max_tokens: 8_000,
       system: SYSTEM_PROMPT,
       messages: [{
         role: "user",

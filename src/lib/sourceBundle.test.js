@@ -5,7 +5,7 @@ describe("sourceBundle", () => {
   it("creates stable transcript and raw-note source IDs", () => {
     const bundle = buildSourceBundle({
       transcript: "Jordan confirmed the Dallas lab rollout.\n\nPriya owns the license cleanup.",
-      rawNotes: "Gokul sounded worried about the timeline.",
+      rawNotes: "Dana sounded worried about the timeline.",
     });
 
     expect(bundle.transcriptSources[0].id).toBe("T1");

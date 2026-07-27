@@ -55,8 +55,8 @@ describe("privacy review corrections", () => {
 
 describe("applyReplacements", () => {
   it("replaces whole words case-insensitively", () => {
-    const out = applyReplacements("Met with Lockheed and lockheed again", [
-      { original: "Lockheed", alias: "ORG_1" },
+    const out = applyReplacements("Met with Acme and acme again", [
+      { original: "Acme", alias: "ORG_1" },
     ]);
     expect(out).toBe("Met with ORG_1 and ORG_1 again");
   });
@@ -67,17 +67,17 @@ describe("applyReplacements", () => {
   });
 
   it("honors the skip flag", () => {
-    const out = applyReplacements("Lockheed", [{ original: "Lockheed", alias: "ORG_1", skip: true }]);
-    expect(out).toBe("Lockheed");
+    const out = applyReplacements("Acme", [{ original: "Acme", alias: "ORG_1", skip: true }]);
+    expect(out).toBe("Acme");
   });
 });
 
 describe("reverseReplacements", () => {
   it("restores aliases to their real names", () => {
     const out = reverseReplacements("ORG_1 shipped it", [
-      { original: "Lockheed", alias: "ORG_1" },
+      { original: "Acme", alias: "ORG_1" },
     ]);
-    expect(out).toBe("Lockheed shipped it");
+    expect(out).toBe("Acme shipped it");
   });
 
   it("prefers an explicit restored value", () => {
@@ -100,12 +100,12 @@ describe("reverseReplacements", () => {
 describe("round-trip", () => {
   it("forward then reverse returns the original text", () => {
     const replacements = [
-      { original: "Lockheed", alias: "ORG_1" },
+      { original: "Acme", alias: "ORG_1" },
       { original: "Jane Doe", alias: "PERSON_1" },
     ];
-    const original = "Jane Doe from Lockheed met the Lockheed team.";
+    const original = "Jane Doe from Acme met the Acme team.";
     const sanitized = applyReplacements(original, replacements);
-    expect(sanitized).not.toContain("Lockheed");
+    expect(sanitized).not.toContain("Acme");
     expect(sanitized).not.toContain("Jane Doe");
     expect(reverseReplacements(sanitized, replacements)).toBe(original);
   });

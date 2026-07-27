@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { assertTrustedRequest } from "@/lib/requestSafety";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { buildWorkflowInstruction } from "@/lib/noteWorkflows";
 import { formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 
@@ -81,10 +82,10 @@ export async function POST(request) {
     }
 
     const client = new Anthropic({ apiKey: key });
-    const selectedModel = model || "claude-sonnet-4-6";
+    const selectedModel = model || DEFAULT_MODEL;
     const stream = client.messages.stream({
       model: selectedModel,
-      max_tokens: 9216,
+      max_tokens: 24_000,
       system: SYSTEM_PROMPT,
       messages: [{
         role: "user",

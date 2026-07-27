@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
+import { resolveInsideDirectory } from "@/lib/fileSafety";
+import { assertAllowedRoot } from "@/lib/pathAllowlist";
+import { assertTrustedRequest } from "@/lib/requestSafety";
 
 // Weekly SFDC activity report: mirrors the Todos flow. When a note is saved,
 // its "## SFDC Activity Entry" section is appended to a weekly file (named
@@ -61,14 +64,16 @@ function insertInOrder(blocks, newBlock, meetingTitle) {
 
 export async function POST(request) {
   try {
+    assertTrustedRequest(request);
+
     const { notes, vaultPath, meetingTitle } = await request.json();
     if (!notes || !vaultPath) return NextResponse.json({ ok: true });
 
     const section = extractSfdcSection(notes);
     if (!section) return NextResponse.json({ ok: true, skipped: true });
 
-    const resolvedVault = path.resolve(vaultPath);
-    const reportsDir = path.join(resolvedVault, "Reports");
+    const resolvedVault = assertAllowedRoot(vaultPath, "Vault path");
+    const reportsDir = resolveInsideDirectory(resolvedVault, "Reports", "Reports folder");
     if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
 
     const monday = getMondayOfWeek(extractDateFromTitle(meetingTitle));
@@ -96,7 +101,9 @@ export async function POST(request) {
     fs.writeFileSync(filePath, content, "utf-8");
     return NextResponse.json({ ok: true, savedPath: path.relative(resolvedVault, filePath) });
   } catch (error) {
+    // Best-effort side effect of saving a note: never fail the save. Surface
+    // the reason so an auth/allowlist rejection is diagnosable, not silent.
     console.error("SFDC report error:", error);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, skipped: true, error: error?.message || "SFDC report append failed" });
   }
 }

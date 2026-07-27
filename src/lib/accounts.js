@@ -1,12 +1,18 @@
-// Default account configuration. Editable in Settings and persisted to the
-// portable config file. Each account maps a set of name aliases (used for
-// cross-vault keyword search and folder auto-detection) to a transcript
-// archive subfolder.
+// Placeholder account configuration — deliberately fictional.
+//
+// Real account names, aliases, and keywords are customer data and must not
+// live in source control. Load the real roster through Settings → Import
+// config (see docs/private-config.md); it is then persisted to the portable
+// notetaker-config.json in your transcripts folder, which stays local.
+//
+// These placeholders exist so a fresh clone is runnable and demonstrable.
+// Each account maps a set of name aliases (used for cross-vault keyword
+// search and folder auto-detection) to a transcript archive subfolder.
 export const DEFAULT_ACCOUNTS = [
-  { name: "Lockheed Martin", archiveFolder: "LM Transcripts", aliases: ["lockheed", "lmco", "mfc", "rms"] },
-  { name: "L3Harris", archiveFolder: "L3 Transcripts", aliases: ["l3harris", "l3 harris"] },
-  { name: "Northrop Grumman", archiveFolder: "NGC Transcripts", aliases: ["northrop", "ngc"] },
-  { name: "Frontgrade", archiveFolder: "Frontgrade Transcripts", aliases: ["frontgrade"] },
+  { name: "Acme Aerospace", archiveFolder: "Acme Transcripts", aliases: ["acme", "aac"] },
+  { name: "Beacon Systems", archiveFolder: "Beacon Transcripts", aliases: ["beacon", "bcn"] },
+  { name: "Cardinal Defense", archiveFolder: "Cardinal Transcripts", aliases: ["cardinal", "cad"] },
+  { name: "Delta Microsystems", archiveFolder: "Delta Transcripts", aliases: ["delta"] },
 ];
 
 const INTERNAL = { name: "Internal", archiveFolder: "Internal Transcripts", aliases: [] };
@@ -56,7 +62,7 @@ export function suggestAgreements(text, account) {
 
 // Detect which account a selected Obsidian folder name belongs to.
 // Uses substring matching since folder names are short and curated
-// (e.g. "3. Northrop"). Falls back to Internal when nothing matches.
+// (e.g. "3. Acme"). Falls back to Internal when nothing matches.
 export function detectAccount(folderName, accounts) {
   const f = (folderName || "").toLowerCase();
   for (const acct of resolve(accounts)) {

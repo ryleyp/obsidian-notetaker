@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { looksSpeakerLabeled } from "@/lib/speakers";
 import { assertTrustedRequest } from "@/lib/requestSafety";
+import { DEFAULT_MODEL } from "@/lib/models";
 import { buildWorkflowInstruction } from "@/lib/noteWorkflows";
 import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 
@@ -19,7 +20,34 @@ Do NOT include personal updates, personal check-ins, or personal anecdotes (e.g.
 
 Always respond with ONLY the Markdown content, no preamble or explanation.`;
 
-const TAG_CATEGORIES = `
+// Account names are customer data, so they are injected from the caller's
+// configured account list rather than hardcoded into the prompt. Each
+// account's keywords double as its division/business-unit tags.
+function buildAccountTagLines(accounts = []) {
+  const named = accounts.filter((a) => a?.name && a.name !== "Internal");
+  if (!named.length) {
+    return "- Accounts / customers: any company or customer name that is clearly a customer or account being discussed\n";
+  }
+
+  const aliasList = named
+    .flatMap((a) => [a.name, ...(a.aliases || [])])
+    .filter(Boolean)
+    .map((t) => t.toLowerCase());
+
+  let out = `- Accounts / customers: ${[...new Set(aliasList)].join(", ")} — and any other company or customer name that is clearly a customer or account being discussed\n`;
+
+  for (const a of named) {
+    const divisions = (a.keywords || []).filter(Boolean);
+    if (divisions.length) {
+      out += `- ${a.name} divisions or business units (only if explicitly called out): ${divisions.join(", ")}\n`;
+    }
+  }
+  return out;
+}
+
+function buildTagCategories(accounts) {
+  const accountLines = buildAccountTagLines(accounts);
+  return `
 Extract tags ONLY if explicitly mentioned in the transcript. Use lowercase, no spaces (use hyphens for multi-word).
 
 Categories to check:
@@ -28,14 +56,11 @@ Categories to check:
 - NI Software: systemlink, labview, teststand, diadem, flexlogger, veristand, ni-daqmx, labwindows-cvi, measurement-studio, ni-visa, opentestbed, etc.
 - Software / Dev languages & tools: python, c, c-plus-plus, matlab, java, javascript, typescript, dotnet, rust, sql, r, julia, simulink, etc.
 - Other tools or platforms mentioned prominently (e.g. github, azure, aws, jira, confluence, salesforce)
-- Accounts / customers: lockheed, northrop, frontgrade, l3harris — and any other company or customer name that is clearly a customer or account being discussed
-- Lockheed divisions (only if explicitly called out): rms, mfc, space
-- Northrop Grumman divisions (only if explicitly called out): aeronautics, defensesystems, missionsystems, space
-- L3Harris divisions (only if explicitly called out): sms (Space and Mission Systems), csd (Communications and Spectrum Dominance), msl (Missile Solutions)
-- CS program terms: proficiencyplan, flexcredits, snowsupport, enterpriseagreement — tag if these programs or concepts are explicitly discussed
+${accountLines}- CS program terms: proficiencyplan, flexcredits, snowsupport, enterpriseagreement — tag if these programs or concepts are explicitly discussed
 - Training: tag as proficiencyplans if training, onboarding, skill-building, or learning resources for NI tools are discussed
 
 Only include a tag if that city/state/technology is actually discussed — not just briefly mentioned in passing.`;
+}
 
 const SFDC_ACTIVITY_RULES = `
 Rules for the SFDC Activity Entry section:
@@ -81,6 +106,7 @@ export function buildPrompt(
     customTemplateInstructions = "",
     customRecipeInstructions = "",
     sourceBundle,
+    accounts = [],
   } = {}
 ) {
   const title = meetingTitle || "Meeting Notes";
@@ -128,7 +154,7 @@ SOURCE BLOCKS:
 ${sourceBlock}
 ---
 
-${TAG_CATEGORIES}
+${buildTagCategories(accounts)}
 
 TEMPLATE AND RECIPE
 ${workflowInstruction}
@@ -244,6 +270,7 @@ export async function POST(request) {
       customTemplateInstructions = "",
       customRecipeInstructions = "",
       sourceBundle,
+      accounts = [],
     } = body;
 
     if (!transcript || transcript.trim().length === 0) {
@@ -261,12 +288,13 @@ export async function POST(request) {
     const client = new Anthropic({ apiKey: key });
 
     const stream = client.messages.stream({
-      model: model || "claude-sonnet-4-6",
-      max_tokens: 9216,
+      model: model || DEFAULT_MODEL,
+      max_tokens: 24_000,
       system: SYSTEM_PROMPT,
       messages: [{
         role: "user",
         content: buildPrompt(transcript, meetingTitle, suggestedAgreements, meetingContext, {
+          accounts,
           noteTemplateId,
           recipeId,
           customTemplateInstructions,
@@ -287,7 +315,7 @@ export async function POST(request) {
             }
           }
           const finalMsg = await stream.finalMessage();
-          send({ type: "done", usage: finalMsg.usage, model: model || "claude-sonnet-4-6" });
+          send({ type: "done", usage: finalMsg.usage, model: model || DEFAULT_MODEL });
         } catch (err) {
           send({ type: "error", message: err?.message || "Processing failed" });
         } finally {

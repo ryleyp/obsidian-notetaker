@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import ScrubPanel from "@/components/ScrubPanel";
 import ModelPicker from "@/components/ModelPicker";
-import { contextLimit, estimateUsage } from "@/lib/pricing";
+import { contextLimit, estimateUsage } from "@/lib/models";
 import { findAccountBleed } from "@/lib/scrub";
 
 export function Spinner({ className = "w-4 h-4" }) {

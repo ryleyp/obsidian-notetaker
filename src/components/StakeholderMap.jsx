@@ -3,41 +3,20 @@
 import { useRef, useState } from "react";
 import FolderSelector from "@/components/FolderSelector";
 import NotesPreview from "@/components/NotesPreview";
-import { calcCost } from "@/lib/pricing";
+import { calcCost, contextLimit, estimateUsage } from "@/lib/models";
 import { detectAccount } from "@/lib/accounts";
 import { reverseReplacements } from "@/lib/sanitize";
 import { apiFetch } from "@/lib/apiClient";
 
 const TODAY = new Date().toISOString().split("T")[0];
 
-const SYNTHESIS_PRICING = {
-  "claude-haiku-4-5": { input: 1.0, output: 5.0, label: "Haiku" },
-  "claude-sonnet-4-6": { input: 3.0, output: 15.0, label: "Sonnet" },
-};
-
-const MODEL_CONTEXT = {
-  "claude-opus-4-8": 1_000_000,
-  "claude-sonnet-4-6": 1_000_000,
-  "claude-haiku-4-5": 200_000,
-};
-
-function contextLimit(model) {
-  return MODEL_CONTEXT[model] || 200_000;
-}
+// Stakeholder maps run longer than the default note summary.
+const ESTIMATED_OUTPUT_TOKENS = 4000;
 
 function threeMonthsAgoLabel() {
   const d = new Date();
   d.setMonth(d.getMonth() - 3);
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-}
-
-function estimateUsage(notes, model) {
-  const chars = notes.reduce((s, n) => s + (n.content?.length || 0) + (n.title?.length || 0), 0);
-  const inputTokens = Math.ceil(chars / 4) + 2500;
-  const outputTokens = 4000;
-  const p = SYNTHESIS_PRICING[model] || SYNTHESIS_PRICING["claude-sonnet-4-6"];
-  const cost = (inputTokens / 1e6) * p.input + (outputTokens / 1e6) * p.output;
-  return { inputTokens, outputTokens, cost, label: p.label };
 }
 
 export default function StakeholderMap({ settings, onSettingsClick }) {
@@ -314,7 +293,7 @@ export default function StakeholderMap({ settings, onSettingsClick }) {
                 <div className="flex rounded-lg border border-gray-200 bg-white overflow-hidden">
                   {[
                     { id: "claude-haiku-4-5", label: "Haiku", sub: "Faster - 200k" },
-                    { id: "claude-sonnet-4-6", label: "Sonnet", sub: "Best - 1M ctx" },
+                    { id: "claude-sonnet-5", label: "Sonnet", sub: "Best - 1M ctx" },
                   ].map((m) => (
                     <button
                       key={m.id}
@@ -350,7 +329,7 @@ export default function StakeholderMap({ settings, onSettingsClick }) {
           )}
 
           {loadedSources?.length > 0 && showConfirm && (() => {
-            const est = estimateUsage(loadedSources, model);
+            const est = estimateUsage(loadedSources, model, ESTIMATED_OUTPUT_TOKENS);
             const limit = contextLimit(model);
             const warnAt = limit - 20_000;
             return (
@@ -360,7 +339,7 @@ export default function StakeholderMap({ settings, onSettingsClick }) {
                   <div className="flex rounded-lg border border-gray-200 bg-white overflow-hidden">
                     {[
                       { id: "claude-haiku-4-5", label: "Haiku", sub: "200k" },
-                      { id: "claude-sonnet-4-6", label: "Sonnet", sub: "1M" },
+                      { id: "claude-sonnet-5", label: "Sonnet", sub: "1M" },
                     ].map((m) => (
                       <button
                         key={m.id}

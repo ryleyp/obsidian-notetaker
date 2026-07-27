@@ -9,16 +9,16 @@ import {
 
 describe("suggestAgreements", () => {
   const account = {
-    name: "Lockheed Martin",
+    name: "Acme",
     agreements: [
-      { type: "EA", number: "EA-1001", keywords: ["MFC", "missiles"] },
+      { type: "EA", number: "EA-1001", keywords: ["ORB", "missiles"] },
       { type: "EP", number: "EP-2002", keywords: ["space"] },
       { type: "EA", number: "EA-3003", keywords: [] }, // no keywords → always applies
     ],
   };
 
   it("suggests agreements whose keywords appear as whole words", () => {
-    const r = suggestAgreements("Reviewed the MFC roadmap today", account);
+    const r = suggestAgreements("Reviewed the ORB roadmap today", account);
     expect(r).toContainEqual({ type: "EA", number: "EA-1001" });
     expect(r).toContainEqual({ type: "EA", number: "EA-3003" });
     expect(r).not.toContainEqual({ type: "EP", number: "EP-2002" });
@@ -30,7 +30,7 @@ describe("suggestAgreements", () => {
   });
 
   it("does not match a keyword inside a larger word", () => {
-    const r = suggestAgreements("the simfcx module", { agreements: [{ type: "EA", number: "X", keywords: ["mfc"] }] });
+    const r = suggestAgreements("the siorbx module", { agreements: [{ type: "EA", number: "X", keywords: ["orb"] }] });
     expect(r).toEqual([]);
   });
 
@@ -51,26 +51,26 @@ describe("suggestAgreements", () => {
 
 describe("textHasAlias", () => {
   it("matches an alias as a whole word, case-insensitively", () => {
-    expect(textHasAlias("Met with NGC today", "ngc")).toBe(true);
-    expect(textHasAlias("northrop grumman call", "northrop")).toBe(true);
+    expect(textHasAlias("Met with CAD today", "cad")).toBe(true);
+    expect(textHasAlias("cardinal grumman call", "cardinal")).toBe(true);
   });
 
   it("does not match an alias inside a larger word", () => {
-    expect(textHasAlias("the engcomputer lab", "ngc")).toBe(false);
+    expect(textHasAlias("the ecadomputer lab", "cad")).toBe(false);
   });
 
   it("returns false for blank alias or text", () => {
     expect(textHasAlias("anything", "")).toBe(false);
-    expect(textHasAlias("", "ngc")).toBe(false);
+    expect(textHasAlias("", "cad")).toBe(false);
   });
 });
 
 describe("detectAccount", () => {
   it("detects an account from the folder name", () => {
-    const res = detectAccount("3. Northrop");
-    expect(res.name).toBe("Northrop Grumman");
-    expect(res.archiveFolder).toBe("NGC Transcripts");
-    expect(res.aliases).toContain("northrop");
+    const res = detectAccount("3. Cardinal");
+    expect(res.name).toBe("Cardinal Defense");
+    expect(res.archiveFolder).toBe("Cardinal Transcripts");
+    expect(res.aliases).toContain("cardinal");
   });
 
   it("falls back to Internal when nothing matches", () => {
@@ -84,24 +84,24 @@ describe("detectAccount", () => {
     const custom = [{ name: "Boeing", archiveFolder: "BA Transcripts", aliases: ["boeing"] }];
     expect(detectAccount("Boeing notes", custom).archiveFolder).toBe("BA Transcripts");
     // Default accounts are ignored when a custom list is supplied.
-    expect(detectAccount("Northrop", custom).name).toBe("Internal");
+    expect(detectAccount("Cardinal", custom).name).toBe("Internal");
   });
 
   it("falls back to defaults for an empty account list", () => {
-    expect(detectAccount("Lockheed", []).name).toBe("Lockheed Martin");
+    expect(detectAccount("Acme", []).name).toBe("Acme Aerospace");
   });
 });
 
 describe("matchVaultFolder", () => {
   const folders = [
-    { name: "1. Lockheed", path: "1. Lockheed" },
-    { name: "3. Northrop", path: "3. Northrop" },
+    { name: "1. Acme", path: "1. Acme" },
+    { name: "3. Cardinal", path: "3. Cardinal" },
     { name: "Internal", path: "Internal" },
   ];
 
   it("routes text mentioning an account to its folder", () => {
-    expect(matchVaultFolder("Sync with the Northrop team", folders)).toBe("3. Northrop");
-    expect(matchVaultFolder("NGC roadmap review", folders)).toBe("3. Northrop");
+    expect(matchVaultFolder("Sync with the Cardinal team", folders)).toBe("3. Cardinal");
+    expect(matchVaultFolder("CAD roadmap review", folders)).toBe("3. Cardinal");
   });
 
   it("returns null when no account alias appears", () => {
@@ -109,7 +109,7 @@ describe("matchVaultFolder", () => {
   });
 
   it("returns null when the matching folder is absent", () => {
-    expect(matchVaultFolder("Frontgrade kickoff", folders)).toBeNull();
+    expect(matchVaultFolder("Delta kickoff", folders)).toBeNull();
   });
 });
 

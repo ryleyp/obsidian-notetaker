@@ -38,3 +38,10 @@ next-env.d.ts
 
 # claude code
 .claude/
+
+# private config — real account roster, glossary, exported settings.
+# Customer data: never commit.
+/private/
+notetaker-settings-*.json
+notetaker-config.json
+notetaker-glossary.json

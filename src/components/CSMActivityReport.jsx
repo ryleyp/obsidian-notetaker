@@ -5,6 +5,7 @@ import FolderSelector from "@/components/FolderSelector";
 import ActivityPreview from "@/components/ActivityPreview";
 import { detectAccount } from "@/lib/accounts";
 import { reverseReplacements } from "@/lib/sanitize";
+import { apiFetch } from "@/lib/apiClient";
 import { useReportWorkflow, TODAY } from "@/hooks/useReportWorkflow";
 import { ScanButton, CountsBadges, NoteList, GeneratePanel, PreflightPanel, OutputHeader, HistoryMenu, BleedWarning, StrictToggle } from "@/components/ReportSections";
 import { parseActivityRows, rowsToNDJSON, rowsToMarkdown } from "@/lib/activityRows";
@@ -119,7 +120,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
     if (!rows.length || !wf.activeNotes?.length) return;
     setVerifying(true);
     try {
-      const res = await fetch("/api/verify-rows", {
+      const res = await apiFetch("/api/verify-rows", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
