@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { POST as detectSpeakers } from "./detect-speakers/route";
+import { POST as emailThread } from "./email-thread/route";
 import { POST as sanitize } from "./sanitize/route";
 import { POST as verifyReport } from "./verify-report/route";
 import { POST as verifyRows } from "./verify-rows/route";
@@ -34,6 +35,7 @@ function get(handler, url, { token, origin = "http://localhost:3000" } = {}) {
 
 const POST_ROUTES = [
   { name: "detect-speakers", handler: detectSpeakers, path: "/api/detect-speakers", body: { transcript: "hello there", apiKey: "sk-ant-test" } },
+  { name: "email-thread", handler: emailThread, path: "/api/email-thread", body: { emailThread: "Subject: hello", apiKey: "sk-ant-test" } },
   { name: "sanitize", handler: sanitize, path: "/api/sanitize", body: { text: "hello there", apiKey: "sk-ant-test" } },
   { name: "verify-report", handler: verifyReport, path: "/api/verify-report", body: { report: "r", notes: [{ date: "2026-01-01", title: "t", content: "c" }], accountName: "Acme", apiKey: "sk-ant-test" } },
   { name: "verify-rows", handler: verifyRows, path: "/api/verify-rows", body: { rows: [{ eventDate: "2026-01-01", title: "t", sourceTitle: "t", comments: "c" }], notes: [{ date: "2026-01-01", title: "t", content: "c" }], accountName: "Acme", apiKey: "sk-ant-test" } },

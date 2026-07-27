@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { StepBadge } from "@/components/MeetingDetails";
 import { apiFetch, approveLocalPaths } from "@/lib/apiClient";
 
-export default function FolderSelector({ vaultPath, selectedFolder, onSelect, onSettingsClick }) {
+export default function FolderSelector({ vaultPath, selectedFolder, onSelect, onSettingsClick, stepNumber = 3 }) {
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -36,7 +36,7 @@ export default function FolderSelector({ vaultPath, selectedFolder, onSelect, on
     <div className="card p-6">
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
-          <StepBadge n={3} />
+          <StepBadge n={stepNumber} />
           <div>
             <h2 className="text-base font-semibold text-gray-900">Destination Folder</h2>
             <p className="text-xs text-gray-500">Pick where to save the note in your vault</p>

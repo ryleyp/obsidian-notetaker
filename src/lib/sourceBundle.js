@@ -58,13 +58,15 @@ export function makeSourceBlocks(text, { prefix, label, maxChars = DEFAULT_CHUNK
   }));
 }
 
-export function buildSourceBundle({ transcript = "", rawNotes = "" } = {}) {
+export function buildSourceBundle({ transcript = "", rawNotes = "", emailThread = "" } = {}) {
   const transcriptSources = makeSourceBlocks(transcript, { prefix: "T", label: "Transcript" });
   const rawNoteSources = makeSourceBlocks(rawNotes, { prefix: "N", label: "Raw notes" });
+  const emailSources = makeSourceBlocks(emailThread, { prefix: "E", label: "Email thread" });
   return {
     transcriptSources,
     rawNoteSources,
-    allSources: [...transcriptSources, ...rawNoteSources],
+    emailSources,
+    allSources: [...transcriptSources, ...rawNoteSources, ...emailSources],
   };
 }
 
@@ -81,23 +83,25 @@ export function mapSourceBundle(sourceBundle, mapper) {
   const mapOne = (source) => ({ ...source, content: mapper(source.content) });
   const transcriptSources = (sourceBundle?.transcriptSources || []).map(mapOne);
   const rawNoteSources = (sourceBundle?.rawNoteSources || []).map(mapOne);
+  const emailSources = (sourceBundle?.emailSources || []).map(mapOne);
   return {
     transcriptSources,
     rawNoteSources,
-    allSources: [...transcriptSources, ...rawNoteSources],
+    emailSources,
+    allSources: [...transcriptSources, ...rawNoteSources, ...emailSources],
   };
 }
 
 export function extractReferencedSourceIds(markdown) {
   const found = new Set();
-  const regex = /\[([TN]\d+)\]/g;
+  const regex = /\[([TNE]\d+)\]/g;
   let match;
   while ((match = regex.exec(markdown || ""))) {
     found.add(match[1]);
   }
 
   return [...found].sort((a, b) => {
-    const priority = { T: 0, N: 1 };
+    const priority = { T: 0, N: 1, E: 2 };
     const prefixCompare = (priority[a[0]] ?? 9) - (priority[b[0]] ?? 9);
     if (prefixCompare !== 0) return prefixCompare;
     return Number(a.slice(1)) - Number(b.slice(1));

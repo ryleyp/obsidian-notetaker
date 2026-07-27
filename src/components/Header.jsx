@@ -45,6 +45,16 @@ export default function Header({ onSettingsClick, isSettingsOpen, mode, onModeCh
                 New Note
               </button>
               <button
+                onClick={() => onModeChange("email")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  mode === "email"
+                    ? "bg-white text-obsidian-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Email
+              </button>
+              <button
                 onClick={() => onModeChange("status")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                   mode === "status"

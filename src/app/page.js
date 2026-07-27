@@ -7,6 +7,7 @@ import MeetingDetails from "@/components/MeetingDetails";
 import TranscriptInput from "@/components/TranscriptInput";
 import FolderSelector from "@/components/FolderSelector";
 import NotesPreview from "@/components/NotesPreview";
+import EmailThreadNote from "@/components/EmailThreadNote";
 import AccountStatus from "@/components/AccountStatus";
 import SystemLinkStatus from "@/components/SystemLinkStatus";
 import CSMActivityReport from "@/components/CSMActivityReport";
@@ -142,6 +143,15 @@ export default function Home() {
             settings={settings}
             onSave={saveSettings}
             onClose={() => setShowSettings(false)}
+          />
+        )}
+
+        {/* ── Email Thread mode ── */}
+        {mode === "email" && (
+          <EmailThreadNote
+            settings={settings}
+            onSettingsPatch={applySettingsPatch}
+            onSettingsClick={() => setShowSettings(true)}
           />
         )}
 
