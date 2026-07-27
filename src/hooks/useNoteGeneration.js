@@ -42,7 +42,7 @@ async function consumeStream(response, onDelta) {
 // Owns the generated note and everything that produces or revises it:
 // initial generation, regeneration with an instruction, and the follow-up
 // email draft.
-export function useNoteGeneration({ settings, model, workflow, meeting }) {
+export function useNoteGeneration({ settings, model, meeting }) {
   const [processing, setProcessing] = useState(false);
   const [processError, setProcessError] = useState(null);
   const [notes, setNotes] = useState("");
@@ -164,7 +164,6 @@ export function useNoteGeneration({ settings, model, workflow, meeting }) {
         suggestedAgreements,
         sourceBundle: promptSourceBundle,
         accounts: settings.accounts || [],
-        ...workflow,
       },
       replacements,
       displaySourceBundle,
@@ -194,7 +193,6 @@ export function useNoteGeneration({ settings, model, workflow, meeting }) {
           apiKey: settings.apiKey || undefined,
           model,
           sourceBundle: lastGenerationRequest?.payload?.sourceBundle || null,
-          ...workflow,
         }),
       });
       if (!res.ok) {

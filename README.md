@@ -1,6 +1,6 @@
 # Obsidian Meeting Notes
 
-A local web app that turns meeting transcripts into structured Obsidian notes using Claude Sonnet.
+A local web app that turns meeting transcripts into structured Obsidian notes using Claude. Pick Haiku, Sonnet, or Opus per run; Opus is the default.
 
 ## What it does
 
@@ -66,5 +66,5 @@ The file is saved as `YYYY-MM-DD - Meeting Title.md` in your chosen folder.
 ## Requirements
 
 - Node.js 18+
-- An Anthropic API key (Claude Sonnet)
+- An Anthropic API key
 - Your Obsidian vault accessible on the local file system

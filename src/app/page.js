@@ -7,7 +7,6 @@ import MeetingDetails from "@/components/MeetingDetails";
 import TranscriptInput from "@/components/TranscriptInput";
 import FolderSelector from "@/components/FolderSelector";
 import NotesPreview from "@/components/NotesPreview";
-import NoteWorkflowPanel from "@/components/NoteWorkflowPanel";
 import AccountStatus from "@/components/AccountStatus";
 import SystemLinkStatus from "@/components/SystemLinkStatus";
 import CSMActivityReport from "@/components/CSMActivityReport";
@@ -17,14 +16,11 @@ import SpeakerReview from "@/components/SpeakerReview";
 import ModelPicker from "@/components/ModelPicker";
 import { looksSpeakerLabeled } from "@/lib/speakers";
 import { FAST_MODEL, MODEL_OPTIONS } from "@/lib/models";
-import { DEFAULT_NOTE_TEMPLATE_ID, DEFAULT_RECIPE_ID } from "@/lib/noteWorkflows";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { useSpeakerDetection } from "@/hooks/useSpeakerDetection";
 import { useSanitizeReview } from "@/hooks/useSanitizeReview";
 import { useNoteGeneration } from "@/hooks/useNoteGeneration";
 import { useNoteSaving } from "@/hooks/useNoteSaving";
-
-const WORKFLOW_KEY = "obsidian-notes-workflow";
 
 function Spinner({ className = "w-5 h-5" }) {
   return (
@@ -45,14 +41,7 @@ export default function Home() {
   const [selectedFolder, setSelectedFolder] = useState("");
   const [model, setModel] = useState(FAST_MODEL);
 
-  // Note template / recipe selection
-  const [noteTemplateId, setNoteTemplateId] = useState(DEFAULT_NOTE_TEMPLATE_ID);
-  const [recipeId, setRecipeId] = useState(DEFAULT_RECIPE_ID);
-  const [customTemplateInstructions, setCustomTemplateInstructions] = useState("");
-  const [customRecipeInstructions, setCustomRecipeInstructions] = useState("");
-
   const meeting = { transcript, meetingTitle, meetingContext, selectedFolder };
-  const workflow = { noteTemplateId, recipeId, customTemplateInstructions, customRecipeInstructions };
 
   const {
     settings,
@@ -66,7 +55,7 @@ export default function Home() {
 
   const saving = useNoteSaving({ settings, meeting });
 
-  const generation = useNoteGeneration({ settings, model, workflow, meeting });
+  const generation = useNoteGeneration({ settings, model, meeting });
 
   const sanitize = useSanitizeReview({
     settings,
@@ -88,30 +77,7 @@ export default function Home() {
     if (initialModel) setModel(initialModel);
   }, [initialModel]);
 
-  // Restore and persist the template/recipe selection.
-  useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(WORKFLOW_KEY) || "null");
-      if (!stored) return;
-      if (stored.noteTemplateId) setNoteTemplateId(stored.noteTemplateId);
-      if (stored.recipeId) setRecipeId(stored.recipeId);
-      if (typeof stored.customTemplateInstructions === "string") {
-        setCustomTemplateInstructions(stored.customTemplateInstructions);
-      }
-      if (typeof stored.customRecipeInstructions === "string") {
-        setCustomRecipeInstructions(stored.customRecipeInstructions);
-      }
-    } catch {}
-  }, []);
 
-  useEffect(() => {
-    localStorage.setItem(WORKFLOW_KEY, JSON.stringify({
-      noteTemplateId,
-      recipeId,
-      customTemplateInstructions,
-      customRecipeInstructions,
-    }));
-  }, [noteTemplateId, recipeId, customTemplateInstructions, customRecipeInstructions]);
 
   // Editing the source invalidates a previous transcript-only save.
   const { clearTranscriptSaved } = saving;
@@ -251,16 +217,6 @@ export default function Home() {
                 onTitleSuggest={(suggested) => { if (!meetingTitle) setMeetingTitle(suggested); }}
               />
 
-              <NoteWorkflowPanel
-                noteTemplateId={noteTemplateId}
-                setNoteTemplateId={setNoteTemplateId}
-                recipeId={recipeId}
-                setRecipeId={setRecipeId}
-                customTemplateInstructions={customTemplateInstructions}
-                setCustomTemplateInstructions={setCustomTemplateInstructions}
-                customRecipeInstructions={customRecipeInstructions}
-                setCustomRecipeInstructions={setCustomRecipeInstructions}
-              />
 
               {transcript.trim() && !speakers.pending && (
                 <div className="card p-4 flex items-center justify-between gap-3">

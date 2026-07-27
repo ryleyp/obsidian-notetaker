@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { looksSpeakerLabeled } from "@/lib/speakers";
 import { assertTrustedRequest } from "@/lib/requestSafety";
-import { DEFAULT_MODEL } from "@/lib/models";
-import { buildWorkflowInstruction } from "@/lib/noteWorkflows";
+import { DEFAULT_MODEL, maxOutputTokens } from "@/lib/models";
 import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 
 const SYSTEM_PROMPT = `You are an expert meeting notes specialist working for a Customer Success Manager (CSM) at NI (National Instruments). The person who recorded this meeting is that CSM — their job is driving adoption, expansion, and renewal of NI products at large customer accounts.
@@ -100,24 +99,11 @@ export function buildPrompt(
   meetingTitle,
   suggestedAgreements = [],
   meetingContext = "",
-  {
-    noteTemplateId,
-    recipeId,
-    customTemplateInstructions = "",
-    customRecipeInstructions = "",
-    sourceBundle,
-    accounts = [],
-  } = {}
+  { sourceBundle, accounts = [] } = {}
 ) {
   const title = meetingTitle || "Meeting Notes";
   const sources = sourceBundle || buildSourceBundle({ transcript, rawNotes: meetingContext });
   const sourceBlock = formatSourceBundleForPrompt(sources) || `[T1] Transcript\n${transcript}`;
-  const workflowInstruction = buildWorkflowInstruction({
-    noteTemplateId,
-    recipeId,
-    customTemplateInstructions,
-    customRecipeInstructions,
-  });
 
   // Extra background and/or the CSM's own handwritten notes, typed in by the
   // CSM alongside the transcript. Treated as a trusted second source.
@@ -156,9 +142,6 @@ ${sourceBlock}
 
 ${buildTagCategories(accounts)}
 
-TEMPLATE AND RECIPE
-${workflowInstruction}
-
 SOURCE CITATION RULES
 - Use only the source block IDs above as citations.
 - Add citations to every factual bullet or factual paragraph outside the SFDC Activity Entry, using markers like [T1] or [N1].
@@ -167,9 +150,11 @@ SOURCE CITATION RULES
 - If a point is synthesized from multiple sources, cite each relevant source, e.g. [T2] [N1].
 - Do not put citation markers inside the SFDC Activity Entry because it is copied into Salesforce.
 
-Generate the meeting notes with this baseline structure. Do NOT include a YAML frontmatter block. Keep every required section below. You may add a short template-specific section only if the selected template or recipe clearly requires it, and only before Action Items.
+Generate the meeting notes with EXACTLY this structure. Do NOT include a YAML frontmatter block.
 
-Word limit: The Executive Summary and Meeting Notes sections together must be 120 words or fewer. Keep those two sections tight; use the later callout, action item, and next step sections for structured follow-up detail.
+Length: Meeting Notes is the section of record and has no length limit — make it as long as the
+material genuinely warrants. The only capped section in this note is the SFDC Activity Entry, whose
+limit is a Salesforce field constraint and still applies exactly as specified above.
 
 # ${title}
 
@@ -179,13 +164,22 @@ Word limit: The Executive Summary and Meeting Notes sections together must be 12
 
 ## Executive Summary
 
-Write 1-2 concise sentences capturing the overall purpose, key outcomes, and most important decisions from this meeting. This section counts toward the combined 120-word limit for Executive Summary + Meeting Notes.
+Write 3-5 sentences capturing the overall purpose, key outcomes, and most important decisions from this meeting. This is a scannable overview, so keep it tight even though the notes below are exhaustive.
 
 ---
 
 ## Meeting Notes
 
-Provide concise bulleted notes with only the highest-signal decisions, key points, and meaningful details from the transcript. Skip filler, repetition, tangential remarks, and personal updates or check-ins. This section and Executive Summary together must be 120 words or fewer.
+Provide exhaustive bulleted notes covering everything of substance in the sources. This is the section of record: someone who missed the meeting should be able to read it instead of the transcript and miss nothing that matters.
+
+- Cover every topic discussed, in the order it came up. Use sub-bullets to keep related detail together under its topic.
+- Capture the specifics that get lost in summaries: names, numbers, dates, versions, product names, license and entitlement details, system and environment details, error messages, quantities, and timelines.
+- Record decisions with the reasoning behind them, not just the outcome, and note who made or drove each one.
+- Record open questions, disagreements, unresolved threads, and anything explicitly deferred — mark them as unresolved rather than implying closure.
+- Preserve the substance of notable exchanges: what was asked, what the answer was, and any concern, objection, hesitation, or enthusiasm expressed.
+- Where a speaker is identifiable, attribute the point to them.
+
+Skip only true noise: filler, verbatim repetition, small talk, and personal updates or check-ins. When in doubt about whether a detail belongs, include it — length is not a concern in this section. Do not compress detail out to save space, and do not editorialize or invent anything absent from the sources.
 
 ---
 
@@ -239,7 +233,9 @@ List the agreed-upon next steps, upcoming milestones, follow-up meetings, or pla
 
 ## SFDC Activity Entry
 
-A Salesforce-ready activity entry for this meeting, following the rules below. Output EXACTLY this shape and nothing else in this section — no extra headings, bullets, or commentary:
+A Salesforce-ready activity entry for this meeting, following the rules below. Output EXACTLY this shape and nothing else in this section — no extra headings, bullets, or commentary.
+
+The instruction to write exhaustively applies to Meeting Notes and NOT to this section. This section is pasted into a Salesforce field: the Summary/Notes block (Summary + Outcomes + Next steps, including the labels) must be 120 words or fewer and 800 characters or fewer. Write the block, count the words, and trim until it fits before you output it. Detail that does not fit belongs in Meeting Notes above, not here.
 
 **Type:** <one approved type>
 **Subtype:** <matching subtype from that type's list>
@@ -265,10 +261,6 @@ export async function POST(request) {
       model,
       suggestedAgreements = [],
       meetingContext = "",
-      noteTemplateId,
-      recipeId,
-      customTemplateInstructions = "",
-      customRecipeInstructions = "",
       sourceBundle,
       accounts = [],
     } = body;
@@ -289,16 +281,12 @@ export async function POST(request) {
 
     const stream = client.messages.stream({
       model: model || DEFAULT_MODEL,
-      max_tokens: 24_000,
+      max_tokens: maxOutputTokens(model || DEFAULT_MODEL),
       system: SYSTEM_PROMPT,
       messages: [{
         role: "user",
         content: buildPrompt(transcript, meetingTitle, suggestedAgreements, meetingContext, {
           accounts,
-          noteTemplateId,
-          recipeId,
-          customTemplateInstructions,
-          customRecipeInstructions,
           sourceBundle,
         }),
       }],
