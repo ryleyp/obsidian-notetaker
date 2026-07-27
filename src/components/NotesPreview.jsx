@@ -1,9 +1,10 @@
 "use client";
 
-import { Children, useState } from "react";
+import { Children, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatCost } from "@/lib/pricing";
+import { extractReferencedSourceIds, sourceExcerpt } from "@/lib/sourceBundle";
 
 function textFromChildren(children) {
   return Children.toArray(children)
@@ -46,13 +47,51 @@ export default function NotesPreview({
   todosSaved,
   sfdcReportSaved,
   cost,
+  sourceBundle,
+  onRegenerate,
+  regenerating,
+  regenerateError,
+  onGenerateFollowUp,
+  followUpDraft,
+  followUpLoading,
+  followUpError,
+  followUpCost,
 }) {
   const [viewMode, setViewMode] = useState("preview");
+  const [regenerationInstruction, setRegenerationInstruction] = useState("");
+  const [followUpAudience, setFollowUpAudience] = useState("customer");
+  const [followUpTone, setFollowUpTone] = useState("warm-professional");
+  const [followUpInstructions, setFollowUpInstructions] = useState("");
   const editable = typeof onNotesChange === "function";
+  const sources = useMemo(() => sourceBundle?.allSources || [], [sourceBundle]);
+  const referencedIds = useMemo(() => extractReferencedSourceIds(notes), [notes]);
+  const referencedSources = useMemo(() => {
+    const byId = new Map(sources.map((source) => [source.id, source]));
+    return referencedIds.map((id) => byId.get(id)).filter(Boolean);
+  }, [referencedIds, sources]);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(notes).catch(() => {});
   };
+
+  const copyFollowUp = () => {
+    navigator.clipboard.writeText(followUpDraft || "").catch(() => {});
+  };
+
+  function submitRegeneration() {
+    const instruction = regenerationInstruction.trim();
+    if (!instruction || !onRegenerate) return;
+    onRegenerate(instruction);
+  }
+
+  function submitFollowUp() {
+    if (!onGenerateFollowUp) return;
+    onGenerateFollowUp({
+      audience: followUpAudience,
+      tone: followUpTone,
+      instructions: followUpInstructions,
+    });
+  }
 
   return (
     <div className="card overflow-hidden">
@@ -90,6 +129,16 @@ export default function NotesPreview({
             >
               Markdown
             </button>
+            {sources.length > 0 && (
+              <button
+                onClick={() => setViewMode("sources")}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  viewMode === "sources" ? "bg-obsidian-600 text-white" : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                Sources
+              </button>
+            )}
           </div>
           <button onClick={copyToClipboard} className="btn-secondary text-xs px-3 py-1.5">
             Copy
@@ -124,6 +173,8 @@ export default function NotesPreview({
               {notes}
             </ReactMarkdown>
           </div>
+        ) : viewMode === "sources" ? (
+          <SourcePanel sources={sources} referencedSources={referencedSources} referencedIds={referencedIds} />
         ) : editable ? (
           <textarea
             className="input min-h-[600px] resize-y font-mono text-xs leading-relaxed"
@@ -137,6 +188,85 @@ export default function NotesPreview({
           </pre>
         )}
       </div>
+
+      {!streaming && (onRegenerate || onGenerateFollowUp) && (
+        <div className="px-6 py-4 border-t border-gray-200 bg-white grid lg:grid-cols-2 gap-4">
+          {onRegenerate && (
+            <div className="rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <h3 className="text-sm font-semibold text-gray-900">Ask for Changes</h3>
+                {regenerating && (
+                  <span className="text-xs text-obsidian-600 font-medium">Rewriting...</span>
+                )}
+              </div>
+              <textarea
+                className="input resize-y text-xs leading-relaxed"
+                rows={3}
+                placeholder="e.g. Make the action items more concrete and tighten the SFDC summary."
+                value={regenerationInstruction}
+                onChange={(event) => setRegenerationInstruction(event.target.value)}
+              />
+              {regenerateError && <p className="mt-2 text-xs text-red-600">{regenerateError}</p>}
+              <button
+                type="button"
+                onClick={submitRegeneration}
+                disabled={regenerating || !regenerationInstruction.trim()}
+                className="btn-secondary text-xs mt-3"
+              >
+                {regenerating ? "Rewriting..." : "Regenerate Notes"}
+              </button>
+            </div>
+          )}
+
+          {onGenerateFollowUp && (
+            <div className="rounded-lg border border-gray-200 p-4">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <h3 className="text-sm font-semibold text-gray-900">Follow-Up Draft</h3>
+                {followUpCost && <span className="text-xs text-gray-400 font-mono">{formatCost(followUpCost)}</span>}
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <select className="input text-xs" value={followUpAudience} onChange={(event) => setFollowUpAudience(event.target.value)}>
+                  <option value="customer">Customer</option>
+                  <option value="internal">Internal team</option>
+                  <option value="mixed">Customer plus NI owners</option>
+                </select>
+                <select className="input text-xs" value={followUpTone} onChange={(event) => setFollowUpTone(event.target.value)}>
+                  <option value="warm-professional">Warm professional</option>
+                  <option value="concise-direct">Concise direct</option>
+                  <option value="technical">Technical</option>
+                  <option value="executive">Executive</option>
+                </select>
+              </div>
+              <textarea
+                className="input resize-y text-xs leading-relaxed"
+                rows={2}
+                placeholder="Optional: include only CSM-owned next steps, or make it customer-ready."
+                value={followUpInstructions}
+                onChange={(event) => setFollowUpInstructions(event.target.value)}
+              />
+              {followUpError && <p className="mt-2 text-xs text-red-600">{followUpError}</p>}
+              <div className="flex items-center gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={submitFollowUp}
+                  disabled={followUpLoading}
+                  className="btn-secondary text-xs"
+                >
+                  {followUpLoading ? "Drafting..." : "Draft Follow-Up"}
+                </button>
+                {followUpDraft && (
+                  <button type="button" onClick={copyFollowUp} className="btn-secondary text-xs">Copy Draft</button>
+                )}
+              </div>
+              {followUpDraft && (
+                <pre className="mt-3 max-h-60 overflow-y-auto whitespace-pre-wrap rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs leading-relaxed text-gray-700">
+                  {followUpDraft}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-4">
         {saved ? (
@@ -198,6 +328,40 @@ export default function NotesPreview({
           )}
         </button>
       </div>
+    </div>
+  );
+}
+
+function SourcePanel({ sources, referencedSources, referencedIds }) {
+  const displayed = referencedSources.length ? referencedSources : sources;
+
+  return (
+    <div className="max-h-[600px] overflow-y-auto space-y-3">
+      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+        <p className="text-sm font-medium text-gray-800">
+          {referencedSources.length
+            ? `${referencedSources.length} cited source${referencedSources.length !== 1 ? "s" : ""}`
+            : "No source IDs found in the generated note yet"}
+        </p>
+        {referencedIds.length > 0 && (
+          <p className="mt-1 text-xs text-gray-500">Referenced IDs: {referencedIds.join(", ")}</p>
+        )}
+      </div>
+
+      {displayed.map((source) => (
+        <div key={source.id} className="rounded-lg border border-gray-200 p-4 bg-white">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs rounded bg-gray-100 px-2 py-1 text-gray-700">[{source.id}]</span>
+              <span className="text-xs font-medium text-gray-500">{source.label}</span>
+            </div>
+            {referencedIds.includes(source.id) && (
+              <span className="text-[11px] uppercase tracking-wide text-obsidian-600 font-semibold">cited</span>
+            )}
+          </div>
+          <p className="whitespace-pre-wrap text-xs leading-relaxed text-gray-700">{sourceExcerpt(source)}</p>
+        </div>
+      ))}
     </div>
   );
 }

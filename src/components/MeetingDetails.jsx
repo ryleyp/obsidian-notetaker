@@ -1,6 +1,25 @@
 "use client";
 
+import { useRef } from "react";
+
 export default function MeetingDetails({ meetingTitle, setMeetingTitle, meetingContext, setMeetingContext }) {
+  const rawNotesRef = useRef(null);
+
+  function appendToRawNotes(text) {
+    const prefix = meetingContext.trim() ? "\n" : "";
+    setMeetingContext(`${meetingContext}${prefix}${text}`);
+    requestAnimationFrame(() => rawNotesRef.current?.focus());
+  }
+
+  function insertBullet() {
+    appendToRawNotes("- ");
+  }
+
+  function insertTimestamp() {
+    const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    appendToRawNotes(`- ${time} - `);
+  }
+
   return (
     <div className="card p-6">
       <div className="flex items-center gap-3 mb-5">
@@ -32,20 +51,34 @@ export default function MeetingDetails({ meetingTitle, setMeetingTitle, meetingC
       </div>
 
       <div className="mt-4">
-        <label className="label">Additional Context &amp; Your Notes <span className="font-normal text-gray-400">(optional — never saved as a file)</span></label>
-        <p className="text-xs text-gray-500 mb-2">
-          Anything the transcript won't say on its own — who attended and their roles, what the meeting was
-          about, account background, follow-ups from a prior call, or your own handwritten notes from the
-          meeting. Woven into the generated notes and SFDC entry, then discarded — this text is not saved
-          anywhere on its own.
-        </p>
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <label className="label mb-0">Raw Notes &amp; Context <span className="font-normal text-gray-400">(optional)</span></label>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={insertBullet} className="btn-secondary text-xs px-2.5 py-1.5">Bullet</button>
+            <button type="button" onClick={insertTimestamp} className="btn-secondary text-xs px-2.5 py-1.5">Timestamp</button>
+            {meetingContext && (
+              <button
+                type="button"
+                onClick={() => setMeetingContext("")}
+                className="text-xs text-gray-500 hover:text-red-600"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
         <textarea
+          ref={rawNotesRef}
           className="input resize-y text-xs leading-relaxed"
-          rows={4}
+          rows={7}
           placeholder={"e.g. Quarterly sync with Gokul (LM MFC EA admin) and Jordan. Follow-up to the June SystemLink migration briefing.\nMy notes: Gokul wants SL Pro rollout confirmed before August; sounded frustrated about Data Bridge re-ingestion."}
           value={meetingContext}
           onChange={(e) => setMeetingContext(e.target.value)}
         />
+        <div className="mt-2 flex items-center justify-between text-xs text-gray-400">
+          <span>{meetingContext.trim() ? meetingContext.trim().split(/\s+/).length.toLocaleString() : 0} words</span>
+          <span>Used as source IDs N1, N2, ... when notes are generated</span>
+        </div>
       </div>
     </div>
   );

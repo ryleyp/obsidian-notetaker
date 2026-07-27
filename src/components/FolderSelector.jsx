@@ -36,7 +36,7 @@ export default function FolderSelector({ vaultPath, selectedFolder, onSelect, on
     <div className="card p-6">
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
-          <StepBadge n={3} />
+          <StepBadge n={4} />
           <div>
             <h2 className="text-base font-semibold text-gray-900">Destination Folder</h2>
             <p className="text-xs text-gray-500">Pick where to save the note in your vault</p>

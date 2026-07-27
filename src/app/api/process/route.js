@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { looksSpeakerLabeled } from "@/lib/speakers";
 import { assertTrustedRequest } from "@/lib/requestSafety";
+import { buildWorkflowInstruction } from "@/lib/noteWorkflows";
+import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 
 const SYSTEM_PROMPT = `You are an expert meeting notes specialist working for a Customer Success Manager (CSM) at NI (National Instruments). The person who recorded this meeting is that CSM — their job is driving adoption, expansion, and renewal of NI products at large customer accounts.
 
@@ -68,8 +70,28 @@ SUMMARY/NOTES RULES
 - Do not invent attendees, regions, outcomes, or next steps that aren't supported by the transcript or the CSM's own context/notes.
 - Exclude raw internal complaints/blame, speculative pricing or forecast figures, and anything the account team wouldn't want visible in CRM.`;
 
-export function buildPrompt(transcript, meetingTitle, suggestedAgreements = [], meetingContext = "") {
+export function buildPrompt(
+  transcript,
+  meetingTitle,
+  suggestedAgreements = [],
+  meetingContext = "",
+  {
+    noteTemplateId,
+    recipeId,
+    customTemplateInstructions = "",
+    customRecipeInstructions = "",
+    sourceBundle,
+  } = {}
+) {
   const title = meetingTitle || "Meeting Notes";
+  const sources = sourceBundle || buildSourceBundle({ transcript, rawNotes: meetingContext });
+  const sourceBlock = formatSourceBundleForPrompt(sources) || `[T1] Transcript\n${transcript}`;
+  const workflowInstruction = buildWorkflowInstruction({
+    noteTemplateId,
+    recipeId,
+    customTemplateInstructions,
+    customRecipeInstructions,
+  });
 
   // Extra background and/or the CSM's own handwritten notes, typed in by the
   // CSM alongside the transcript. Treated as a trusted second source.
@@ -102,13 +124,24 @@ This transcript has been segmented by speaker — each turn is preceded by a lab
 Meeting Title: ${title}
 ${speakerGuidance}${contextBlock}
 ---
-TRANSCRIPT:
-${transcript}
+SOURCE BLOCKS:
+${sourceBlock}
 ---
 
 ${TAG_CATEGORIES}
 
-Generate the meeting notes with EXACTLY this structure. Do NOT include a YAML frontmatter block.
+TEMPLATE AND RECIPE
+${workflowInstruction}
+
+SOURCE CITATION RULES
+- Use only the source block IDs above as citations.
+- Add citations to every factual bullet or factual paragraph outside the SFDC Activity Entry, using markers like [T1] or [N1].
+- Put citations at the end of the sentence or bullet they support.
+- Use [N#] for claims that come from the CSM's raw notes/context and [T#] for transcript claims.
+- If a point is synthesized from multiple sources, cite each relevant source, e.g. [T2] [N1].
+- Do not put citation markers inside the SFDC Activity Entry because it is copied into Salesforce.
+
+Generate the meeting notes with this baseline structure. Do NOT include a YAML frontmatter block. Keep every required section below. You may add a short template-specific section only if the selected template or recipe clearly requires it, and only before Action Items.
 
 Word limit: The Executive Summary and Meeting Notes sections together must be 120 words or fewer. Keep those two sections tight; use the later callout, action item, and next step sections for structured follow-up detail.
 
@@ -199,7 +232,19 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { transcript, meetingTitle, apiKey, model, suggestedAgreements = [], meetingContext = "" } = body;
+    const {
+      transcript,
+      meetingTitle,
+      apiKey,
+      model,
+      suggestedAgreements = [],
+      meetingContext = "",
+      noteTemplateId,
+      recipeId,
+      customTemplateInstructions = "",
+      customRecipeInstructions = "",
+      sourceBundle,
+    } = body;
 
     if (!transcript || transcript.trim().length === 0) {
       return NextResponse.json({ error: "Transcript is required" }, { status: 400 });
@@ -219,7 +264,16 @@ export async function POST(request) {
       model: model || "claude-sonnet-4-6",
       max_tokens: 9216,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildPrompt(transcript, meetingTitle, suggestedAgreements, meetingContext) }],
+      messages: [{
+        role: "user",
+        content: buildPrompt(transcript, meetingTitle, suggestedAgreements, meetingContext, {
+          noteTemplateId,
+          recipeId,
+          customTemplateInstructions,
+          customRecipeInstructions,
+          sourceBundle,
+        }),
+      }],
     });
 
     const encoder = new TextEncoder();

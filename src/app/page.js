@@ -7,6 +7,7 @@ import MeetingDetails from "@/components/MeetingDetails";
 import TranscriptInput from "@/components/TranscriptInput";
 import FolderSelector from "@/components/FolderSelector";
 import NotesPreview from "@/components/NotesPreview";
+import NoteWorkflowPanel from "@/components/NoteWorkflowPanel";
 import AccountStatus from "@/components/AccountStatus";
 import SystemLinkStatus from "@/components/SystemLinkStatus";
 import CSMActivityReport from "@/components/CSMActivityReport";
@@ -27,6 +28,8 @@ import { looksSpeakerLabeled } from "@/lib/speakers";
 import { aliasesFromReplacements } from "@/lib/privacy";
 import { mergeFileConfigIntoSettings } from "@/lib/settings";
 import { apiFetch, approveLocalPaths } from "@/lib/apiClient";
+import { DEFAULT_NOTE_TEMPLATE_ID, DEFAULT_RECIPE_ID } from "@/lib/noteWorkflows";
+import { buildSourceBundle, mapSourceBundle } from "@/lib/sourceBundle";
 
 export default function Home() {
   const [mode, setMode] = useState("new");
@@ -39,6 +42,10 @@ export default function Home() {
   const [meetingContext, setMeetingContext] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
   const [model, setModel] = useState("claude-haiku-4-5");
+  const [noteTemplateId, setNoteTemplateId] = useState(DEFAULT_NOTE_TEMPLATE_ID);
+  const [recipeId, setRecipeId] = useState(DEFAULT_RECIPE_ID);
+  const [customTemplateInstructions, setCustomTemplateInstructions] = useState("");
+  const [customRecipeInstructions, setCustomRecipeInstructions] = useState("");
 
   // Sanitization state
   const [sanitizing, setSanitizing] = useState(false);
@@ -67,6 +74,13 @@ export default function Home() {
   const [transcriptSavedPath, setTranscriptSavedPath] = useState("");
   const generationControllerRef = useRef(null);
   const [lastGenerationRequest, setLastGenerationRequest] = useState(null);
+  const [sourceBundle, setSourceBundle] = useState(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState(null);
+  const [followUpDraft, setFollowUpDraft] = useState("");
+  const [followUpLoading, setFollowUpLoading] = useState(false);
+  const [followUpError, setFollowUpError] = useState(null);
+  const [followUpCost, setFollowUpCost] = useState(null);
 
   function persistBrowserSettings(nextSettings) {
     const settingsToPersist = { ...nextSettings };
@@ -124,6 +138,31 @@ export default function Home() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("obsidian-notes-workflow");
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      if (parsed.noteTemplateId) setNoteTemplateId(parsed.noteTemplateId);
+      if (parsed.recipeId) setRecipeId(parsed.recipeId);
+      if (typeof parsed.customTemplateInstructions === "string") {
+        setCustomTemplateInstructions(parsed.customTemplateInstructions);
+      }
+      if (typeof parsed.customRecipeInstructions === "string") {
+        setCustomRecipeInstructions(parsed.customRecipeInstructions);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("obsidian-notes-workflow", JSON.stringify({
+      noteTemplateId,
+      recipeId,
+      customTemplateInstructions,
+      customRecipeInstructions,
+    }));
+  }, [noteTemplateId, recipeId, customTemplateInstructions, customRecipeInstructions]);
 
   useEffect(() => {
     setTranscriptSaved(false);
@@ -343,19 +382,24 @@ export default function Home() {
 
   // Step 3: sanitize + generate
   async function streamGenerateRequest(requestConfig) {
-    const { payload, replacements } = requestConfig;
+    const { payload, replacements, displaySourceBundle } = requestConfig;
     const controller = new AbortController();
     generationControllerRef.current = controller;
 
     setLastGenerationRequest(requestConfig);
+    setSourceBundle(displaySourceBundle || payload.sourceBundle || null);
     setProcessing(true);
     setProcessError(null);
+    setRegenerateError(null);
     setNotes("");
     setSaved(false);
     setSavedPath("");
     setTodosSaved(null);
     setSfdcReportSaved(null);
     setNoteCost(null);
+    setFollowUpDraft("");
+    setFollowUpError(null);
+    setFollowUpCost(null);
 
     try {
       const res = await apiFetch("/api/process", {
@@ -440,6 +484,13 @@ export default function Home() {
     const sanitizedContext = replacements.length
       ? applyReplacements(correctedContext, replacements)
       : correctedContext;
+    const promptSourceBundle = buildSourceBundle({
+      transcript: sanitizedTranscript,
+      rawNotes: sanitizedContext,
+    });
+    const displaySourceBundle = replacements.length
+      ? mapSourceBundle(promptSourceBundle, (content) => reverseReplacements(content, replacements))
+      : promptSourceBundle;
 
     // Match this account's EA/EP numbers to the raw transcript by keyword so
     // they can be suggested in the SFDC entry. Done client-side on the
@@ -456,9 +507,139 @@ export default function Home() {
         apiKey: settings.apiKey || undefined,
         model,
         suggestedAgreements,
+        noteTemplateId,
+        recipeId,
+        customTemplateInstructions,
+        customRecipeInstructions,
+        sourceBundle: promptSourceBundle,
       },
       replacements,
+      displaySourceBundle,
     });
+  }
+
+  async function handleRegenerateNotes(instruction) {
+    if (!notes.trim()) return;
+    const replacements = activeReplacements || [];
+    const sanitizedNotes = replacements.length ? applyReplacements(notes, replacements) : notes;
+    const correctedInstruction = applyCorrections(instruction, settings.corrections || []);
+    const sanitizedInstruction = replacements.length
+      ? applyReplacements(correctedInstruction, replacements)
+      : correctedInstruction;
+    const correctedTitle = applyCorrections(meetingTitle, settings.corrections || []);
+    const sanitizedTitle = replacements.length
+      ? applyReplacements(correctedTitle, replacements)
+      : correctedTitle;
+    const promptSourceBundle = lastGenerationRequest?.payload?.sourceBundle || null;
+
+    setRegenerating(true);
+    setRegenerateError(null);
+    setProcessError(null);
+    setSaved(false);
+    setSavedPath("");
+    setTodosSaved(null);
+    setSfdcReportSaved(null);
+    setFollowUpDraft("");
+    setFollowUpError(null);
+    setFollowUpCost(null);
+
+    try {
+      const res = await apiFetch("/api/regenerate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: sanitizedNotes,
+          instruction: sanitizedInstruction,
+          meetingTitle: sanitizedTitle,
+          apiKey: settings.apiKey || undefined,
+          model,
+          sourceBundle: promptSourceBundle,
+          noteTemplateId,
+          recipeId,
+          customTemplateInstructions,
+          customRecipeInstructions,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Regeneration failed");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
+      let buffer = "";
+      let usage = null;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop();
+        for (const part of parts) {
+          if (!part.startsWith("data: ")) continue;
+          const evt = JSON.parse(part.slice(6));
+          if (evt.type === "delta") {
+            accumulated += evt.text;
+            setNotes(replacements.length ? reverseReplacements(accumulated, replacements) : accumulated);
+          } else if (evt.type === "done") {
+            usage = evt.usage;
+          } else if (evt.type === "error") {
+            throw new Error(evt.message);
+          }
+        }
+      }
+      if (usage) setNoteCost(calcCost(usage, model));
+      setNotes(replacements.length ? reverseReplacements(accumulated, replacements) : accumulated);
+    } catch (e) {
+      setRegenerateError(e.message);
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  async function handleGenerateFollowUp({ audience, tone, instructions }) {
+    if (!notes.trim()) return;
+    const replacements = activeReplacements || [];
+    const sanitizedNotes = replacements.length ? applyReplacements(notes, replacements) : notes;
+    const correctedTitle = applyCorrections(meetingTitle, settings.corrections || []);
+    const sanitizedTitle = replacements.length
+      ? applyReplacements(correctedTitle, replacements)
+      : correctedTitle;
+    const correctedInstructions = applyCorrections(instructions || "", settings.corrections || []);
+    const sanitizedInstructions = replacements.length
+      ? applyReplacements(correctedInstructions, replacements)
+      : correctedInstructions;
+
+    setFollowUpLoading(true);
+    setFollowUpError(null);
+    setFollowUpDraft("");
+    setFollowUpCost(null);
+    try {
+      const res = await apiFetch("/api/follow-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: sanitizedNotes,
+          meetingTitle: sanitizedTitle,
+          apiKey: settings.apiKey || undefined,
+          model,
+          audience,
+          tone,
+          instructions: sanitizedInstructions,
+          sourceBundle: lastGenerationRequest?.payload?.sourceBundle || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Follow-up draft failed");
+      const restoredDraft = replacements.length ? reverseReplacements(data.draft, replacements) : data.draft;
+      setFollowUpDraft(restoredDraft);
+      if (data.usage) setFollowUpCost(calcCost(data.usage, model));
+    } catch (e) {
+      setFollowUpError(e.message);
+    } finally {
+      setFollowUpLoading(false);
+    }
   }
 
   function handleCancelGeneration() {
@@ -475,6 +656,9 @@ export default function Home() {
     setSavedPath("");
     setTodosSaved(null);
     setSfdcReportSaved(null);
+    setFollowUpDraft("");
+    setFollowUpError(null);
+    setFollowUpCost(null);
   }
 
   async function handleSave() {
@@ -591,8 +775,14 @@ export default function Home() {
     setSfdcReportSaved(null);
     setNoteCost(null);
     setProcessError(null);
+    setRegenerateError(null);
     setPendingReview(null);
     setActiveReplacements([]);
+    setLastGenerationRequest(null);
+    setSourceBundle(null);
+    setFollowUpDraft("");
+    setFollowUpError(null);
+    setFollowUpCost(null);
     setTranscriptSaved(false);
     setTranscriptSavedPath("");
   }
@@ -692,6 +882,15 @@ export default function Home() {
                 todosSaved={todosSaved}
                 sfdcReportSaved={sfdcReportSaved}
                 cost={noteCost}
+                sourceBundle={sourceBundle}
+                onRegenerate={handleRegenerateNotes}
+                regenerating={regenerating}
+                regenerateError={regenerateError}
+                onGenerateFollowUp={handleGenerateFollowUp}
+                followUpDraft={followUpDraft}
+                followUpLoading={followUpLoading}
+                followUpError={followUpError}
+                followUpCost={followUpCost}
               />
             </div>
           ) : (
@@ -707,6 +906,17 @@ export default function Home() {
                 transcript={transcript}
                 setTranscript={setTranscript}
                 onTitleSuggest={handleTitleSuggest}
+              />
+
+              <NoteWorkflowPanel
+                noteTemplateId={noteTemplateId}
+                setNoteTemplateId={setNoteTemplateId}
+                recipeId={recipeId}
+                setRecipeId={setRecipeId}
+                customTemplateInstructions={customTemplateInstructions}
+                setCustomTemplateInstructions={setCustomTemplateInstructions}
+                customRecipeInstructions={customRecipeInstructions}
+                setCustomRecipeInstructions={setCustomRecipeInstructions}
               />
 
               {transcript.trim() && !pendingSpeakers && (
@@ -729,7 +939,7 @@ export default function Home() {
                         </svg>
                         Analyzing…
                       </>
-                    ) : looksSpeakerLabeled(transcript) ? "Re-detect speakers" : "🎙️ Detect Speakers"}
+                    ) : looksSpeakerLabeled(transcript) ? "Re-detect speakers" : "Detect Speakers"}
                   </button>
                 </div>
               )}
