@@ -2,7 +2,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { dateSortValue } from "@/lib/synthesisPolicy";
-import { DEFAULT_MODEL, budgetChars as modelBudgetChars, maxOutputTokens } from "@/lib/models";
+import {
+  DEFAULT_MODEL,
+  budgetChars as modelBudgetChars,
+  contextLimit as contextTokens,
+  maxOutputTokens,
+} from "@/lib/models";
 
 function budgetChars(model) {
   return modelBudgetChars(model, 10_000);
