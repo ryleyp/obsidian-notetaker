@@ -31,6 +31,29 @@ export function textHasAlias(text, alias) {
   return new RegExp(`${left}${esc}${right}`, "i").test(text || "");
 }
 
+// Which of an account's EA/EP agreements apply to a piece of text (a
+// transcript). An agreement matches if any of its keywords appears as a
+// whole word; an agreement with NO keywords is treated as always applicable
+// to its account. Returns [{ type, number }] with duplicate numbers removed.
+export function suggestAgreements(text, account) {
+  const agreements = account?.agreements || [];
+  const out = [];
+  const seen = new Set();
+  for (const g of agreements) {
+    const number = (g.number || "").trim();
+    if (!number) continue;
+    const keywords = (g.keywords || []).filter(Boolean);
+    const hit = keywords.length === 0 || keywords.some((k) => textHasAlias(text, k));
+    if (!hit) continue;
+    const type = g.type === "EP" ? "EP" : "EA";
+    const key = `${type} ${number}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ type, number });
+  }
+  return out;
+}
+
 // Detect which account a selected Obsidian folder name belongs to.
 // Uses substring matching since folder names are short and curated
 // (e.g. "3. Northrop"). Falls back to Internal when nothing matches.

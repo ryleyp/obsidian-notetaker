@@ -1,6 +1,23 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 export default function Header({ onSettingsClick, isSettingsOpen, mode, onModeChange }) {
+  const [dark, setDark] = useState(false);
+
+  useEffect(() => {
+    setDark(document.documentElement.classList.contains("dark"));
+  }, []);
+
+  const toggleTheme = () => {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.classList.toggle("dark", next);
+    try {
+      localStorage.setItem("theme", next ? "dark" : "light");
+    } catch (e) {}
+  };
+
   return (
     <header className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
       <div className="max-w-3xl mx-auto px-4 sm:px-6">
@@ -38,6 +55,16 @@ export default function Header({ onSettingsClick, isSettingsOpen, mode, onModeCh
                 Account Status
               </button>
               <button
+                onClick={() => onModeChange("mapping")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  mode === "mapping"
+                    ? "bg-white text-obsidian-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Mapping
+              </button>
+              <button
                 onClick={() => onModeChange("sl-status")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                   mode === "sl-status"
@@ -47,7 +74,34 @@ export default function Header({ onSettingsClick, isSettingsOpen, mode, onModeCh
               >
                 SL Status
               </button>
+              <button
+                onClick={() => onModeChange("csm-activity")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  mode === "csm-activity"
+                    ? "bg-white text-obsidian-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                EA Activity
+              </button>
             </div>
+
+            <button
+              onClick={toggleTheme}
+              aria-label="Toggle dark mode"
+              title={dark ? "Switch to light mode" : "Switch to dark mode"}
+              className="flex items-center justify-center w-9 h-9 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              {dark ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+              )}
+            </button>
 
             <button
               onClick={onSettingsClick}

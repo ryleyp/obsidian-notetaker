@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
+import { scrubWithExceptions } from "@/lib/scrub";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { BATCH_TEMPORAL_RULE, TEMPORAL_ACCURACY_RULE, dateSortValue } from "@/lib/synthesisPolicy";
 
@@ -49,6 +50,7 @@ CRITICAL ACCOUNT SCOPING RULES — these override everything else:
 - If a source mentions ${acct} only in passing, extract just the ${acct}-relevant parts.
 - If a source has no ${acct} content, ignore it entirely.
 - Never write a sentence that is about another account. The reader only cares about ${acct}.
+- ATTRIBUTION RULE: Lines and sections mentioning other accounts were removed before these notes reached you, so some sources (especially internal or multi-account meetings like site-level reviews and team syncs) may contain orphaned fragments whose account is no longer identifiable. NEVER assume such content is about ${acct}. Only attribute content to ${acct} when the surrounding text explicitly names ${acct} or an unambiguous ${acct} identifier. When the subject is unclear, LEAVE IT OUT — do not rewrite another account's content to sound like it happened at ${acct}.
 ${buildExclusionList(acct, allAccounts)}
 `
     : "";
@@ -246,6 +248,7 @@ CRITICAL ACCOUNT SCOPING RULES — these override everything else:
 - Some sources come from other folders and may contain content about other accounts. Use ONLY the portions about ${acct}. Ignore everything about any other account, even within the same note.
 - If a source has no ${acct} + ${p} content, ignore it entirely.
 - Never write a sentence about ${p} at another account. The reader only cares about ${acct}.
+- ATTRIBUTION RULE: Lines and sections mentioning other accounts were removed before these notes reached you, so some sources may contain orphaned fragments whose account is no longer identifiable. NEVER assume such content is about ${acct}. Only attribute content to ${acct} when the surrounding text explicitly names ${acct} or an unambiguous ${acct} identifier. When the subject is unclear, LEAVE IT OUT — do not rewrite another account's content to sound like it happened at ${acct}.
 ${buildExclusionList(acct, allAccounts)}
 `
     : "";
@@ -406,6 +409,152 @@ List any cases where a newer source contradicts, reverses, or materially updates
 Priority actions for the CS team related to ${p} in the coming weeks.`;
 }
 
+function buildCSMActivityPrompt(notes, today, accountName, allAccounts, range, resumeRows) {
+  let rangeStart = range?.start ? new Date(range.start) : null;
+  if (rangeStart && isNaN(rangeStart.getTime())) rangeStart = null;
+  if (!rangeStart) {
+    rangeStart = new Date(today);
+    rangeStart.setMonth(rangeStart.getMonth() - 4);
+  }
+  let rangeEnd = range?.end ? new Date(range.end) : null;
+  if (rangeEnd && isNaN(rangeEnd.getTime())) rangeEnd = null;
+  if (!rangeEnd) rangeEnd = new Date(today);
+  const fmt = (d) => d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const rangeLabel = `${fmt(rangeStart)} – ${fmt(rangeEnd)}`;
+
+  const acct = accountName && accountName !== "Internal" ? accountName : "this account";
+
+  const noteBlocks = notes
+    .map((n) => {
+      const tag = n.source === "cross-vault" ? ` [${n.sourceLabel}]` : "";
+      return `### ${n.date} — ${n.title}${tag}${n._dayLabel || ""}\n\n${n.content}`;
+    })
+    .join("\n\n---\n\n");
+
+  const exclusion = buildExclusionList(acct, allAccounts);
+
+  return `You are a NI Software Customer Success Manager creating an EA Engagement Activity Report for **${acct}** based on ${notes.length} meeting notes and transcripts from the reporting period ${rangeLabel}.
+${exclusion ? `\n${exclusion}` : ""}
+CRITICAL ACCOUNT SCOPING RULES — these override everything else:
+- Report exclusively on **${acct}**. Do NOT include any activity that belongs to another customer account.
+- Some notes may mention other accounts or come from shared folders. Extract ONLY activities that involve ${acct}. Ignore everything else, even within the same note.
+- Never write a row about another account. If an activity does not involve ${acct}, skip it entirely.
+- Do not mention any other account name, alias, or keyword in any field.
+- ATTRIBUTION RULE: Lines and sections mentioning other accounts were removed before these notes reached you, so some sources (especially internal or multi-account meetings like site-level reviews and team syncs) may contain orphaned fragments whose account is no longer identifiable. NEVER assume such content is about ${acct}. Only report an activity as ${acct}'s when the surrounding text explicitly names ${acct} or an unambiguous ${acct} identifier (a site, program, or contact you can see belongs to ${acct} in the same source). When the subject is unclear, SKIP the activity entirely — do not rewrite another account's activity to sound like it happened at ${acct}. A partial report is correct; a misattributed row is a serious error.
+
+TASK: Identify all meaningful, reportable CSM activities from these sources and output an EA Engagement Activity Report. Do NOT include routine emails, low-value check-ins, or any activity that wouldn't impress an executive reader. If two notes describe the same session, produce only one activity — no duplicates.
+${resumeRows?.length ? `
+ALREADY REPORTED — a previous run already produced the activities below. Do NOT output them again. Continue with the remaining activities only:
+${resumeRows.map((r) => `- ${r.eventDate}: ${r.title}`).join("\n")}
+` : ""}
+OUTPUT FORMAT — output ONLY newline-delimited JSON (NDJSON): exactly one JSON object per line, one line per activity. No Markdown, no code fences, no intro or commentary, no blank lines between objects. Each line has exactly these keys:
+
+{"eventDate":"YYYY-MM-DD","title":"...","type":"...","subtype":"...","comments":"...","sourceTitle":"...","review":false,"reviewReason":""}
+
+Field rules:
+- **eventDate**: the date of the note this activity came from (YYYY-MM-DD, taken from the ### heading of the source)
+- **sourceTitle**: the exact title of the source note this activity came from, copied verbatim from its ### heading (the part after the date). Every row MUST cite its source.
+- **title**: short descriptive name matching the style of these real examples — "L3Harris RF User Group - March 2026", "CSM / FAE NGC Account Interlock", "NI Connect Promotional Email", "LM MFC Proficiency Plan - LabVIEW Core Training Scheduling"
+- **type** and **subtype**: must exactly match one option from the taxonomy below
+- **comments**: max 800 characters. Write for an executive audience. CSM is the active subject (e.g. "CSM coordinated...", "CSM submitted..."). Name specific contacts and titles. Lead with what happened and why it matters. Connect to adoption, expansion, renewal, or risk.
+- **review**: set to true ONLY when you are genuinely unsure of the type/subtype classification (e.g. a session that could be either Demo Days or User Group), with a short reviewReason explaining the ambiguity. When confident, use false and an empty reviewReason.
+
+CLASSIFICATION PROCESS — for each activity, evaluate ALL 6 Type options before selecting. Do not stop at the first type that seems plausible:
+
+IMPORTANT DEFINITION — **EA Admin**: a customer-side IT administrator (employed by Frontgrade, Lockheed Martin, Northrop Grumman, L3Harris, etc.) who runs the EA or maintains NI licensing on their company's behalf. EA Admins are NOT NI employees. Any meeting with an EA Admin is a customer-facing activity — never Internal Alignment.
+NI-side roles are NOT EA Admins: AMs (Account Managers), FAEs (Field Application Engineers), CSMs, and any other NI employee. A meeting attended only by NI-side roles (e.g. a CSM/FAE or CSM/AM sync with no customer contact present) is Internal Alignment & Collaboration, NOT an EA Admin Sync. Only classify something as EA Admin Sync or EA Admin Onboarding when an actual customer-side EA Admin is involved.
+
+1. **Entitlement Awareness & Promotion** — Is this about promoting EA entitlement awareness or usage? (emails, newsletters, training plans, shared portals)
+2. **Internal Alignment & Collaboration** — Was this NI-internal only with NO customer present? Did it produce a concrete decision or outcome? (If no clear outcome, skip it.) Any session that includes an EA Admin or any other customer contact is NOT internal.
+3. **Onboarding & Kick-Off** — Was this specifically onboarding a new EA Admin (customer-side) or new end users to the EA scope and entitlements?
+4. **Strategic Relationship Management** — Was this a 1:1 or small-group customer-facing governance or relationship sync that doesn't qualify as a User Group or Onboarding?
+5. **User Groups** — Was this a group session with multiple attendees (demo, user group, or planning/coordination for one)?
+6. **Value Realization & Success Stories** — Was the primary purpose to capture or communicate customer ROI, outcomes, or a success story?
+
+Tiebreaker rules:
+- If NI-internal only (zero customer contacts present) → Internal Alignment & Collaboration (not Strategic)
+- If group session with multiple attendees → User Groups (not Strategic)
+- If onboarding a new EA Admin (customer-side) or new end users → Onboarding & Kick-Off (not Strategic)
+- If capturing/writing ROI or a success story → Value Realization (not Strategic)
+- Strategic Relationship Management is a catch-all for customer-facing relationship activities only after ruling out all more-specific types above
+
+For each activity, silently verify your choice by asking: "Is there a more specific type that fits better than what I'm about to pick?" Only then write the row.
+
+EA ENGAGEMENT TYPE TAXONOMY — use the EXACT text shown below for both Type and Subtype (copy it character-for-character). Read descriptions and examples before picking.
+
+**Type: Entitlement Awareness & Promotion** — activities promoting awareness or use of EA entitlements:
+  - Digital Campaign/Promotion — email/digital outreach campaigns promoting training, events, or EA awareness (e.g. NI Connect promo emails, training registration drives, event promotions)
+    Example: "Launched NI Connect promotional email campaign to NGC contacts, targeting registration and identifying potential presenters for the NGC-sponsored session. Campaign supports expansion positioning."
+  - MidTerm Reviews — formal midpoint EA review with the customer covering usage and ROI
+  - Newsletters — quarterly newsletters to account contacts covering product highlights, events, training, key POCs
+    Example: "Distributed Q1 FY26 EA Quarterly Newsletter to L3Harris contacts. Content included NI product highlights, NI Connect event promotion, L3Harris-specific upcoming events, training resources, and key NI POC information. Reinforced EA value awareness."
+  - Shared Space Set-up/Update — setting up or updating a shared portal or resource hub
+  - Training/Support Plans — creating or scheduling a formal training plan across sites/teams
+    Example: "Sync with Jordan (GTS, LM MFC), Nicole, and Angelica (NI Education Services) to scope LabVIEW Core 1 and Core 2 training across MFC sites. MFC holds ~7,600 EA training credits over 3 years. Confirmed in-person, instructor-led format."
+  - Training/Support Webinar — delivering a live training or support session to users
+  - Other
+
+**Type: Internal Alignment & Collaboration** — NI-internal sessions (no customer present). Only log if a clear decision or outcome resulted:
+  - Account Planning — CSM/FAE interlock, account strategy sessions, NI Connect planning calls, internal alignment that produced a defined outcome
+    Example: "CSM/FAE FY26 account interlock for Northrop Grumman. Reviewed CS focus areas, current usage data trends, and CS execution plan including site-level priorities. Identified specific gaps in FAE workflow where CSM provides strategic coverage."
+  - Account Team Kick-Off — formal kickoff session with the full internal account team (CSM, FAE, AM, etc.)
+    Example: "CSM/FAE Interlock for FY 2026, reviewing CS Focus Areas, overview of usage data trends, CS execution plans including site level and event calendar, and brainstorming session on where CS can help fill in gaps in the FAE workflow."
+  - Product Feedback — internal session to escalate or document customer product feedback
+  - Other — recurring internal team syncs (e.g. biweekly account team calls) when they produced a concrete outcome
+
+**Type: Onboarding & Kick-Off** — onboarding new admins or users:
+  - EA Admin Onboarding — onboarding a new customer-side EA Admin (customer IT administrator who runs the EA or maintains NI licensing for their company) to EA scope, entitlements, and governance. This is always a customer-facing meeting.
+    Example: "EA Admin onboarding session for two new L3Harris EA Admins who recently took over the role. Session covered the full scope of the EA (software entitlements, training credits, etc.), admin Q&A, and established understanding of internal processes."
+  - EA End-User Kick-Off — introduction or review of EA terms, entitlements, and inclusions with customer end users
+  - Other
+
+**Type: Strategic Relationship Management** — high-touch customer-facing relationship and governance activities:
+  - EA Admin Sync — recurring or ad-hoc sync with the customer-side EA Admin (customer IT administrator who runs the EA or maintains NI licensing for their company) or other key customer stakeholders. These contacts are NOT NI employees.
+    Example: "Frontgrade TestStand Pilot Check In and EA Renewal Alignment — Meeting with Marc Pevotaux to review pilot status and align on renewal timeline."
+  - Escalation/Risk Management — active risk mitigation, escalations, or at-risk situations
+    Example: "Active R&D escalation on behalf of Bret Ridgel (Northrop Grumman) related to a TKM505X IVI driver issue preventing LabVIEW control of the Tektronix MSO46B. Original FAE ticket stalled after R&D contacts left NI. CSM submitted an R&D Advocacy request to unblock."
+  - QBRs/EBRs — formal quarterly or executive business review
+  - Roadmap Review — session reviewing NI product roadmap with customer stakeholders
+  - SLE Governance — SystemLink Enterprise governance meetings
+  - Other
+
+**Type: User Groups** — group sessions with multiple attendees. Pick subtype based on who led the session:
+  - Demo Days — NI-led session where NI/FAE presents or demos products to the customer
+    Comment format: "[Title] — Region: [X], Attendees: [#]. [Description of session content and who led it.] Outcome: [adoption / expansion / risk reduction / customer momentum]"
+    Example: "L3Harris RF User Group — Region: AMER, Attendees: 22. FAE and AM led users through an overview of NI RF Hardware Platforms and demoed InstrumentStudio. Session targeted RF-focused sites. Outcome: Drove direct product exposure across the RF engineering community and generated adoption momentum at targeted sites."
+  - User Group — customer-sponsored recurring session; may include NI content but customer drives cadence/agenda
+    Comment format: "[Title] — Region: [X], Attendees: [#]. [Description]. Outcome: [impact]"
+    Example: "LMS User Group — Region: AMER, Participants: TBD. Conducted an LMS user group session focused on important updates to the LMS NI EA and entitlements. Maintained customer momentum and reinforced awareness of EA value."
+  - Other — planning or brainstorming sessions tied to user group execution (e.g. pre-UG sponsor sync)
+  ⚠️ NI-led demo sessions = Demo Days. Customer-sponsored recurring groups = User Group. Pre-UG planning calls = Other.
+
+**Type: Value Realization & Success Stories** — capturing or communicating customer outcomes and ROI:
+  - Case Study — written or formal case study in progress or completed
+    Example: "Initiated SystemLink case study with Eric Reek (IT Admin Lead, L3Harris) documenting the successful deployment of SystemLink Server at L3Harris Florida sites. Sessions held 3/11 and 3/12 to capture deployment scope, outcomes, and measurable value."
+  - Customer Testimonial — capturing a customer success quote or formal testimonial
+  - Outcome Review — reviewing measured outcomes and value delivered
+  - SLE ROI Review — formal ROI review specific to SystemLink Enterprise
+  - Other
+
+**Type: Other** — only use if truly none of the above types fit.
+
+COMMENT REQUIREMENTS:
+- Use "CSM" as the active subject (e.g., "CSM coordinated...", "CSM submitted...", "CSM/FAE interlock...") — never I/we/my
+- Name specific people by name and title when available (e.g., "Eric Reek, IT Admin Lead")
+- Every comment must answer: what happened, who was involved, and why it matters — do not just describe logistics
+- State outcomes explicitly: what did this drive? (adoption, expansion signal, renewal positioning, risk reduction, customer momentum)
+- Show CSM ownership and leadership — describe what CSM drove, defined, or decided, not just that a meeting occurred
+- Connect to revenue where possible — note how the activity ties to expansion, adoption health, or renewal
+- Be specific — reference actual product names, site names, topics discussed, decisions made
+- For Demo Days and User Groups: always include Region, Attendees (or TBD), topics, and Outcome
+- Keep comments under 800 characters but use the full space when the detail is there — do not be artificially brief
+- Skip activities that are purely logistics with no outcome (routine calendar holds, placeholder reminders with no substance)
+
+SOURCES (${rangeLabel}):
+
+${noteBlocks}`;
+}
+
 // Max output tokens per model. Sonnet 4.6 supports 16k; Haiku 4.5 caps at 8k.
 const MODEL_MAX_OUTPUT = {
   "claude-opus-4-8": 32_000,
@@ -463,36 +612,6 @@ function fitNotes(notes, model) {
     total += size;
   }
   return { kept, dropped: notes.length - kept.length };
-}
-
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function lineContainsKeyword(line, keywords) {
-  return keywords.some((kw) => {
-    const esc = escapeRegex(kw.trim());
-    const left = /^\w/.test(kw) ? "\\b" : "";
-    const right = /\w$/.test(kw) ? "\\b" : "";
-    return new RegExp(`${left}${esc}${right}`, "i").test(line);
-  });
-}
-
-// Physically remove lines containing keywords that belong to other accounts
-// so Claude never sees them — prompt instructions alone aren't reliable enough.
-function scrubForbiddenKeywords(notes, accountName, allAccounts) {
-  const forbidden = (allAccounts || [])
-    .filter((a) => a.name !== accountName && a.name !== "Internal")
-    .flatMap((a) => a.keywords || [])
-    .filter(Boolean);
-  if (!forbidden.length) return notes;
-  return notes.map((n) => ({
-    ...n,
-    content: n.content
-      .split("\n")
-      .filter((line) => !lineContainsKeyword(line, forbidden))
-      .join("\n"),
-  }));
 }
 
 function combineUsage(a = {}, b = {}) {
@@ -619,13 +738,12 @@ function tagSameDayNotes(notes) {
     return { ...n, _dayLabel: "" };
   });
 }
-
 export async function POST(request) {
   try {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { notes, apiKey, model, today, replacements = [], corrections = [], productFocus, accountName, allAccounts = [] } = body;
+    const { notes, apiKey, model, today, replacements = [], corrections = [], productFocus, promptType, accountName, allAccounts = [], restoredIds = [], rangeStart, rangeEnd, resumeRows = [] } = body;
 
     if (!notes || notes.length === 0) {
       return new Response(JSON.stringify({ error: "No notes provided" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -637,6 +755,12 @@ export async function POST(request) {
       content: applyReplacements(applyCorrections(n.content, corrections), replacements),
     }));
 
+    // Resume rows come from the client with real names — sanitize like note content.
+    const sanitizedResumeRows = (resumeRows || []).slice(0, 200).map((r) => ({
+      eventDate: r?.eventDate || "",
+      title: applyReplacements(applyCorrections(r?.title || "", corrections), replacements),
+    }));
+
     const key = apiKey || process.env.ANTHROPIC_API_KEY;
     if (!key) {
       return new Response(JSON.stringify({ error: "Anthropic API key is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -644,7 +768,7 @@ export async function POST(request) {
 
     const selectedModel = model || "claude-sonnet-4-6";
     const client = new Anthropic({ apiKey: key });
-    const scrubbedNotes = scrubForbiddenKeywords(sanitizedNotes, accountName, allAccounts);
+    const scrubbedNotes = scrubWithExceptions(sanitizedNotes, accountName, allAccounts, restoredIds);
     let { kept, dropped } = fitNotes(scrubbedNotes, selectedModel);
     let summarizedCount = 0;
     let mapReduceUsage = { input_tokens: 0, output_tokens: 0 };
@@ -670,13 +794,18 @@ export async function POST(request) {
       async start(controller) {
         const send = (obj) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
         try {
+          const systemPrompt = promptType === "csm-activity"
+            ? "You are an expert at synthesizing meeting notes into structured activity reports. Respond with only newline-delimited JSON objects — no preamble, no Markdown, no code fences."
+            : "You are an expert at synthesizing dated meeting notes into clear, actionable executive summaries. Newer dated sources override older dated sources when they conflict, resolve, or update a fact. Respond with only the Markdown document — no preamble.";
           const messageStream = client.messages.stream({
             model: selectedModel,
             max_tokens: maxOutputTokens(selectedModel),
-            system: "You are an expert at synthesizing dated meeting notes into clear, actionable executive summaries. Newer dated sources override older dated sources when they conflict, resolve, or update a fact. Respond with only the Markdown document — no preamble.",
+            system: systemPrompt,
             messages: [{
               role: "user",
-              content: productFocus
+              content: promptType === "csm-activity"
+                ? buildCSMActivityPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], accountName, allAccounts, { start: rangeStart, end: rangeEnd }, sanitizedResumeRows)
+                : productFocus
                 ? buildProductPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], productFocus, accountName, allAccounts)
                 : buildSynthesisPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], accountName, allAccounts),
             }],

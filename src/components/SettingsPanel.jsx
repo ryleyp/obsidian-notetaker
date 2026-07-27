@@ -1,8 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { DEFAULT_ACCOUNTS } from "@/lib/accounts";
 import { apiFetch, approveLocalPaths } from "@/lib/apiClient";
+
+const CONFIG_VERSION = 1;
+
+// Turn a persisted account (array fields) back into a form row (text fields).
+function accountToFormRow(a) {
+  return {
+    name: a.name || "",
+    archiveFolder: a.archiveFolder || "",
+    aliasesText: (a.aliases || []).join(", "),
+    keywordsText: (a.keywords || []).join(", "),
+    agreements: (a.agreements || []).map((g) => ({
+      type: g.type === "EP" ? "EP" : "EA",
+      number: g.number || "",
+      keywordsText: (g.keywords || []).join(", "),
+    })),
+  };
+}
 
 export default function SettingsPanel({ settings, onSave, onClose }) {
   const [form, setForm] = useState({
@@ -13,13 +30,8 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
     model: settings.model || "claude-haiku-4-5",
     replacements: settings.replacements || [],
     corrections: settings.corrections || [],
-    // Edit aliases as a comma-separated string; split into an array on save.
-    accounts: (settings.accounts?.length ? settings.accounts : DEFAULT_ACCOUNTS).map((a) => ({
-      name: a.name || "",
-      archiveFolder: a.archiveFolder || "",
-      aliasesText: (a.aliases || []).join(", "),
-      keywordsText: (a.keywords || []).join(", "),
-    })),
+    // Edit aliases/keywords as comma-separated strings; split on save.
+    accounts: (settings.accounts?.length ? settings.accounts : DEFAULT_ACCOUNTS).map(accountToFormRow),
   });
   const [newFind, setNewFind] = useState("");
   const [newReplace, setNewReplace] = useState("");
@@ -27,6 +39,75 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
   const [testResult, setTestResult] = useState(null);
   const [newOriginal, setNewOriginal] = useState("");
   const [newAlias, setNewAlias] = useState("");
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestions, setSuggestions] = useState(null); // { account: [{term,count}] }
+  const [suggestError, setSuggestError] = useState(null);
+  const [pickedTerms, setPickedTerms] = useState(new Set()); // "account||term"
+  const [includeKeyInExport, setIncludeKeyInExport] = useState(false);
+  const [importMsg, setImportMsg] = useState(null); // { ok, message }
+  const importInputRef = useRef(null);
+
+  function formAccounts() {
+    return form.accounts
+      .filter((a) => a.name.trim())
+      .map((a) => ({
+        name: a.name.trim(),
+        archiveFolder: a.archiveFolder.trim(),
+        aliases: a.aliasesText.split(",").map((s) => s.trim()).filter(Boolean),
+        keywords: a.keywordsText.split(",").map((s) => s.trim()).filter(Boolean),
+      }));
+  }
+
+  async function handleSuggestKeywords() {
+    if (!form.vaultPath.trim()) return;
+    setSuggesting(true);
+    setSuggestError(null);
+    setSuggestions(null);
+    setPickedTerms(new Set());
+    try {
+      const params = new URLSearchParams({
+        vaultPath: form.vaultPath.trim(),
+        accounts: JSON.stringify(formAccounts()),
+      });
+      if (form.transcriptsPath.trim()) params.set("transcriptsPath", form.transcriptsPath.trim());
+      const res = await fetch(`/api/suggest-keywords?${params}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Scan failed");
+      setSuggestions(data.suggestions || {});
+    } catch (e) {
+      setSuggestError(e.message);
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  function togglePicked(account, term) {
+    setPickedTerms((prev) => {
+      const key = `${account}||${term}`;
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function addPickedKeywords() {
+    setForm((f) => ({
+      ...f,
+      accounts: f.accounts.map((a) => {
+        const terms = [...pickedTerms]
+          .map((k) => k.split("||"))
+          .filter(([acct]) => acct === a.name.trim())
+          .map(([, term]) => term);
+        if (!terms.length) return a;
+        const existing = a.keywordsText.split(",").map((s) => s.trim()).filter(Boolean);
+        const merged = [...existing, ...terms.filter((t) => !existing.some((e) => e.toLowerCase() === t.toLowerCase()))];
+        return { ...a, keywordsText: merged.join(", ") };
+      }),
+    }));
+    setPickedTerms(new Set());
+    setSuggestions(null);
+  }
 
   function handleChange(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -90,22 +171,63 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
   }
 
   function addAccount() {
-    setForm((f) => ({ ...f, accounts: [...f.accounts, { name: "", archiveFolder: "", aliasesText: "", keywordsText: "" }] }));
+    setForm((f) => ({ ...f, accounts: [...f.accounts, { name: "", archiveFolder: "", aliasesText: "", keywordsText: "", agreements: [] }] }));
   }
 
   function removeAccount(i) {
     setForm((f) => ({ ...f, accounts: f.accounts.filter((_, idx) => idx !== i) }));
   }
 
-  function handleSave() {
-    const accounts = form.accounts
+  function addAgreement(accountIdx) {
+    setForm((f) => ({
+      ...f,
+      accounts: f.accounts.map((a, idx) =>
+        idx === accountIdx ? { ...a, agreements: [...(a.agreements || []), { type: "EA", number: "", keywordsText: "" }] } : a
+      ),
+    }));
+  }
+
+  function updateAgreement(accountIdx, agrIdx, field, value) {
+    setForm((f) => ({
+      ...f,
+      accounts: f.accounts.map((a, idx) =>
+        idx === accountIdx
+          ? { ...a, agreements: a.agreements.map((g, gi) => (gi === agrIdx ? { ...g, [field]: value } : g)) }
+          : a
+      ),
+    }));
+  }
+
+  function removeAgreement(accountIdx, agrIdx) {
+    setForm((f) => ({
+      ...f,
+      accounts: f.accounts.map((a, idx) =>
+        idx === accountIdx ? { ...a, agreements: a.agreements.filter((_, gi) => gi !== agrIdx) } : a
+      ),
+    }));
+  }
+
+  // Convert the form's account rows (with comma-separated text fields) back
+  // into the canonical persisted account shape.
+  function serializeAccounts() {
+    return form.accounts
       .filter((a) => a.name.trim())
       .map((a) => ({
         name: a.name.trim(),
         archiveFolder: a.archiveFolder.trim(),
         aliases: a.aliasesText.split(",").map((s) => s.trim()).filter(Boolean),
         keywords: a.keywordsText.split(",").map((s) => s.trim()).filter(Boolean),
+        agreements: (a.agreements || [])
+          .filter((g) => g.number.trim())
+          .map((g) => ({
+            type: g.type === "EP" ? "EP" : "EA",
+            number: g.number.trim(),
+            keywords: g.keywordsText.split(",").map((s) => s.trim()).filter(Boolean),
+          })),
       }));
+  }
+
+  function handleSave() {
     onSave({
       vaultPath: form.vaultPath.trim(),
       transcriptsPath: form.transcriptsPath.trim(),
@@ -114,8 +236,73 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       model: form.model,
       replacements: form.replacements,
       corrections: form.corrections,
-      accounts,
+      accounts: serializeAccounts(),
     });
+  }
+
+  // Download the current (in-form, unsaved-edits-included) config as JSON.
+  // API key is excluded unless the user opts in — it's a credential and the
+  // glossary already contains real names, so the file is sensitive either way.
+  function handleExport() {
+    const config = {
+      _type: "notetaker-settings",
+      version: CONFIG_VERSION,
+      exportedAt: new Date().toISOString(),
+      vaultPath: form.vaultPath.trim(),
+      transcriptsPath: form.transcriptsPath.trim(),
+      model: form.model,
+      replacements: form.replacements,
+      corrections: form.corrections,
+      accounts: serializeAccounts(),
+      ...(includeKeyInExport && form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
+    };
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `notetaker-settings-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleImportFile(file) {
+    if (!file) return;
+    setImportMsg(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const cfg = JSON.parse(e.target.result);
+        if (cfg._type && cfg._type !== "notetaker-settings") {
+          throw new Error("This file isn't a Notetaker settings export.");
+        }
+        setForm((f) => ({
+          ...f,
+          vaultPath: typeof cfg.vaultPath === "string" ? cfg.vaultPath : f.vaultPath,
+          transcriptsPath: typeof cfg.transcriptsPath === "string" ? cfg.transcriptsPath : f.transcriptsPath,
+          model: cfg.model || f.model,
+          apiKey: typeof cfg.apiKey === "string" && cfg.apiKey ? cfg.apiKey : f.apiKey,
+          replacements: Array.isArray(cfg.replacements) ? cfg.replacements : f.replacements,
+          corrections: Array.isArray(cfg.corrections) ? cfg.corrections : f.corrections,
+          accounts: Array.isArray(cfg.accounts) && cfg.accounts.length
+            ? cfg.accounts.map(accountToFormRow)
+            : f.accounts,
+        }));
+        const counts = [
+          Array.isArray(cfg.accounts) ? `${cfg.accounts.length} accounts` : null,
+          Array.isArray(cfg.replacements) ? `${cfg.replacements.length} replacements` : null,
+          Array.isArray(cfg.corrections) ? `${cfg.corrections.length} corrections` : null,
+        ].filter(Boolean).join(", ");
+        setImportMsg({ ok: true, message: `Loaded ${counts || "config"}. Review, then click Save Settings to apply.` });
+        setTestResult(null);
+      } catch (err) {
+        setImportMsg({ ok: false, message: `Could not import: ${err.message}` });
+      }
+    };
+    reader.onerror = () => setImportMsg({ ok: false, message: "Could not read the file." });
+    reader.readAsText(file);
   }
 
   return (
@@ -130,6 +317,40 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       </div>
 
       <div className="space-y-5">
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-sm font-medium text-gray-800">Backup &amp; transfer</p>
+              <p className="text-xs text-gray-500">Export all settings (accounts, keywords, EA/EP numbers, glossary, corrections) to a file, or import one on another machine.</p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button onClick={handleExport} className="btn-secondary text-xs whitespace-nowrap">Export config</button>
+              <button onClick={() => importInputRef.current?.click()} className="btn-secondary text-xs whitespace-nowrap">Import config</button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => { handleImportFile(e.target.files[0]); e.target.value = ""; }}
+              />
+            </div>
+          </div>
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 mt-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={includeKeyInExport}
+              onChange={(e) => setIncludeKeyInExport(e.target.checked)}
+              className="w-3.5 h-3.5 rounded accent-obsidian-600"
+            />
+            Include API key in export (the file also contains real names from your glossary — keep it private)
+          </label>
+          {importMsg && (
+            <p className={`text-xs mt-2 ${importMsg.ok ? "text-green-600" : "text-red-600"}`}>
+              {importMsg.ok ? "✓ " : "✗ "}{importMsg.message}
+            </p>
+          )}
+        </div>
+
         <div>
           <label className="label">Obsidian Vault Path</label>
           <p className="text-xs text-gray-500 mb-2">
@@ -163,7 +384,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
         <div>
           <label className="label">Transcripts Archive Path</label>
           <p className="text-xs text-gray-500 mb-2">
-            Folder where raw transcripts are saved after each generation. Subfolders are created automatically by account (LM Transcripts, L3 Transcripts, NGC Transcripts, Frontgrade Transcripts, Internal Transcripts).
+            Folder where raw transcripts are saved after each generation. Change this to move where transcripts go. Subfolders are created automatically per account using each account's “Archive folder” name below (unmatched meetings go to Internal Transcripts). This folder also holds the portable config/glossary files.
           </p>
           <input
             type="text"
@@ -340,7 +561,8 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
             Each account maps name aliases to a transcript archive subfolder. Aliases drive
             cross-folder search and auto-filing of vault-root notes. Keywords are account-specific
             terms (e.g. program names, product lines) that will be excluded from other accounts'
-            summaries.
+            summaries. EA / EP numbers let you tie each Enterprise Agreement or Purchase to the
+            keywords that identify it, so the right number can be surfaced when those terms come up.
           </p>
 
           <div className="space-y-3">
@@ -385,13 +607,123 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
                   value={a.keywordsText}
                   onChange={(e) => updateAccount(i, "keywordsText", e.target.value)}
                 />
+
+                {/* EA / EP agreement numbers, each tied to identifying keywords */}
+                <div className="pt-2 mt-1 border-t border-gray-200">
+                  <p className="text-xs font-medium text-gray-600 mb-1.5">EA / EP Numbers</p>
+                  {(a.agreements || []).length > 0 && (
+                    <div className="space-y-2 mb-2">
+                      {a.agreements.map((g, gi) => (
+                        <div key={gi} className="flex gap-2 items-start">
+                          <select
+                            value={g.type}
+                            onChange={(e) => updateAgreement(i, gi, "type", e.target.value)}
+                            className="input !w-16 flex-shrink-0"
+                            title="Agreement type"
+                          >
+                            <option value="EA">EA</option>
+                            <option value="EP">EP</option>
+                          </select>
+                          <input
+                            type="text"
+                            className="input w-32 flex-shrink-0"
+                            placeholder="Number"
+                            value={g.number}
+                            onChange={(e) => updateAgreement(i, gi, "number", e.target.value)}
+                          />
+                          <input
+                            type="text"
+                            className="input flex-1"
+                            placeholder="Keywords to look for, comma-separated"
+                            value={g.keywordsText}
+                            onChange={(e) => updateAgreement(i, gi, "keywordsText", e.target.value)}
+                          />
+                          <button
+                            onClick={() => removeAgreement(i, gi)}
+                            className="text-gray-400 hover:text-red-500 flex-shrink-0 mt-2"
+                            title="Remove this number"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => addAgreement(i)}
+                    className="text-xs text-obsidian-600 hover:text-obsidian-700 font-medium"
+                  >
+                    + Add EA / EP number
+                  </button>
+                </div>
               </div>
             ))}
           </div>
 
-          <button onClick={addAccount} className="btn-secondary mt-3">
-            + Add account
-          </button>
+          <div className="flex gap-2 mt-3">
+            <button onClick={addAccount} className="btn-secondary">
+              + Add account
+            </button>
+            <button
+              onClick={handleSuggestKeywords}
+              disabled={suggesting || !form.vaultPath.trim()}
+              className="btn-secondary"
+              title="Scan each account's folders for distinctive terms (sites, programs, contacts) to add as keywords"
+            >
+              {suggesting ? "Scanning notes…" : "🔍 Suggest keywords from my notes"}
+            </button>
+          </div>
+          {suggestError && <p className="mt-2 text-sm text-red-600">{suggestError}</p>}
+
+          {suggestions && (
+            <div className="mt-3 rounded-lg border border-obsidian-200 bg-obsidian-50 p-3 space-y-3">
+              <p className="text-xs text-gray-700">
+                Terms that appear often in one account's notes and rarely elsewhere. Check the ones that
+                are genuinely account-specific (sites, programs, people), then add them as keywords —
+                they'll be scrubbed and redacted from every other account's reports.
+              </p>
+              {Object.entries(suggestions).every(([, terms]) => !terms.length) && (
+                <p className="text-xs text-gray-500">No distinctive terms found — folders may be empty or terms already covered.</p>
+              )}
+              {Object.entries(suggestions).map(([account, terms]) =>
+                terms.length ? (
+                  <div key={account}>
+                    <p className="text-xs font-semibold text-gray-800 mb-1">{account}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {terms.map(({ term, count }) => {
+                        const picked = pickedTerms.has(`${account}||${term}`);
+                        return (
+                          <button
+                            key={term}
+                            type="button"
+                            onClick={() => togglePicked(account, term)}
+                            className={`px-2 py-0.5 rounded-full text-xs border transition-colors ${
+                              picked
+                                ? "bg-obsidian-600 text-white border-obsidian-600"
+                                : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                            }`}
+                            title={`${count} occurrences`}
+                          >
+                            {picked ? "✓ " : ""}{term} <span className={picked ? "text-obsidian-200" : "text-gray-400"}>×{count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null
+              )}
+              <div className="flex gap-2">
+                <button onClick={addPickedKeywords} disabled={!pickedTerms.size} className="btn-primary text-xs px-3 py-1.5">
+                  Add {pickedTerms.size || ""} selected as keywords
+                </button>
+                <button onClick={() => { setSuggestions(null); setPickedTerms(new Set()); }} className="btn-secondary text-xs px-3 py-1.5">
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">

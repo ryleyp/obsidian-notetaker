@@ -4,7 +4,50 @@ import {
   detectAccount,
   matchVaultFolder,
   textHasAlias,
+  suggestAgreements,
 } from "@/lib/accounts";
+
+describe("suggestAgreements", () => {
+  const account = {
+    name: "Lockheed Martin",
+    agreements: [
+      { type: "EA", number: "EA-1001", keywords: ["MFC", "missiles"] },
+      { type: "EP", number: "EP-2002", keywords: ["space"] },
+      { type: "EA", number: "EA-3003", keywords: [] }, // no keywords → always applies
+    ],
+  };
+
+  it("suggests agreements whose keywords appear as whole words", () => {
+    const r = suggestAgreements("Reviewed the MFC roadmap today", account);
+    expect(r).toContainEqual({ type: "EA", number: "EA-1001" });
+    expect(r).toContainEqual({ type: "EA", number: "EA-3003" });
+    expect(r).not.toContainEqual({ type: "EP", number: "EP-2002" });
+  });
+
+  it("treats a keyword-less agreement as always applicable", () => {
+    const r = suggestAgreements("nothing relevant here", account);
+    expect(r).toEqual([{ type: "EA", number: "EA-3003" }]);
+  });
+
+  it("does not match a keyword inside a larger word", () => {
+    const r = suggestAgreements("the simfcx module", { agreements: [{ type: "EA", number: "X", keywords: ["mfc"] }] });
+    expect(r).toEqual([]);
+  });
+
+  it("skips agreements with a blank number and dedupes repeats", () => {
+    const acct = { agreements: [
+      { type: "EA", number: "", keywords: ["space"] },
+      { type: "EA", number: "EA-9", keywords: ["space"] },
+      { type: "EA", number: "EA-9", keywords: ["orbit"] },
+    ] };
+    expect(suggestAgreements("space and orbit", acct)).toEqual([{ type: "EA", number: "EA-9" }]);
+  });
+
+  it("returns empty when the account has no agreements", () => {
+    expect(suggestAgreements("anything", { name: "X" })).toEqual([]);
+    expect(suggestAgreements("anything", null)).toEqual([]);
+  });
+});
 
 describe("textHasAlias", () => {
   it("matches an alias as a whole word, case-insensitively", () => {

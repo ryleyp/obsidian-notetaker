@@ -9,7 +9,10 @@ import FolderSelector from "@/components/FolderSelector";
 import NotesPreview from "@/components/NotesPreview";
 import AccountStatus from "@/components/AccountStatus";
 import SystemLinkStatus from "@/components/SystemLinkStatus";
+import CSMActivityReport from "@/components/CSMActivityReport";
+import StakeholderMap from "@/components/StakeholderMap";
 import SanitizeReview from "@/components/SanitizeReview";
+import SpeakerReview from "@/components/SpeakerReview";
 import {
   applyReplacements,
   reverseReplacements,
@@ -19,8 +22,10 @@ import {
   mergeCorrections,
 } from "@/lib/sanitize";
 import { calcCost } from "@/lib/pricing";
-import { matchVaultFolder, DEFAULT_ACCOUNTS } from "@/lib/accounts";
+import { matchVaultFolder, detectAccount, suggestAgreements, DEFAULT_ACCOUNTS } from "@/lib/accounts";
+import { looksSpeakerLabeled } from "@/lib/speakers";
 import { aliasesFromReplacements } from "@/lib/privacy";
+import { mergeFileConfigIntoSettings } from "@/lib/settings";
 import { apiFetch, approveLocalPaths } from "@/lib/apiClient";
 
 export default function Home() {
@@ -31,6 +36,7 @@ export default function Home() {
   // New note state
   const [meetingTitle, setMeetingTitle] = useState("");
   const [transcript, setTranscript] = useState("");
+  const [meetingContext, setMeetingContext] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
   const [model, setModel] = useState("claude-haiku-4-5");
 
@@ -40,6 +46,12 @@ export default function Home() {
   const [pendingAction, setPendingAction] = useState("generate"); // "generate" | "saveTranscript"
   const [activeReplacements, setActiveReplacements] = useState([]);
 
+  // Speaker detection state — best-effort inference of speaker turns from
+  // conversational cues, since raw dictation has no real speaker signal.
+  const [detectingSpeakers, setDetectingSpeakers] = useState(false);
+  const [pendingSpeakers, setPendingSpeakers] = useState(null); // null | raw segmented text
+  const [speakerError, setSpeakerError] = useState(null);
+
   // Generation state
   const [processing, setProcessing] = useState(false);
   const [processError, setProcessError] = useState(null);
@@ -48,6 +60,7 @@ export default function Home() {
   const [saved, setSaved] = useState(false);
   const [savedPath, setSavedPath] = useState("");
   const [todosSaved, setTodosSaved] = useState(null); // { count, path } | null
+  const [sfdcReportSaved, setSfdcReportSaved] = useState(null); // { path } | null
   const [noteCost, setNoteCost] = useState(null);
   const [savingTranscript, setSavingTranscript] = useState(false);
   const [transcriptSaved, setTranscriptSaved] = useState(false);
@@ -101,12 +114,7 @@ export default function Home() {
         const data = await res.json();
         if (data.config) {
           setSettings((prev) => {
-            const merged = {
-              ...prev,
-              replacements: data.config.replacements ?? prev.replacements,
-              corrections: data.config.corrections ?? prev.corrections,
-              accounts: data.config.accounts?.length ? data.config.accounts : prev.accounts,
-            };
+            const merged = mergeFileConfigIntoSettings(prev, data.config);
             persistBrowserSettings(merged);
             return merged;
           });
@@ -145,6 +153,17 @@ export default function Home() {
       .catch(() => {});
   }
 
+  // Targeted accounts update (e.g. the bleed-feedback flow adding keywords)
+  // without opening the full settings panel.
+  function handleAccountsUpdate(accounts) {
+    setSettings((prev) => {
+      const merged = { ...prev, accounts };
+      persistBrowserSettings(merged);
+      persistConfig(merged);
+      return merged;
+    });
+  }
+
   async function handleSaveSettings(newSettings) {
     const { apiKey, ...settingsToPersist } = newSettings;
     const merged = { replacements: [], ...settingsToPersist, apiKey };
@@ -166,6 +185,46 @@ export default function Home() {
     if (!meetingTitle) setMeetingTitle(suggested);
   }
 
+  // Best-effort speaker segmentation: apply known glossary replacements
+  // first (same privacy tradeoff as the sanitize scan below — only terms
+  // already in the glossary are protected before this call), send to
+  // Claude for turn inference, then show the review card.
+  async function handleDetectSpeakers() {
+    if (!transcript.trim()) return;
+    setSpeakerError(null);
+    setDetectingSpeakers(true);
+    try {
+      const sanitizedForDetection = applyReplacements(
+        applyCorrections(transcript, settings.corrections || []),
+        settings.replacements || []
+      );
+      const res = await fetch("/api/detect-speakers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: sanitizedForDetection, apiKey: settings.apiKey || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Speaker detection failed");
+      const restored = (settings.replacements || []).length
+        ? reverseReplacements(data.segmented, settings.replacements)
+        : data.segmented;
+      setPendingSpeakers(restored);
+    } catch (e) {
+      setSpeakerError(e.message);
+    } finally {
+      setDetectingSpeakers(false);
+    }
+  }
+
+  function handleSpeakerConfirm(labeledText) {
+    setTranscript(labeledText);
+    setPendingSpeakers(null);
+  }
+
+  function handleSpeakerSkip() {
+    setPendingSpeakers(null);
+  }
+
   // Shared: detect entities, show review card, then route to action
   async function runSanitizeDetection(action) {
     const savedReplacements = settings.replacements || [];
@@ -180,7 +239,13 @@ export default function Home() {
       applyCorrections(transcript, settings.corrections || []),
       savedReplacements
     );
-    const scanText = [preSanitizedTitle, preSanitizedTranscript].filter(Boolean).join("\n\n");
+    const preSanitizedContext = applyReplacements(
+      applyCorrections(meetingContext, settings.corrections || []),
+      savedReplacements
+    );
+    const scanText = [preSanitizedTitle, preSanitizedTranscript, preSanitizedContext]
+      .filter((part) => part && part.trim())
+      .join("\n\n");
 
     let newEntities = [];
     let scanSkipped = !settings.aiPrivacyScan;
@@ -289,6 +354,8 @@ export default function Home() {
     setSaved(false);
     setSavedPath("");
     setTodosSaved(null);
+    setSfdcReportSaved(null);
+    setNoteCost(null);
 
     try {
       const res = await apiFetch("/api/process", {
@@ -341,6 +408,7 @@ export default function Home() {
             meetingTitle,
             transcriptsPath: settings.transcriptsPath,
             folder: selectedFolder || undefined,
+            accounts: settings.accounts || [],
           }),
         }).catch(() => {});
       }
@@ -362,19 +430,32 @@ export default function Home() {
     setActiveReplacements(replacements);
     const corrected = applyCorrections(transcript, settings.corrections || []);
     const correctedTitle = applyCorrections(meetingTitle, settings.corrections || []);
+    const correctedContext = applyCorrections(meetingContext, settings.corrections || []);
     const sanitizedTranscript = replacements.length
       ? applyReplacements(corrected, replacements)
       : corrected;
     const sanitizedTitle = replacements.length
       ? applyReplacements(correctedTitle, replacements)
       : correctedTitle;
+    const sanitizedContext = replacements.length
+      ? applyReplacements(correctedContext, replacements)
+      : correctedContext;
+
+    // Match this account's EA/EP numbers to the raw transcript by keyword so
+    // they can be suggested in the SFDC entry. Done client-side on the
+    // original text (not the pseudonymized copy) so keyword matching is exact.
+    const acct = detectAccount(selectedFolder, settings.accounts);
+    const account = (settings.accounts || []).find((a) => a.name === acct.name);
+    const suggestedAgreements = account ? suggestAgreements(transcript, account) : [];
 
     await streamGenerateRequest({
       payload: {
         transcript: sanitizedTranscript,
+        meetingContext: sanitizedContext,
         meetingTitle: sanitizedTitle,
         apiKey: settings.apiKey || undefined,
         model,
+        suggestedAgreements,
       },
       replacements,
     });
@@ -392,6 +473,8 @@ export default function Home() {
     setNotes(nextNotes);
     setSaved(false);
     setSavedPath("");
+    setTodosSaved(null);
+    setSfdcReportSaved(null);
   }
 
   async function handleSave() {
@@ -427,6 +510,22 @@ export default function Home() {
         }
       } catch {
         // Todos extraction is best-effort
+      }
+
+      // Append the SFDC Activity Entry to this week's report file (same
+      // weekly-file pattern as todos: Reports/<monday> - SFDC Activity Report.md)
+      try {
+        const reportRes = await apiFetch("/api/sfdc-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notes, vaultPath: settings.vaultPath, meetingTitle }),
+        });
+        const reportData = await reportRes.json();
+        if (reportData.savedPath) {
+          setSfdcReportSaved({ path: reportData.savedPath });
+        }
+      } catch {
+        // Weekly report append is best-effort
       }
     } catch (e) {
       alert(`Failed to save: ${e.message}`);
@@ -470,6 +569,7 @@ export default function Home() {
             meetingTitle: title,
             transcriptsPath: settings.transcriptsPath,
             folder: folderPath || undefined,
+            accounts: settings.accounts || [],
           }),
         }).catch(() => {});
       }
@@ -482,11 +582,13 @@ export default function Home() {
 
   function handleNewNote() {
     setTranscript("");
+    setMeetingContext("");
     setMeetingTitle("");
     setNotes("");
     setSaved(false);
     setSavedPath("");
     setTodosSaved(null);
+    setSfdcReportSaved(null);
     setNoteCost(null);
     setProcessError(null);
     setPendingReview(null);
@@ -543,6 +645,14 @@ export default function Home() {
           />
         )}
 
+        {/* ── Customer & Site Mapping mode ── */}
+        {mode === "mapping" && (
+          <StakeholderMap
+            settings={settings}
+            onSettingsClick={() => setShowSettings(true)}
+          />
+        )}
+
         {/* ── SystemLink Status mode ── */}
         {mode === "sl-status" && (
           <SystemLinkStatus
@@ -551,6 +661,14 @@ export default function Home() {
           />
         )}
 
+        {/* ── CSM EA Activity Report mode ── */}
+        {mode === "csm-activity" && (
+          <CSMActivityReport
+            settings={settings}
+            onAccountsUpdate={handleAccountsUpdate}
+            onSettingsClick={() => setShowSettings(true)}
+          />
+        )}
 
         {/* ── New Note mode ── */}
         {mode === "new" && (
@@ -572,6 +690,7 @@ export default function Home() {
                 onRetry={handleRetryGeneration}
                 canRetry={!!lastGenerationRequest && !processing}
                 todosSaved={todosSaved}
+                sfdcReportSaved={sfdcReportSaved}
                 cost={noteCost}
               />
             </div>
@@ -580,6 +699,8 @@ export default function Home() {
               <MeetingDetails
                 meetingTitle={meetingTitle}
                 setMeetingTitle={setMeetingTitle}
+                meetingContext={meetingContext}
+                setMeetingContext={setMeetingContext}
               />
 
               <TranscriptInput
@@ -587,6 +708,39 @@ export default function Home() {
                 setTranscript={setTranscript}
                 onTitleSuggest={handleTitleSuggest}
               />
+
+              {transcript.trim() && !pendingSpeakers && (
+                <div className="card p-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Distinguish speakers</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {looksSpeakerLabeled(transcript)
+                        ? "This transcript has speaker labels — notes will attribute statements to the right person."
+                        : "No speaker labels detected. Claude can infer likely speaker turns from conversational patterns (best-effort, not real diarization)."}
+                    </p>
+                    {speakerError && <p className="text-xs text-red-600 mt-1">{speakerError}</p>}
+                  </div>
+                  <button onClick={handleDetectSpeakers} disabled={detectingSpeakers} className="btn-secondary whitespace-nowrap">
+                    {detectingSpeakers ? (
+                      <>
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Analyzing…
+                      </>
+                    ) : looksSpeakerLabeled(transcript) ? "Re-detect speakers" : "🎙️ Detect Speakers"}
+                  </button>
+                </div>
+              )}
+
+              {pendingSpeakers && (
+                <SpeakerReview
+                  rawText={pendingSpeakers}
+                  onConfirm={handleSpeakerConfirm}
+                  onSkip={handleSpeakerSkip}
+                />
+              )}
 
               <FolderSelector
                 vaultPath={settings.vaultPath}

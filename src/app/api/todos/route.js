@@ -21,11 +21,12 @@ function extractDateFromTitle(title) {
   return match ? match[1] : null;
 }
 
-function isRelevantItem(line) {
-  return /\b(Ryley|Riley|Customer Success)\b/i.test(line) || /\bCS\b/.test(line);
+export function isRelevantItem(line) {
+  return /\b(Ryley|Riley|Customer Success|Customer Success Managers?|CSMs?)\b/i.test(line)
+    || /\bCS\b/.test(line);
 }
 
-function extractItems(notes) {
+export function extractItems(notes) {
   const result = { actionItems: [], nextSteps: [] };
 
   const actionMatch = notes.match(/## Action Items\n([\s\S]*?)(?=\n## |\n---\n|$)/);

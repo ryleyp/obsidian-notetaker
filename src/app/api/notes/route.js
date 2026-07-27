@@ -20,7 +20,7 @@ function parseDateFromContent(content) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function readFolder(dir, threeMonthsAgo, source, sourceLabel) {
+function readFolder(dir, cutoff, source, sourceLabel, options = {}) {
   const notes = [];
   if (!fs.existsSync(dir)) return notes;
   let entries;
@@ -32,8 +32,12 @@ function readFolder(dir, threeMonthsAgo, source, sourceLabel) {
     let content;
     try { content = fs.readFileSync(filePath, "utf-8"); } catch { continue; }
 
-    const date = parseDateFromFilename(entry.name) || parseDateFromContent(content);
-    if (!date || date < threeMonthsAgo) continue;
+    let date = parseDateFromFilename(entry.name) || parseDateFromContent(content);
+    if (!date && options.useMtimeDate) {
+      try { date = fs.statSync(filePath).mtime; } catch { continue; }
+    }
+    if (!date || date < cutoff.start) continue;
+    if (cutoff.end && date > cutoff.end) continue;
 
     notes.push({
       filename: entry.name,
@@ -51,6 +55,8 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const vaultPath = searchParams.get("vaultPath");
   const folderPath = searchParams.get("folderPath") || "";
+  const transcriptsPath = searchParams.get("transcriptsPath") || "";
+  const transcriptFolder = searchParams.get("transcriptFolder") || "";
   const accountAliases = (searchParams.get("accountAliases") || searchParams.get("accountKeyword") || "")
     .split(",")
     .map((s) => s.trim())
@@ -81,13 +87,41 @@ export async function GET(request) {
     );
   }
 
-  const threeMonthsAgo = new Date();
-  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  // Date window: explicit startDate/endDate (YYYY-MM-DD) take precedence;
+  // otherwise fall back to a trailing `months` window (default 3).
+  const startParam = searchParams.get("startDate");
+  const endParam = searchParams.get("endDate");
+  let start = startParam ? new Date(startParam) : null;
+  if (start && isNaN(start.getTime())) start = null;
+  if (!start) {
+    const monthsParam = parseInt(searchParams.get("months"), 10);
+    const months = Number.isFinite(monthsParam) && monthsParam > 0 ? monthsParam : 3;
+    start = new Date();
+    start.setMonth(start.getMonth() - months);
+  }
+  let end = endParam ? new Date(endParam) : null;
+  if (end && isNaN(end.getTime())) end = null;
+  if (end) end.setHours(23, 59, 59, 999);
+  const cutoff = { start, end };
 
   // 1. Primary Obsidian folder notes
-  const primaryNotes = readFolder(targetDir, threeMonthsAgo, "obsidian", folderPath || "Vault root");
+  const primaryNotes = readFolder(targetDir, cutoff, "obsidian", folderPath || "Vault root");
 
-  // 2. Cross-vault keyword search (other Obsidian subfolders, skipping transcript folders).
+  // 2. Transcript archive notes for this account. Transcript filenames often
+  // do not contain dates, so use modified time as a fallback for archive files.
+  let transcriptNotes = [];
+  let transcriptWarning = null;
+  if (transcriptsPath && transcriptFolder) {
+    try {
+      const resolvedTranscripts = assertAllowedRoot(transcriptsPath, "Transcripts archive path");
+      const transcriptDir = assertExistingChildDirectory(resolvedTranscripts, transcriptFolder, "Transcript folder");
+      transcriptNotes = readFolder(transcriptDir, cutoff, "transcript", transcriptFolder, { useMtimeDate: true });
+    } catch (error) {
+      transcriptWarning = error?.message || "Transcript archive could not be scanned";
+    }
+  }
+
+  // 3. Cross-vault keyword search (other Obsidian subfolders, skipping transcript folders).
   // A note matches if any account alias appears as a whole word in its content.
   let crossVaultNotes = [];
   if (accountAliases.length) {
@@ -101,7 +135,7 @@ export async function GET(request) {
         if (entry.name.toLowerCase().includes("transcript")) continue;
         if (entry.name.toLowerCase().includes("todo")) continue;
         const subDir = path.join(resolvedVault, entry.name);
-        const candidates = readFolder(subDir, threeMonthsAgo, "cross-vault", entry.name);
+        const candidates = readFolder(subDir, cutoff, "cross-vault", entry.name);
         for (const note of candidates) {
           if (accountAliases.some((a) => textHasAlias(note.content, a))) {
             crossVaultNotes.push(note);
@@ -111,7 +145,7 @@ export async function GET(request) {
     }
   }
 
-  const all = [...primaryNotes, ...crossVaultNotes];
+  const all = [...primaryNotes, ...transcriptNotes, ...crossVaultNotes];
   all.sort((a, b) => {
     const dateCmp = b.date.localeCompare(a.date);
     if (dateCmp !== 0) return dateCmp;
@@ -124,7 +158,9 @@ export async function GET(request) {
     total: all.length,
     counts: {
       obsidian: primaryNotes.length,
+      transcripts: transcriptNotes.length,
       crossVault: crossVaultNotes.length,
     },
+    warning: transcriptWarning,
   });
 }

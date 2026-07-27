@@ -1,6 +1,6 @@
 "use client";
 
-export default function MeetingDetails({ meetingTitle, setMeetingTitle }) {
+export default function MeetingDetails({ meetingTitle, setMeetingTitle, meetingContext, setMeetingContext }) {
   return (
     <div className="card p-6">
       <div className="flex items-center gap-3 mb-5">
@@ -21,16 +21,32 @@ export default function MeetingDetails({ meetingTitle, setMeetingTitle }) {
           onChange={(e) => setMeetingTitle(e.target.value)}
           autoFocus
         />
+        {meetingTitle && (
+          <p className="mt-2 text-xs text-gray-400">
+            Generated notes will be saved as{" "}
+            <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
+              {meetingTitle}.md
+            </span>
+          </p>
+        )}
       </div>
 
-      {meetingTitle && (
-        <p className="mt-3 text-xs text-gray-400">
-          File will be saved as{" "}
-          <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
-            {meetingTitle}.md
-          </span>
+      <div className="mt-4">
+        <label className="label">Additional Context &amp; Your Notes <span className="font-normal text-gray-400">(optional — never saved as a file)</span></label>
+        <p className="text-xs text-gray-500 mb-2">
+          Anything the transcript won't say on its own — who attended and their roles, what the meeting was
+          about, account background, follow-ups from a prior call, or your own handwritten notes from the
+          meeting. Woven into the generated notes and SFDC entry, then discarded — this text is not saved
+          anywhere on its own.
         </p>
-      )}
+        <textarea
+          className="input resize-y text-xs leading-relaxed"
+          rows={4}
+          placeholder={"e.g. Quarterly sync with Gokul (LM MFC EA admin) and Jordan. Follow-up to the June SystemLink migration briefing.\nMy notes: Gokul wants SL Pro rollout confirmed before August; sounded frustrated about Data Bridge re-ingestion."}
+          value={meetingContext}
+          onChange={(e) => setMeetingContext(e.target.value)}
+        />
+      </div>
     </div>
   );
 }

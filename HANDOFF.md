@@ -18,7 +18,10 @@ npm test                                  # 23 vitest unit tests
 
 ## Three tabs (Header.jsx)
 1. **New Note** — paste/upload a transcript → sanitize/pseudonymize → Claude generates
-   Markdown notes → save into a chosen Obsidian folder (`src/app/page.js`).
+   Markdown notes → save into a chosen Obsidian folder (`src/app/page.js`). The generated
+   note ends with a **## SFDC Activity Entry** section (Type / Subtype / Summary-Outcomes-
+   Next steps) produced in the *same* single streamed completion for copy-paste into
+   Salesforce — see Key architecture.
 2. **Account Status** — pick an account folder, scan the past quarter's notes, generate a
    5-pillar account health summary (`src/components/AccountStatus.jsx`).
 3. **SL Status** — same as Account Status but filtered to SystemLink-related notes, with a
@@ -40,6 +43,14 @@ npm test                                  # 23 vitest unit tests
   support was fully removed.
 - **Vault scan** (`src/app/api/scan-vault/route.js`): all-time account mention scan,
   folded into Account Status (runs in parallel on Scan Folder).
+- **Note generation** (`src/app/api/process/route.js`): one `client.messages.stream` call.
+  `buildPrompt` asks for tag line, Executive Summary, Meeting Notes, CS Takeaways, Action
+  Items, Next Steps, and finally a **## SFDC Activity Entry** section. The SFDC rules live in
+  the `SFDC_ACTIVITY_RULES` block (approved Type→Subtype taxonomy, classification tie-breakers,
+  and a CSM persona/voice guide: past tense, no first person, plain non-jargony language,
+  ~100-120 words / ≤800 chars, Summary/Outcomes/Next steps only). It is NOT a second API call —
+  it is the last section of the same completion, so the existing sanitize/reverse, save, and
+  `NotesPreview` rendering all work unchanged. `max_tokens` bumped to 9216 to fit it.
 
 ## Synthesis (`src/app/api/synthesize/route.js`)
 - **Streams** output via SSE (`client.messages.stream`); both status tabs render text live
