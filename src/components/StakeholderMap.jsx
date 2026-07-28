@@ -102,6 +102,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
 
   const [mapping, setMapping] = useState(false);
   const [mapError, setMapError] = useState(null);
+  const [mapPartial, setMapPartial] = useState(false);
   const [output, setOutput] = useState("");
 
   const [saving, setSaving] = useState(false);
@@ -164,6 +165,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setShowConfirm(false);
     setDroppedCount(0);
     setMapError(null);
+    setMapPartial(false);
     setMapCost(null);
     setLastMapRequest(null);
     setPrivacyScanError(null);
@@ -185,6 +187,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setSaved(false);
     setShowConfirm(false);
     setDroppedCount(0);
+    setMapPartial(false);
     setPrivacyScanError(null);
     setMappingReviewItems(null);
 
@@ -292,13 +295,16 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       });
   }
 
-  async function runMapRequest(requestPayload) {
+  async function runMapRequest(requestPayload, options = {}) {
+    const append = !!options.append;
+    const baseOutput = append ? output : "";
     const controller = new AbortController();
     mapControllerRef.current = controller;
     setLastMapRequest(requestPayload);
     setMapping(true);
     setMapError(null);
-    setOutput("");
+    setMapPartial(false);
+    if (!append) setOutput("");
     setSaved(false);
     setShowConfirm(false);
     setDroppedCount(0);
@@ -332,12 +338,17 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
           const evt = JSON.parse(part.slice(6));
           if (evt.type === "delta") {
             accumulated += evt.text;
-            setOutput(accumulated);
+            setOutput(append ? `${baseOutput}${accumulated}` : accumulated);
           } else if (evt.type === "done") {
             const reps = requestPayload.replacements || settings.replacements || [];
             const requestCorrections = requestPayload.corrections || settings.corrections || [];
             const restored = reps.length ? reverseReplacements(accumulated, reps) : accumulated;
-            setOutput(applyCorrections(restored, requestCorrections));
+            const nextOutput = append ? `${baseOutput}${restored}` : restored;
+            setOutput(applyCorrections(nextOutput, requestCorrections));
+            if (evt.truncated) {
+              setMapPartial(true);
+              setMapError("Generation hit the model output limit. Partial map kept below; continue to finish it.");
+            }
             if (evt.usage) setMapCost(calcCost(evt.usage, evt.model));
             if (evt.droppedCount) setDroppedCount(evt.droppedCount);
           } else if (evt.type === "error") {
@@ -346,7 +357,18 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
         }
       }
     } catch (e) {
-      setMapError(e.name === "AbortError" ? "Mapping canceled." : e.message);
+      const message = e.name === "AbortError" ? "Mapping canceled." : e.message;
+      if (accumulated.trim()) {
+        const reps = requestPayload.replacements || settings.replacements || [];
+        const requestCorrections = requestPayload.corrections || settings.corrections || [];
+        const restored = reps.length ? reverseReplacements(accumulated, reps) : accumulated;
+        const nextOutput = append ? `${baseOutput}${restored}` : restored;
+        setOutput(applyCorrections(nextOutput, requestCorrections));
+        setMapPartial(true);
+        setMapError(`${message} Partial map kept below; continue to finish it.`);
+      } else {
+        setMapError(message);
+      }
     } finally {
       if (mapControllerRef.current === controller) {
         mapControllerRef.current = null;
@@ -381,10 +403,16 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     if (lastMapRequest) runMapRequest(lastMapRequest);
   }
 
+  function handleContinueMapping() {
+    if (!lastMapRequest || !output.trim()) return;
+    runMapRequest({ ...lastMapRequest, previousOutput: output }, { append: true });
+  }
+
   function handleOutputChange(nextOutput) {
     setOutput(nextOutput);
     setSaved(false);
     setSavedPath("");
+    setMapPartial(false);
   }
 
   async function handleSave() {
@@ -420,9 +448,12 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setSaved(false);
     setSavedPath("");
     setMapError(null);
+    setMapPartial(false);
     setLoadError(null);
     setShowConfirm(false);
     setDroppedCount(0);
+    setMapCost(null);
+    setLastMapRequest(null);
     setPrivacyScanError(null);
     setMappingReviewItems(null);
   }
@@ -868,6 +899,25 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
               {droppedCount} source{droppedCount !== 1 ? "s" : ""} could not fit within the model's context limit.
             </p>
+          )}
+          {mapError && (
+            <div className={`text-xs rounded-lg px-3 py-2 border flex items-center justify-between gap-3 ${
+              mapPartial
+                ? "text-amber-700 bg-amber-50 border-amber-200"
+                : "text-red-700 bg-red-50 border-red-200"
+            }`}>
+              <span>{mapError}</span>
+              {mapPartial && !mapping && (
+                <button
+                  type="button"
+                  onClick={handleContinueMapping}
+                  disabled={!lastMapRequest}
+                  className="btn-secondary text-xs px-3 py-1.5 whitespace-nowrap"
+                >
+                  Continue
+                </button>
+              )}
+            </div>
           )}
           {output && (
             <NotesPreview

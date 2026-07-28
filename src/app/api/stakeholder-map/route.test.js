@@ -58,4 +58,21 @@ describe("buildStakeholderMapPrompt", () => {
     expect(prompt).toContain("User-provided context for mapped names and organizations");
     expect(prompt).toContain("**PERSON_1:** Primary lab owner; treat as customer technical champion.");
   });
+
+  it("can ask Claude to continue a partial map", () => {
+    const prompt = buildStakeholderMapPrompt([
+      {
+        date: "2026-07-10",
+        title: "Planning Sync",
+        content: "Dallas lab rollout.",
+        source: "obsidian",
+        sourceLabel: "Acme",
+      },
+    ], "2026-07-23", "Acme", [], "recent", [], "# Acme Customer & Site Mapping\n\n## Customer Stakeholders\n\n- **Jordan**");
+
+    expect(prompt).toContain("Continuation mode");
+    expect(prompt).toContain("Continue the same Markdown document from exactly where the previous output ended");
+    expect(prompt).toContain("Previous partial output:");
+    expect(prompt).toContain("- **Jordan**");
+  });
 });

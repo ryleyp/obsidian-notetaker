@@ -21,9 +21,9 @@ function noteDateKey(note) {
   return dateSortValue(note.date);
 }
 
-function fitNotes(notes, model) {
+function fitNotes(notes, model, extraPromptChars = 0) {
   const perNoteCap = contextTokens(model) >= 1_000_000 ? 300_000 : 80_000;
-  const maxChars = budgetChars(model);
+  const maxChars = Math.max(0, budgetChars(model) - extraPromptChars);
   const capped = notes.map((n) => ({
     ...n,
     content: n.content.length > perNoteCap
@@ -141,7 +141,14 @@ function mappingContextBlock(mappingContext) {
     .join("\n")}\n`;
 }
 
-export function buildStakeholderMapPrompt(notes, today, accountName, allAccounts, sourceRange = "recent", mappingContext = []) {
+function previousOutputBlock(previousOutput) {
+  const text = String(previousOutput || "").trim();
+  if (!text) return "";
+
+  return `\nContinuation mode: a previous attempt stopped before the document was complete. Continue the same Markdown document from exactly where the previous output ended. Do not repeat completed sections unless needed to finish a cut-off bullet or sentence.\n\nPrevious partial output:\n${text}\n`;
+}
+
+export function buildStakeholderMapPrompt(notes, today, accountName, allAccounts, sourceRange = "recent", mappingContext = [], previousOutput = "") {
   const range = rangeDescriptor(today, sourceRange);
   const acct = accountName && accountName !== "Internal" ? accountName : "Selected Account";
   const noteBlocks = notes
@@ -164,6 +171,7 @@ Sources are in chronological order, oldest first. Within a single day, same-day 
 
 Citation rule: Every mapped person and every mapped site must list every provided source that mentions them. Use source date, title, and source label when present. Do not write "multiple meetings" without enumerating those meetings.
 ${mappingContextBlock(mappingContext)}
+${previousOutputBlock(previousOutput)}
 
 ---
 SOURCES:
@@ -241,7 +249,7 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { notes, apiKey, model, today, replacements = [], corrections = [], accountName, allAccounts = [], sourceRange = "recent", mappingContext = [] } = body;
+    const { notes, apiKey, model, today, replacements = [], corrections = [], accountName, allAccounts = [], sourceRange = "recent", mappingContext = [], previousOutput = "" } = body;
 
     if (!notes || notes.length === 0) {
       return new Response(JSON.stringify({ error: "No notes provided" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -263,11 +271,13 @@ export async function POST(request) {
         context: applyReplacements(applyCorrections(item?.context || "", corrections), replacements),
       }))
       .filter((item) => item.label.trim() && item.context.trim());
+    const sanitizedPreviousOutput = applyReplacements(applyCorrections(previousOutput || "", corrections), replacements);
 
     const selectedModel = model || DEFAULT_MODEL;
     const scrubbedNotes = scrubForbiddenKeywords(sanitizedNotes, accountName, allAccounts);
     const newestFirst = [...scrubbedNotes].sort((a, b) => noteDateKey(b).localeCompare(noteDateKey(a)));
-    const { kept, dropped } = fitNotes(newestFirst, selectedModel);
+    const extraPromptChars = sanitizedPreviousOutput.length + sanitizedMappingContext.reduce((sum, item) => sum + item.label.length + item.context.length + 20, 0);
+    const { kept, dropped } = fitNotes(newestFirst, selectedModel, extraPromptChars);
     const chronological = [...kept].reverse();
     const taggedNotes = tagSameDayNotes(chronological);
 
@@ -284,7 +294,7 @@ export async function POST(request) {
             system: "You produce precise customer stakeholder maps and site-level planning indexes from dated account notes. Preserve source attribution. Respond with only the Markdown document - no preamble.",
             messages: [{
               role: "user",
-              content: buildStakeholderMapPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], accountName, allAccounts, sourceRange, sanitizedMappingContext),
+              content: buildStakeholderMapPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], accountName, allAccounts, sourceRange, sanitizedMappingContext, sanitizedPreviousOutput),
             }],
           });
 
@@ -301,6 +311,8 @@ export async function POST(request) {
             droppedCount: dropped,
             usage: final.usage,
             model: selectedModel,
+            stopReason: final.stop_reason,
+            truncated: final.stop_reason === "max_tokens",
           });
         } catch (error) {
           send({ type: "error", message: error?.message || "Mapping failed" });
