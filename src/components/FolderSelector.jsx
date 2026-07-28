@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { StepBadge } from "@/components/MeetingDetails";
 import { apiFetch, approveLocalPaths } from "@/lib/apiClient";
 
+const folderCache = new Map();
+
 export default function FolderSelector({ vaultPath, selectedFolder, onSelect, onSettingsClick, stepNumber = 3 }) {
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -11,7 +13,20 @@ export default function FolderSelector({ vaultPath, selectedFolder, onSelect, on
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    if (!vaultPath) return;
+    if (!vaultPath) {
+      setFolders([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    const cached = folderCache.get(vaultPath);
+    if (cached) {
+      setFolders(cached);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    let canceled = false;
     setLoading(true);
     setError(null);
     approveLocalPaths({ vaultPath })
@@ -19,10 +34,19 @@ export default function FolderSelector({ vaultPath, selectedFolder, onSelect, on
       .then((r) => r.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
-        setFolders(data.folders || []);
+        const nextFolders = data.folders || [];
+        folderCache.set(vaultPath, nextFolders);
+        if (!canceled) setFolders(nextFolders);
       })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (!canceled) setError(e.message);
+      })
+      .finally(() => {
+        if (!canceled) setLoading(false);
+      });
+    return () => {
+      canceled = true;
+    };
   }, [vaultPath]);
 
   const filteredFolders = folders.filter((f) =>

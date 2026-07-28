@@ -1,7 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 import { allowDirectory } from "@/lib/pathAllowlist";
 import { getSessionToken } from "@/lib/sessionToken";
@@ -26,6 +26,7 @@ function getNotes(params) {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
   tmpRoot = null;
 });
@@ -68,5 +69,35 @@ describe("/api/notes", () => {
         sourceLabel: "Acme Transcripts",
       }),
     ]));
+  });
+
+  it("skips reading date-prefixed files outside the requested window", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const accountDir = path.join(vault, "Acme");
+    fs.mkdirSync(accountDir, { recursive: true });
+    allowDirectory(vault, "Vault path");
+
+    const oldPath = path.join(accountDir, "2025-01-01 - Old.md");
+    const recentPath = path.join(accountDir, "2026-02-01 - Recent.md");
+    fs.writeFileSync(oldPath, "# Old\n\nThis should not be read.");
+    fs.writeFileSync(recentPath, "# Recent\n\nThis should be included.");
+
+    const readSpy = vi.spyOn(fs, "readFileSync");
+
+    const params = new URLSearchParams({
+      vaultPath: vault,
+      folderPath: "Acme",
+      startDate: "2026-01-01",
+      endDate: "2026-03-31",
+    });
+    const response = await getNotes(params);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.notes.map((n) => n.filename)).toEqual(["2026-02-01 - Recent.md"]);
+    const readPaths = readSpy.mock.calls.map(([file]) => String(file));
+    expect(readPaths).toContain(recentPath);
+    expect(readPaths).not.toContain(oldPath);
   });
 });

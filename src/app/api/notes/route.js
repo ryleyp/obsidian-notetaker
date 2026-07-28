@@ -20,6 +20,10 @@ function parseDateFromContent(content) {
   return isNaN(d.getTime()) ? null : d;
 }
 
+function dateOutsideWindow(date, cutoff) {
+  return date < cutoff.start || (cutoff.end && date > cutoff.end);
+}
+
 function readFolder(dir, cutoff, source, sourceLabel, options = {}) {
   const notes = [];
   if (!fs.existsSync(dir)) return notes;
@@ -29,15 +33,24 @@ function readFolder(dir, cutoff, source, sourceLabel, options = {}) {
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
     const filePath = path.join(dir, entry.name);
-    let content;
-    try { content = fs.readFileSync(filePath, "utf-8"); } catch { continue; }
 
-    let date = parseDateFromFilename(entry.name) || parseDateFromContent(content);
+    const filenameDate = parseDateFromFilename(entry.name);
+    if (filenameDate && dateOutsideWindow(filenameDate, cutoff)) continue;
+
+    let content = null;
+    let date = filenameDate;
+    if (!date) {
+      try { content = fs.readFileSync(filePath, "utf-8"); } catch { continue; }
+      date = parseDateFromContent(content);
+    }
     if (!date && options.useMtimeDate) {
       try { date = fs.statSync(filePath).mtime; } catch { continue; }
     }
-    if (!date || date < cutoff.start) continue;
-    if (cutoff.end && date > cutoff.end) continue;
+    if (!date || dateOutsideWindow(date, cutoff)) continue;
+
+    if (content === null) {
+      try { content = fs.readFileSync(filePath, "utf-8"); } catch { continue; }
+    }
 
     notes.push({
       filename: entry.name,

@@ -27,6 +27,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
   const [loadError, setLoadError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [strictFolderOnly, setStrictFolderOnly] = useState(false);
 
   const [mapping, setMapping] = useState(false);
   const [mapError, setMapError] = useState(null);
@@ -70,6 +71,19 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     updateCorrections(corrections.filter((_, i) => i !== index));
   }
 
+  function handleStrictFolderOnlyChange(checked) {
+    setStrictFolderOnly(checked);
+    setLoadedSources(null);
+    setLoadCounts(null);
+    setLoadWarning(null);
+    setLoadError(null);
+    setOutput("");
+    setSaved(false);
+    setSavedPath("");
+    setShowConfirm(false);
+    setDroppedCount(0);
+  }
+
   async function handleLoadSources() {
     if (!settings.vaultPath) return;
     setLoading(true);
@@ -86,7 +100,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       const { aliases } = detectAccount(selectedFolder, settings.accounts);
       const params = new URLSearchParams({ vaultPath: settings.vaultPath });
       if (selectedFolder) params.set("folderPath", selectedFolder);
-      if (aliases?.length) params.set("accountAliases", aliases.join(","));
+      if (!strictFolderOnly && aliases?.length) params.set("accountAliases", aliases.join(","));
 
       const res = await apiFetch(`/api/notes?${params}`);
       const data = await res.json();
@@ -324,6 +338,17 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
                 Scanning Obsidian meeting notes in <span className="font-medium text-gray-700">{folderLabel}</span>
                 {" "}for sources dated <span className="font-medium text-gray-700">{threeMonthsAgoLabel()}</span> or later.
               </p>
+              <label className={`flex items-center gap-1.5 text-xs mt-2 ${loading || mapping ? "text-gray-300" : "text-gray-500 cursor-pointer"}`}>
+                <input
+                  type="checkbox"
+                  checked={strictFolderOnly}
+                  disabled={loading || mapping}
+                  onChange={(e) => handleStrictFolderOnlyChange(e.target.checked)}
+                  className="accent-obsidian-600"
+                />
+                Account folder only
+                <span title="Skips cross-folder search for a faster, stricter scan. Re-scan after changing.">i</span>
+              </label>
 
               {loadedSources !== null && (
                 <div className="mt-3">
