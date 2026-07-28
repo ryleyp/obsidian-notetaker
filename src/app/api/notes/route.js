@@ -21,7 +21,7 @@ function parseDateFromContent(content) {
 }
 
 function dateOutsideWindow(date, cutoff) {
-  return date < cutoff.start || (cutoff.end && date > cutoff.end);
+  return (cutoff.start && date < cutoff.start) || (cutoff.end && date > cutoff.end);
 }
 
 function readFolder(dir, cutoff, source, sourceLabel, options = {}) {
@@ -46,7 +46,11 @@ function readFolder(dir, cutoff, source, sourceLabel, options = {}) {
     if (!date && options.useMtimeDate) {
       try { date = fs.statSync(filePath).mtime; } catch { continue; }
     }
-    if (!date || dateOutsideWindow(date, cutoff)) continue;
+    if (!date) {
+      if (!options.includeUndated) continue;
+    } else if (dateOutsideWindow(date, cutoff)) {
+      continue;
+    }
 
     if (content === null) {
       try { content = fs.readFileSync(filePath, "utf-8"); } catch { continue; }
@@ -54,7 +58,7 @@ function readFolder(dir, cutoff, source, sourceLabel, options = {}) {
 
     notes.push({
       filename: entry.name,
-      date: date.toISOString().split("T")[0],
+      date: date ? date.toISOString().split("T")[0] : "",
       title: entry.name.replace(/^\d{4}-\d{2}-\d{2}\s*-\s*/, "").replace(/\.md$/, ""),
       content,
       source,
@@ -100,13 +104,15 @@ export async function GET(request) {
     );
   }
 
-  // Date window: explicit startDate/endDate (YYYY-MM-DD) take precedence;
-  // otherwise fall back to a trailing `months` window (default 3).
+  // Date window: `allTime=true` removes the lower bound; otherwise explicit
+  // startDate/endDate (YYYY-MM-DD) take precedence, falling back to a trailing
+  // `months` window (default 3).
+  const allTime = ["1", "true", "yes"].includes((searchParams.get("allTime") || "").toLowerCase());
   const startParam = searchParams.get("startDate");
   const endParam = searchParams.get("endDate");
-  let start = startParam ? new Date(startParam) : null;
+  let start = !allTime && startParam ? new Date(startParam) : null;
   if (start && isNaN(start.getTime())) start = null;
-  if (!start) {
+  if (!allTime && !start) {
     const monthsParam = parseInt(searchParams.get("months"), 10);
     const months = Number.isFinite(monthsParam) && monthsParam > 0 ? monthsParam : 3;
     start = new Date();
@@ -116,9 +122,10 @@ export async function GET(request) {
   if (end && isNaN(end.getTime())) end = null;
   if (end) end.setHours(23, 59, 59, 999);
   const cutoff = { start, end };
+  const readOptions = { includeUndated: allTime };
 
   // 1. Primary Obsidian folder notes
-  const primaryNotes = readFolder(targetDir, cutoff, "obsidian", folderPath || "Vault root");
+  const primaryNotes = readFolder(targetDir, cutoff, "obsidian", folderPath || "Vault root", readOptions);
 
   // 2. Transcript archive notes for this account. Transcript filenames often
   // do not contain dates, so use modified time as a fallback for archive files.
@@ -128,7 +135,7 @@ export async function GET(request) {
     try {
       const resolvedTranscripts = assertAllowedRoot(transcriptsPath, "Transcripts archive path");
       const transcriptDir = assertExistingChildDirectory(resolvedTranscripts, transcriptFolder, "Transcript folder");
-      transcriptNotes = readFolder(transcriptDir, cutoff, "transcript", transcriptFolder, { useMtimeDate: true });
+      transcriptNotes = readFolder(transcriptDir, cutoff, "transcript", transcriptFolder, { useMtimeDate: true, includeUndated: allTime });
     } catch (error) {
       transcriptWarning = error?.message || "Transcript archive could not be scanned";
     }
@@ -148,7 +155,7 @@ export async function GET(request) {
         if (entry.name.toLowerCase().includes("transcript")) continue;
         if (entry.name.toLowerCase().includes("todo")) continue;
         const subDir = path.join(resolvedVault, entry.name);
-        const candidates = readFolder(subDir, cutoff, "cross-vault", entry.name);
+        const candidates = readFolder(subDir, cutoff, "cross-vault", entry.name, readOptions);
         for (const note of candidates) {
           if (accountAliases.some((a) => textHasAlias(note.content, a))) {
             crossVaultNotes.push(note);

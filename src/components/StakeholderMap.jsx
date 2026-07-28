@@ -9,6 +9,10 @@ import { applyCorrections, mergeCorrections, reverseReplacements } from "@/lib/s
 import { apiFetch } from "@/lib/apiClient";
 
 const TODAY = new Date().toISOString().split("T")[0];
+const SOURCE_RANGES = [
+  { id: "recent", label: "Last 3 months" },
+  { id: "all", label: "All history" },
+];
 
 // Stakeholder maps run longer than the default note summary.
 const ESTIMATED_OUTPUT_TOKENS = 4000;
@@ -28,6 +32,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [strictFolderOnly, setStrictFolderOnly] = useState(false);
+  const [sourceRange, setSourceRange] = useState("recent");
 
   const [mapping, setMapping] = useState(false);
   const [mapError, setMapError] = useState(null);
@@ -73,6 +78,16 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
 
   function handleStrictFolderOnlyChange(checked) {
     setStrictFolderOnly(checked);
+    clearLoadedMappingSources();
+  }
+
+  function handleSourceRangeChange(nextRange) {
+    if (nextRange === sourceRange) return;
+    setSourceRange(nextRange);
+    clearLoadedMappingSources();
+  }
+
+  function clearLoadedMappingSources() {
     setLoadedSources(null);
     setLoadCounts(null);
     setLoadWarning(null);
@@ -82,6 +97,9 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setSavedPath("");
     setShowConfirm(false);
     setDroppedCount(0);
+    setMapError(null);
+    setMapCost(null);
+    setLastMapRequest(null);
   }
 
   async function handleLoadSources() {
@@ -100,6 +118,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       const { aliases } = detectAccount(selectedFolder, settings.accounts);
       const params = new URLSearchParams({ vaultPath: settings.vaultPath });
       if (selectedFolder) params.set("folderPath", selectedFolder);
+      if (sourceRange === "all") params.set("allTime", "true");
       if (!strictFolderOnly && aliases?.length) params.set("accountAliases", aliases.join(","));
 
       const res = await apiFetch(`/api/notes?${params}`);
@@ -191,6 +210,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       corrections: settings.corrections || [],
       accountName: account.name,
       allAccounts: settings.accounts || [],
+      sourceRange,
     });
   }
 
@@ -247,6 +267,9 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
   }
 
   const folderLabel = selectedFolder || "(Vault root)";
+  const sourceRangeText = sourceRange === "all"
+    ? "all available source files"
+    : `sources dated ${threeMonthsAgoLabel()} or later`;
 
   return (
     <div className="space-y-4">
@@ -336,25 +359,42 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
               <h3 className="text-base font-semibold text-gray-900 mb-1">Customer & Site Mapping</h3>
               <p className="text-sm text-gray-500">
                 Scanning Obsidian meeting notes in <span className="font-medium text-gray-700">{folderLabel}</span>
-                {" "}for sources dated <span className="font-medium text-gray-700">{threeMonthsAgoLabel()}</span> or later.
+                {" "}for <span className="font-medium text-gray-700">{sourceRangeText}</span>.
               </p>
-              <label className={`flex items-center gap-1.5 text-xs mt-2 ${loading || mapping ? "text-gray-300" : "text-gray-500 cursor-pointer"}`}>
-                <input
-                  type="checkbox"
-                  checked={strictFolderOnly}
-                  disabled={loading || mapping}
-                  onChange={(e) => handleStrictFolderOnlyChange(e.target.checked)}
-                  className="accent-obsidian-600"
-                />
-                Account folder only
-                <span title="Skips cross-folder search for a faster, stricter scan. Re-scan after changing.">i</span>
-              </label>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <div className="flex rounded-lg border border-gray-200 bg-white overflow-hidden">
+                  {SOURCE_RANGES.map((range) => (
+                    <button
+                      key={range.id}
+                      type="button"
+                      onClick={() => handleSourceRangeChange(range.id)}
+                      disabled={loading || mapping}
+                      className={`px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${
+                        sourceRange === range.id ? "bg-obsidian-600 text-white" : "text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      {range.label}
+                    </button>
+                  ))}
+                </div>
+                <label className={`flex items-center gap-1.5 text-xs ${loading || mapping ? "text-gray-300" : "text-gray-500 cursor-pointer"}`}>
+                  <input
+                    type="checkbox"
+                    checked={strictFolderOnly}
+                    disabled={loading || mapping}
+                    onChange={(e) => handleStrictFolderOnlyChange(e.target.checked)}
+                    className="accent-obsidian-600"
+                  />
+                  Account folder only
+                  <span title="Skips cross-folder search for a faster, stricter scan. Re-scan after changing.">i</span>
+                </label>
+              </div>
 
               {loadedSources !== null && (
                 <div className="mt-3">
                   {loadedSources.length === 0 ? (
                     <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200 inline-block">
-                      No Obsidian meeting notes with dates in the past 3 months found.
+                      No Obsidian meeting notes found for this range.
                     </p>
                   ) : (
                     <div className="space-y-1">
@@ -370,7 +410,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
                       <ul className="text-xs text-gray-500 space-y-0.5 max-h-32 overflow-y-auto">
                         {loadedSources.map((n, i) => (
                           <li key={`${n.source}-${n.sourceLabel}-${n.filename}-${i}`} className="flex gap-2">
-                            <span className="font-mono text-gray-400 flex-shrink-0">{n.date}</span>
+                            <span className="font-mono text-gray-400 flex-shrink-0">{n.date || "undated"}</span>
                             <span className="truncate">{n.title}</span>
                             {n.source !== "obsidian" && (
                               <span className="text-gray-400 flex-shrink-0 italic">{n.sourceLabel}</span>

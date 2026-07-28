@@ -22,4 +22,23 @@ describe("buildStakeholderMapPrompt", () => {
     expect(prompt).not.toContain("notes and transcripts");
     expect(prompt).not.toContain("transcripts, and cross-folder notes");
   });
+
+  it("labels all-history maps without quarterly wording", () => {
+    const prompt = buildStakeholderMapPrompt([
+      {
+        date: "",
+        title: "Undated Contact Notes",
+        content: "Dana owns the lab.",
+        source: "obsidian",
+        sourceLabel: "Acme",
+      },
+    ], "2026-07-23", "Acme", [], "all");
+
+    expect(prompt).toContain("Analyze the provided Obsidian meeting notes from all available history");
+    expect(prompt).toContain("# Acme Customer & Site Mapping - All Available History");
+    expect(prompt).toContain("- **Date range:** All Available History");
+    expect(prompt).toContain("### undated - Undated Contact Notes");
+    expect(prompt).toContain("No stakeholder or site details noted in the provided source set.");
+    expect(prompt).not.toContain("this quarter");
+  });
 });

@@ -100,4 +100,33 @@ describe("/api/notes", () => {
     expect(readPaths).toContain(recentPath);
     expect(readPaths).not.toContain(oldPath);
   });
+
+  it("can include all historical and undated files", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const accountDir = path.join(vault, "Acme");
+    fs.mkdirSync(accountDir, { recursive: true });
+    allowDirectory(vault, "Vault path");
+
+    fs.writeFileSync(path.join(accountDir, "2024-01-01 - Old Contact.md"), "# Old Contact\n\nMet Pat.");
+    fs.writeFileSync(path.join(accountDir, "Undated Contact.md"), "# Contact Notes\n\nDana owns the lab.");
+
+    const params = new URLSearchParams({
+      vaultPath: vault,
+      folderPath: "Acme",
+      allTime: "true",
+    });
+    const response = await getNotes(params);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.notes.map((n) => n.filename)).toEqual([
+      "2024-01-01 - Old Contact.md",
+      "Undated Contact.md",
+    ]);
+    expect(data.notes.find((n) => n.filename === "Undated Contact.md")).toEqual(expect.objectContaining({
+      date: "",
+      title: "Undated Contact",
+    }));
+  });
 });

@@ -108,10 +108,26 @@ function scrubForbiddenKeywords(notes, accountName, allAccounts) {
   }));
 }
 
-export function buildStakeholderMapPrompt(notes, today, accountName, allAccounts) {
+function rangeDescriptor(today, sourceRange) {
   const threeMonthsAgo = new Date(today);
   threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
   const rangeLabel = `${threeMonthsAgo.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })} - ${new Date(today).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`;
+  if (sourceRange === "all") {
+    return {
+      label: "All Available History",
+      sentence: "all available history",
+      empty: "in the provided source set",
+    };
+  }
+  return {
+    label: rangeLabel,
+    sentence: rangeLabel,
+    empty: "this quarter",
+  };
+}
+
+export function buildStakeholderMapPrompt(notes, today, accountName, allAccounts, sourceRange = "recent") {
+  const range = rangeDescriptor(today, sourceRange);
   const acct = accountName && accountName !== "Internal" ? accountName : "Selected Account";
   const noteBlocks = notes
     .map((n) => `### ${n.date || "undated"} - ${n.title}${sourceTag(n)}${n._dayLabel || ""}\n\n${n.content}`)
@@ -119,7 +135,7 @@ export function buildStakeholderMapPrompt(notes, today, accountName, allAccounts
 
   return `You are a NI Software Customer Success Manager creating a standalone customer stakeholder and site-level planning map for ${acct}.
 
-Analyze the provided Obsidian meeting notes from ${rangeLabel}. Extract account-relevant people, customer teams, NI/internal contacts, sites, labs, campuses, cities, buildings, and named locations.
+Analyze the provided Obsidian meeting notes from ${range.sentence}. Extract account-relevant people, customer teams, NI/internal contacts, sites, labs, campuses, cities, buildings, and named locations.
 
 Scope rules:
 - Map ${acct} only. If a source contains another customer account, ignore that other account completely.
@@ -142,7 +158,7 @@ ${noteBlocks}
 
 Generate the Customer & Site Mapping document using EXACTLY this structure:
 
-# ${acct} Customer & Site Mapping - ${rangeLabel}
+# ${acct} Customer & Site Mapping - ${range.label}
 
 *Mapped from ${notes.length} source${notes.length !== 1 ? "s" : ""}*
 
@@ -151,7 +167,7 @@ Generate the Customer & Site Mapping document using EXACTLY this structure:
 ## Source Coverage
 
 - **Sources reviewed:** ${notes.length}
-- **Date range:** ${rangeLabel}
+- **Date range:** ${range.label}
 - **Source types:** [summarize account-folder Obsidian meeting notes and cross-folder Obsidian meeting notes represented in the sources]
 
 ---
@@ -201,7 +217,7 @@ Generate the Customer & Site Mapping document using EXACTLY this structure:
 
 - [missing title/contact/site owner/location detail, ambiguity, or source gap that should be clarified]
 
-If no account-relevant stakeholders or sites are found, write exactly: "No stakeholder or site details noted this quarter."`;
+If no account-relevant stakeholders or sites are found, write exactly: "No stakeholder or site details noted ${range.empty}."`;
 }
 
 export async function POST(request) {
@@ -209,7 +225,7 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { notes, apiKey, model, today, replacements = [], corrections = [], accountName, allAccounts = [] } = body;
+    const { notes, apiKey, model, today, replacements = [], corrections = [], accountName, allAccounts = [], sourceRange = "recent" } = body;
 
     if (!notes || notes.length === 0) {
       return new Response(JSON.stringify({ error: "No notes provided" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -246,7 +262,7 @@ export async function POST(request) {
             system: "You produce precise customer stakeholder maps and site-level planning indexes from dated account notes. Preserve source attribution. Respond with only the Markdown document - no preamble.",
             messages: [{
               role: "user",
-              content: buildStakeholderMapPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], accountName, allAccounts),
+              content: buildStakeholderMapPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], accountName, allAccounts, sourceRange),
             }],
           });
 
