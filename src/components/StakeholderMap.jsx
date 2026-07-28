@@ -5,7 +5,14 @@ import FolderSelector from "@/components/FolderSelector";
 import NotesPreview from "@/components/NotesPreview";
 import { calcCost, contextLimit, estimateUsage } from "@/lib/models";
 import { detectAccount } from "@/lib/accounts";
-import { applyCorrections, mergeCorrections, reverseReplacements } from "@/lib/sanitize";
+import { aliasesFromReplacements } from "@/lib/privacy";
+import {
+  applyCorrections,
+  applyReplacements,
+  assignAliases,
+  mergeCorrections,
+  reverseReplacements,
+} from "@/lib/sanitize";
 import { apiFetch } from "@/lib/apiClient";
 
 const TODAY = new Date().toISOString().split("T")[0];
@@ -16,11 +23,67 @@ const SOURCE_RANGES = [
 
 // Stakeholder maps run longer than the default note summary.
 const ESTIMATED_OUTPUT_TOKENS = 4000;
+const SCAN_SOURCE_CHAR_LIMIT = 4500;
+const SCAN_TOTAL_CHAR_LIMIT = 120000;
 
 function threeMonthsAgoLabel() {
   const d = new Date();
   d.setMonth(d.getMonth() - 3);
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+function dedupeEntities(entities) {
+  const seen = new Set();
+  const out = [];
+  for (const entity of entities || []) {
+    const text = String(entity?.text || "").trim();
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ text, type: entity.type === "person" ? "person" : "org" });
+  }
+  return out;
+}
+
+function typeFromAlias(alias) {
+  return String(alias || "").toUpperCase().startsWith("PERSON_") ? "person" : "org";
+}
+
+function includesTerm(text, term) {
+  return term && text.toLowerCase().includes(term.toLowerCase());
+}
+
+function savedReplacementsInSources(notes, replacements) {
+  const sourceText = (notes || []).map((n) => `${n.title || ""}\n${n.content || ""}`).join("\n").toLowerCase();
+  return (replacements || [])
+    .filter((r) => includesTerm(sourceText, r.original || "") || includesTerm(sourceText, r.restored || ""))
+    .map((r) => ({
+      text: r.original,
+      type: typeFromAlias(r.alias),
+      alias: r.alias,
+      restored: r.restored || r.original,
+      context: "",
+      enabled: true,
+      saved: true,
+    }));
+}
+
+function buildMappingScanText(notes, corrections, replacements) {
+  let total = 0;
+  const chunks = [];
+  const clean = (text) => applyReplacements(applyCorrections(text || "", corrections), replacements);
+
+  for (const note of notes || []) {
+    if (total >= SCAN_TOTAL_CHAR_LIMIT) break;
+    const header = `### ${note.date || "undated"} - ${clean(note.title || note.filename || "Untitled")}`;
+    const body = clean(note.content || "").slice(0, SCAN_SOURCE_CHAR_LIMIT);
+    const chunk = `${header}\n${body}`;
+    chunks.push(chunk);
+    total += chunk.length;
+  }
+
+  return chunks.join("\n\n---\n\n").slice(0, SCAN_TOTAL_CHAR_LIMIT);
 }
 
 export default function StakeholderMap({ settings, onSettingsClick, onSettingsPatch }) {
@@ -33,6 +96,9 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
   const [showConfirm, setShowConfirm] = useState(false);
   const [strictFolderOnly, setStrictFolderOnly] = useState(false);
   const [sourceRange, setSourceRange] = useState("recent");
+  const [privacyScanning, setPrivacyScanning] = useState(false);
+  const [privacyScanError, setPrivacyScanError] = useState(null);
+  const [mappingReviewItems, setMappingReviewItems] = useState(null);
 
   const [mapping, setMapping] = useState(false);
   const [mapError, setMapError] = useState(null);
@@ -100,6 +166,12 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setMapError(null);
     setMapCost(null);
     setLastMapRequest(null);
+    setPrivacyScanError(null);
+    setMappingReviewItems(null);
+  }
+
+  function updateReviewItem(index, field, value) {
+    setMappingReviewItems((items) => (items || []).map((item, i) => i === index ? { ...item, [field]: value } : item));
   }
 
   async function handleLoadSources() {
@@ -113,6 +185,8 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setSaved(false);
     setShowConfirm(false);
     setDroppedCount(0);
+    setPrivacyScanError(null);
+    setMappingReviewItems(null);
 
     try {
       const { aliases } = detectAccount(selectedFolder, settings.accounts);
@@ -133,6 +207,89 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleScanNames() {
+    if (!loadedSources?.length) return;
+    const savedReplacements = settings.replacements || [];
+    const corrections = settings.corrections || [];
+
+    setPrivacyScanning(true);
+    setPrivacyScanError(null);
+    setShowConfirm(false);
+
+    try {
+      let newEntities = [];
+      let scanSkipped = !settings.aiPrivacyScan;
+
+      if (settings.aiPrivacyScan) {
+        const scanText = buildMappingScanText(loadedSources, corrections, savedReplacements);
+        try {
+          const res = await apiFetch("/api/sanitize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              transcript: scanText,
+              apiKey: settings.apiKey || undefined,
+              knownAliases: aliasesFromReplacements(savedReplacements),
+            }),
+          });
+          if (!res.ok) throw new Error("Name scan failed");
+          const data = await res.json();
+          if (data.skipped) scanSkipped = true;
+          newEntities = dedupeEntities(data.entities || []);
+        } catch {
+          scanSkipped = true;
+        }
+      }
+
+      const savedItems = savedReplacementsInSources(loadedSources, savedReplacements);
+      const savedTexts = new Set(savedItems.map((item) => item.text.toLowerCase()));
+      const detectedItems = assignAliases(newEntities, savedReplacements)
+        .filter((item) => !savedTexts.has(item.text.toLowerCase()))
+        .map((item) => ({
+          ...item,
+          restored: item.text,
+          context: "",
+          enabled: true,
+          saved: false,
+        }));
+
+      setMappingReviewItems([...savedItems, ...detectedItems]);
+      if (scanSkipped && settings.aiPrivacyScan) {
+        setPrivacyScanError("Name scan skipped - set your API key in Settings to enable AI detection.");
+      } else if (!settings.aiPrivacyScan) {
+        setPrivacyScanError("AI privacy scan is disabled in Settings. Showing saved glossary terms found in these sources.");
+      }
+    } finally {
+      setPrivacyScanning(false);
+    }
+  }
+
+  function buildReviewReplacements() {
+    const savedReplacements = settings.replacements || [];
+    const existing = new Set(savedReplacements.map((r) => String(r.original || "").toLowerCase()));
+    const additions = (mappingReviewItems || [])
+      .filter((item) => item.enabled && !item.saved && !existing.has(String(item.text || "").toLowerCase()))
+      .map((item) => ({
+        original: item.text,
+        alias: item.alias,
+        restored: item.restored || item.text,
+      }));
+    return [...savedReplacements, ...additions];
+  }
+
+  function buildMappingContext(replacements) {
+    const corrections = settings.corrections || [];
+    return (mappingReviewItems || [])
+      .filter((item) => item.context?.trim())
+      .map((item) => {
+        const label = item.enabled ? (item.alias || item.text) : (item.restored || item.text);
+        return {
+          label: applyReplacements(applyCorrections(label, corrections), replacements),
+          context: applyReplacements(applyCorrections(item.context, corrections), replacements),
+        };
+      });
   }
 
   async function runMapRequest(requestPayload) {
@@ -201,16 +358,18 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
   async function handleGenerateMap() {
     if (!loadedSources?.length) return;
     const account = detectAccount(selectedFolder, settings.accounts);
+    const replacements = buildReviewReplacements();
     await runMapRequest({
       notes: loadedSources,
       apiKey: settings.apiKey || undefined,
       model,
       today: TODAY,
-      replacements: settings.replacements || [],
+      replacements,
       corrections: settings.corrections || [],
       accountName: account.name,
       allAccounts: settings.accounts || [],
       sourceRange,
+      mappingContext: buildMappingContext(replacements),
     });
   }
 
@@ -264,6 +423,8 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setLoadError(null);
     setShowConfirm(false);
     setDroppedCount(0);
+    setPrivacyScanError(null);
+    setMappingReviewItems(null);
   }
 
   const folderLabel = selectedFolder || "(Vault root)";
@@ -477,17 +638,128 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
                   {mapError}
                 </p>
               )}
-              <button
-                onClick={() => setShowConfirm(true)}
-                disabled={mapping}
-                className="btn-primary w-full py-3 text-base"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.828 0l-4.243-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                Generate Customer & Site Map
-              </button>
+              {privacyScanError && (
+                <p className="mb-3 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
+                  {privacyScanError}
+                </p>
+              )}
+
+              {mappingReviewItems !== null && (
+                <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+                  <div className="flex items-start justify-between gap-4 mb-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900">Names & Context</h4>
+                      <p className="text-xs text-gray-500">
+                        Checked terms are removed from the AI input with aliases. Context is sent with the map request.
+                      </p>
+                    </div>
+                    <span className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2 py-1 whitespace-nowrap">
+                      {mappingReviewItems.length} term{mappingReviewItems.length !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+
+                  {mappingReviewItems.length === 0 ? (
+                    <p className="text-sm text-gray-500">No names found beyond your saved anonymization list.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                      {mappingReviewItems.map((item, i) => (
+                        <div
+                          key={`${item.alias}-${item.text}-${i}`}
+                          className={`grid gap-2 rounded-lg border p-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.4fr)] ${
+                            item.enabled ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50 opacity-60"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={item.enabled}
+                            onChange={() => updateReviewItem(i, "enabled", !item.enabled)}
+                            disabled={item.saved}
+                            className="mt-1 w-4 h-4 accent-obsidian-600"
+                            title={item.saved ? "Saved glossary terms are always removed from the AI input" : "Remove this name from the AI input"}
+                          />
+                          <div className="space-y-2">
+                            <div>
+                              <div className="text-sm font-medium text-gray-900 truncate">{item.text}</div>
+                              <div className="text-xs text-gray-400">
+                                {item.type}{item.saved ? " - saved" : ""}
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="text"
+                                value={item.alias}
+                                onChange={(e) => updateReviewItem(i, "alias", e.target.value)}
+                                disabled={!item.enabled || item.saved}
+                                className="font-mono text-xs px-2 py-1 rounded border border-gray-200 bg-gray-50 focus:outline-none focus:border-obsidian-400 disabled:opacity-50"
+                                title="Alias sent to Claude"
+                              />
+                              <input
+                                type="text"
+                                value={item.restored || item.text}
+                                onChange={(e) => updateReviewItem(i, "restored", e.target.value)}
+                                disabled={!item.enabled}
+                                className="text-xs px-2 py-1 rounded border border-gray-200 bg-gray-50 focus:outline-none focus:border-obsidian-400 disabled:opacity-50"
+                                title="Name restored in the final map"
+                              />
+                            </div>
+                          </div>
+                          <textarea
+                            value={item.context || ""}
+                            onChange={(e) => updateReviewItem(i, "context", e.target.value)}
+                            rows={3}
+                            className="input text-xs resize-y min-h-20"
+                            placeholder="Context for mapping: role, site, relationship, influence, do/don't include..."
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {mappingReviewItems === null ? (
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleScanNames}
+                    disabled={privacyScanning || mapping}
+                    className="btn-primary flex-1 py-3 text-base"
+                  >
+                    {privacyScanning ? (
+                      <>
+                        <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Scanning...
+                      </>
+                    ) : "Scan Names & Add Context"}
+                  </button>
+                  <button
+                    onClick={() => setShowConfirm(true)}
+                    disabled={privacyScanning || mapping}
+                    className="btn-secondary flex-1 py-3 text-base"
+                  >
+                    Skip Review
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleScanNames}
+                    disabled={privacyScanning || mapping}
+                    className="btn-secondary flex-1 py-3 text-base"
+                  >
+                    Re-scan Names
+                  </button>
+                  <button
+                    onClick={() => setShowConfirm(true)}
+                    disabled={privacyScanning || mapping}
+                    className="btn-primary flex-1 py-3 text-base"
+                  >
+                    Continue to Pre-flight
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -495,6 +767,8 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
             const est = estimateUsage(loadedSources, model, ESTIMATED_OUTPUT_TOKENS);
             const limit = contextLimit(model);
             const warnAt = limit - 20_000;
+            const reviewedCount = (mappingReviewItems || []).filter((item) => item.enabled).length;
+            const contextCount = (mappingReviewItems || []).filter((item) => item.context?.trim()).length;
             return (
               <div className="mt-5 pt-5 border-t border-gray-100">
                 <div className="flex items-center justify-between mb-3">
@@ -544,8 +818,13 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
                     </p>
                   )}
                   <p className="text-xs text-amber-700">
-                    Sanitized source content will be sent to Claude. Names in your glossary are replaced before sending and restored afterward.
+                    Sanitized source content will be sent to Claude. Names in your glossary and selected review terms are replaced before sending and restored afterward.
                   </p>
+                  {mappingReviewItems !== null && (
+                    <p className="text-xs text-amber-700">
+                      Reviewed {reviewedCount} term{reviewedCount !== 1 ? "s" : ""}; {contextCount} context note{contextCount !== 1 ? "s" : ""} will guide the map.
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-3 mt-3">
                   <button onClick={() => setShowConfirm(false)} className="btn-secondary flex-1">

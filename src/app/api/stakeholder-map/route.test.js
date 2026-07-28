@@ -41,4 +41,21 @@ describe("buildStakeholderMapPrompt", () => {
     expect(prompt).toContain("No stakeholder or site details noted in the provided source set.");
     expect(prompt).not.toContain("this quarter");
   });
+
+  it("includes user-provided mapping context", () => {
+    const prompt = buildStakeholderMapPrompt([
+      {
+        date: "2026-07-10",
+        title: "Planning Sync",
+        content: "PERSON_1 discussed the Dallas lab rollout.",
+        source: "obsidian",
+        sourceLabel: "Acme",
+      },
+    ], "2026-07-23", "Acme", [], "recent", [
+      { label: "PERSON_1", context: "Primary lab owner; treat as customer technical champion." },
+    ]);
+
+    expect(prompt).toContain("User-provided context for mapped names and organizations");
+    expect(prompt).toContain("**PERSON_1:** Primary lab owner; treat as customer technical champion.");
+  });
 });

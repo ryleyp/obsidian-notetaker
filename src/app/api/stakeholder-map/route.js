@@ -126,7 +126,22 @@ function rangeDescriptor(today, sourceRange) {
   };
 }
 
-export function buildStakeholderMapPrompt(notes, today, accountName, allAccounts, sourceRange = "recent") {
+function mappingContextBlock(mappingContext) {
+  const items = (mappingContext || [])
+    .map((item) => ({
+      label: String(item?.label || "").trim(),
+      context: String(item?.context || "").trim(),
+    }))
+    .filter((item) => item.label && item.context);
+
+  if (!items.length) return "";
+
+  return `\nUser-provided context for mapped names and organizations. Use this as guidance, but do not invent facts beyond the sources:\n${items
+    .map((item) => `- **${item.label}:** ${item.context}`)
+    .join("\n")}\n`;
+}
+
+export function buildStakeholderMapPrompt(notes, today, accountName, allAccounts, sourceRange = "recent", mappingContext = []) {
   const range = rangeDescriptor(today, sourceRange);
   const acct = accountName && accountName !== "Internal" ? accountName : "Selected Account";
   const noteBlocks = notes
@@ -148,6 +163,7 @@ ${buildExclusionList(accountName, allAccounts)}
 Sources are in chronological order, oldest first. Within a single day, same-day labels indicate order.
 
 Citation rule: Every mapped person and every mapped site must list every provided source that mentions them. Use source date, title, and source label when present. Do not write "multiple meetings" without enumerating those meetings.
+${mappingContextBlock(mappingContext)}
 
 ---
 SOURCES:
@@ -225,7 +241,7 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { notes, apiKey, model, today, replacements = [], corrections = [], accountName, allAccounts = [], sourceRange = "recent" } = body;
+    const { notes, apiKey, model, today, replacements = [], corrections = [], accountName, allAccounts = [], sourceRange = "recent", mappingContext = [] } = body;
 
     if (!notes || notes.length === 0) {
       return new Response(JSON.stringify({ error: "No notes provided" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -241,6 +257,12 @@ export async function POST(request) {
       title: applyReplacements(applyCorrections(n.title || "", corrections), replacements),
       content: applyReplacements(applyCorrections(n.content, corrections), replacements),
     }));
+    const sanitizedMappingContext = (mappingContext || [])
+      .map((item) => ({
+        label: applyReplacements(applyCorrections(item?.label || "", corrections), replacements),
+        context: applyReplacements(applyCorrections(item?.context || "", corrections), replacements),
+      }))
+      .filter((item) => item.label.trim() && item.context.trim());
 
     const selectedModel = model || DEFAULT_MODEL;
     const scrubbedNotes = scrubForbiddenKeywords(sanitizedNotes, accountName, allAccounts);
@@ -262,7 +284,7 @@ export async function POST(request) {
             system: "You produce precise customer stakeholder maps and site-level planning indexes from dated account notes. Preserve source attribution. Respond with only the Markdown document - no preamble.",
             messages: [{
               role: "user",
-              content: buildStakeholderMapPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], accountName, allAccounts, sourceRange),
+              content: buildStakeholderMapPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], accountName, allAccounts, sourceRange, sanitizedMappingContext),
             }],
           });
 
