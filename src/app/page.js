@@ -162,7 +162,11 @@ export default function Home() {
 
         {/* ── Customer & Site Mapping mode ── */}
         {mode === "mapping" && (
-          <StakeholderMap settings={settings} onSettingsClick={() => setShowSettings(true)} />
+          <StakeholderMap
+            settings={settings}
+            onSettingsPatch={applySettingsPatch}
+            onSettingsClick={() => setShowSettings(true)}
+          />
         )}
 
         {/* ── SystemLink Status mode ── */}

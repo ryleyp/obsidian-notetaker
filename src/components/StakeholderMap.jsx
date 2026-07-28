@@ -5,7 +5,7 @@ import FolderSelector from "@/components/FolderSelector";
 import NotesPreview from "@/components/NotesPreview";
 import { calcCost, contextLimit, estimateUsage } from "@/lib/models";
 import { detectAccount } from "@/lib/accounts";
-import { reverseReplacements } from "@/lib/sanitize";
+import { applyCorrections, mergeCorrections, reverseReplacements } from "@/lib/sanitize";
 import { apiFetch } from "@/lib/apiClient";
 
 const TODAY = new Date().toISOString().split("T")[0];
@@ -19,7 +19,7 @@ function threeMonthsAgoLabel() {
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
-export default function StakeholderMap({ settings, onSettingsClick }) {
+export default function StakeholderMap({ settings, onSettingsClick, onSettingsPatch }) {
   const [selectedFolder, setSelectedFolder] = useState("");
   const [loadedSources, setLoadedSources] = useState(null);
   const [loadCounts, setLoadCounts] = useState(null);
@@ -40,6 +40,35 @@ export default function StakeholderMap({ settings, onSettingsClick }) {
   const mapControllerRef = useRef(null);
   const [lastMapRequest, setLastMapRequest] = useState(null);
   const [model, setModel] = useState(settings.model || "claude-haiku-4-5");
+  const [newFind, setNewFind] = useState("");
+  const [newReplace, setNewReplace] = useState("");
+
+  const corrections = settings.corrections || [];
+
+  function updateCorrections(nextCorrections) {
+    if (!onSettingsPatch) return;
+    onSettingsPatch({ corrections: nextCorrections });
+    setLastMapRequest((request) => request ? { ...request, corrections: nextCorrections } : request);
+  }
+
+  function handleAddCorrection() {
+    const find = newFind.trim();
+    if (!find) return;
+    const addition = { find, replace: newReplace };
+    const nextCorrections = mergeCorrections(corrections, [addition]);
+    updateCorrections(nextCorrections);
+    setNewFind("");
+    setNewReplace("");
+    if (output) {
+      setOutput((current) => applyCorrections(current, [addition]));
+      setSaved(false);
+      setSavedPath("");
+    }
+  }
+
+  function handleRemoveCorrection(index) {
+    updateCorrections(corrections.filter((_, i) => i !== index));
+  }
 
   async function handleLoadSources() {
     if (!settings.vaultPath) return;
@@ -115,8 +144,10 @@ export default function StakeholderMap({ settings, onSettingsClick }) {
             accumulated += evt.text;
             setOutput(accumulated);
           } else if (evt.type === "done") {
-            const reps = settings.replacements || [];
-            setOutput(reps.length ? reverseReplacements(accumulated, reps) : accumulated);
+            const reps = requestPayload.replacements || settings.replacements || [];
+            const requestCorrections = requestPayload.corrections || settings.corrections || [];
+            const restored = reps.length ? reverseReplacements(accumulated, reps) : accumulated;
+            setOutput(applyCorrections(restored, requestCorrections));
             if (evt.usage) setMapCost(calcCost(evt.usage, evt.model));
             if (evt.droppedCount) setDroppedCount(evt.droppedCount);
           } else if (evt.type === "error") {
@@ -211,6 +242,78 @@ export default function StakeholderMap({ settings, onSettingsClick }) {
         onSelect={(f) => { setSelectedFolder(f); setLoadedSources(null); setOutput(""); setShowConfirm(false); setLoadWarning(null); }}
         onSettingsClick={onSettingsClick}
       />
+
+      {settings.vaultPath && (
+        <div className="card p-4">
+          <div className="flex items-start justify-between gap-4 mb-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Mapping Corrections</h3>
+              <p className="text-xs text-gray-500">
+                Applied to source notes before anonymization, then to the generated map before saving.
+              </p>
+            </div>
+            {corrections.length > 0 && (
+              <span className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2 py-1 whitespace-nowrap">
+                {corrections.length} rule{corrections.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+
+          {corrections.length > 0 && (
+            <div className="mb-3 space-y-1.5">
+              {corrections.map((correction, i) => (
+                <div key={`${correction.find}-${i}`} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200 text-sm">
+                  <span className="font-medium text-gray-800 flex-1 truncate">{correction.find}</span>
+                  <span className="text-gray-400">-&gt;</span>
+                  <span className="font-medium text-gray-800 flex-1 truncate">
+                    {correction.replace || <em className="text-gray-400">(delete)</em>}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveCorrection(i)}
+                    disabled={mapping}
+                    className="text-gray-400 hover:text-red-500 disabled:opacity-50 ml-1"
+                    aria-label={`Remove correction for ${correction.find}`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+            <input
+              type="text"
+              className="input"
+              placeholder="Find"
+              value={newFind}
+              onChange={(e) => setNewFind(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddCorrection()}
+              disabled={mapping}
+            />
+            <input
+              type="text"
+              className="input"
+              placeholder="Replace with"
+              value={newReplace}
+              onChange={(e) => setNewReplace(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddCorrection()}
+              disabled={mapping}
+            />
+            <button
+              type="button"
+              onClick={handleAddCorrection}
+              disabled={!newFind.trim() || mapping || !onSettingsPatch}
+              className="btn-secondary whitespace-nowrap"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      )}
 
       {settings.vaultPath && !output && (
         <div className="card p-6">
