@@ -13,6 +13,7 @@ import {
   mergeCorrections,
   reverseReplacements,
 } from "@/lib/sanitize";
+import { inferNextMappingSection } from "@/lib/contactMapping";
 import { apiFetch } from "@/lib/apiClient";
 
 const TODAY = new Date().toISOString().split("T")[0];
@@ -99,11 +100,19 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
   const [privacyScanning, setPrivacyScanning] = useState(false);
   const [privacyScanError, setPrivacyScanError] = useState(null);
   const [mappingReviewItems, setMappingReviewItems] = useState(null);
+  const [extractingFacts, setExtractingFacts] = useState(false);
+  const [factError, setFactError] = useState(null);
+  const [mappingFacts, setMappingFacts] = useState(null);
+  const [factStats, setFactStats] = useState(null);
+  const [changedOnly, setChangedOnly] = useState(false);
+  const [forceExtract, setForceExtract] = useState(false);
 
   const [mapping, setMapping] = useState(false);
   const [mapError, setMapError] = useState(null);
   const [mapPartial, setMapPartial] = useState(false);
   const [output, setOutput] = useState("");
+  const [verifyingMap, setVerifyingMap] = useState(false);
+  const [verifyFindings, setVerifyFindings] = useState(null);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -170,10 +179,18 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setLastMapRequest(null);
     setPrivacyScanError(null);
     setMappingReviewItems(null);
+    setFactError(null);
+    setMappingFacts(null);
+    setFactStats(null);
+    setVerifyFindings(null);
   }
 
   function updateReviewItem(index, field, value) {
     setMappingReviewItems((items) => (items || []).map((item, i) => i === index ? { ...item, [field]: value } : item));
+  }
+
+  function updateFactItem(index, field, value) {
+    setMappingFacts((facts) => (facts || []).map((fact, i) => i === index ? { ...fact, [field]: value } : fact));
   }
 
   async function handleLoadSources() {
@@ -190,6 +207,10 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setMapPartial(false);
     setPrivacyScanError(null);
     setMappingReviewItems(null);
+    setFactError(null);
+    setMappingFacts(null);
+    setFactStats(null);
+    setVerifyFindings(null);
 
     try {
       const { aliases } = detectAccount(selectedFolder, settings.accounts);
@@ -295,6 +316,90 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       });
   }
 
+  function activeFacts(facts = mappingFacts) {
+    return (facts || []).filter((fact) => fact.enabled !== false);
+  }
+
+  function normalizedFacts(facts) {
+    return (facts || []).map((fact, i) => ({
+      ...fact,
+      enabled: fact.enabled !== false,
+      reviewId: fact.reviewId || `${fact.sourceId || "source"}-${fact.type || "fact"}-${fact.name || "item"}-${i}`,
+    }));
+  }
+
+  async function handleExtractFacts(options = {}) {
+    if (!loadedSources?.length || !settings.vaultPath) return null;
+    const account = detectAccount(selectedFolder, settings.accounts);
+    const replacements = buildReviewReplacements();
+    const mappingContext = buildMappingContext(replacements);
+
+    setExtractingFacts(true);
+    setFactError(null);
+    setVerifyFindings(null);
+    if (!options.keepExisting) {
+      setMappingFacts(null);
+      setFactStats(null);
+    }
+
+    try {
+      const res = await apiFetch("/api/contact-facts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: loadedSources,
+          vaultPath: settings.vaultPath,
+          folderPath: selectedFolder,
+          apiKey: settings.apiKey || undefined,
+          accountName: account.name,
+          allAccounts: settings.accounts || [],
+          replacements,
+          corrections: settings.corrections || [],
+          mappingContext,
+          changedOnly,
+          force: forceExtract,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Fact extraction failed");
+      const facts = normalizedFacts(data.facts || []);
+      setMappingFacts(facts);
+      setFactStats(data.stats || null);
+      return facts;
+    } catch (error) {
+      setFactError(error.message);
+      if (options.fallbackToRaw) return null;
+      throw error;
+    } finally {
+      setExtractingFacts(false);
+    }
+  }
+
+  async function verifyGeneratedMap(mapText, requestPayload) {
+    if (!mapText.trim()) return;
+    setVerifyingMap(true);
+    setVerifyFindings(null);
+    try {
+      const res = await apiFetch("/api/verify-map", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          map: mapText,
+          facts: requestPayload.facts || [],
+          accountName: requestPayload.accountName,
+          allAccounts: requestPayload.allAccounts || [],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Verification failed");
+      setVerifyFindings(data.findings || []);
+    } catch (error) {
+      setVerifyFindings([{ severity: "warning", message: error.message }]);
+    } finally {
+      setVerifyingMap(false);
+    }
+  }
+
   async function runMapRequest(requestPayload, options = {}) {
     const append = !!options.append;
     const baseOutput = append ? output : "";
@@ -344,10 +449,13 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
             const requestCorrections = requestPayload.corrections || settings.corrections || [];
             const restored = reps.length ? reverseReplacements(accumulated, reps) : accumulated;
             const nextOutput = append ? `${baseOutput}${restored}` : restored;
-            setOutput(applyCorrections(nextOutput, requestCorrections));
+            const displayOutput = applyCorrections(nextOutput, requestCorrections);
+            setOutput(displayOutput);
             if (evt.truncated) {
               setMapPartial(true);
               setMapError("Generation hit the model output limit. Partial map kept below; continue to finish it.");
+            } else {
+              await verifyGeneratedMap(displayOutput, requestPayload);
             }
             if (evt.usage) setMapCost(calcCost(evt.usage, evt.model));
             if (evt.droppedCount) setDroppedCount(evt.droppedCount);
@@ -381,8 +489,22 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     if (!loadedSources?.length) return;
     const account = detectAccount(selectedFolder, settings.accounts);
     const replacements = buildReviewReplacements();
+    let facts = mappingFacts;
+    if (!facts) {
+      facts = await handleExtractFacts({ fallbackToRaw: true });
+    }
+    if (changedOnly && !facts) {
+      setMapError("Changed-only mapping needs a successful fact extraction first.");
+      return;
+    }
+    const factsForRequest = activeFacts(facts);
+    if (changedOnly && facts && factsForRequest.length === 0) {
+      setMapError("No changed contact facts found since the last saved map.");
+      return;
+    }
     await runMapRequest({
       notes: loadedSources,
+      facts: factsForRequest,
       apiKey: settings.apiKey || undefined,
       model,
       today: TODAY,
@@ -392,6 +514,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       allAccounts: settings.accounts || [],
       sourceRange,
       mappingContext: buildMappingContext(replacements),
+      incremental: changedOnly,
     });
   }
 
@@ -405,7 +528,11 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
 
   function handleContinueMapping() {
     if (!lastMapRequest || !output.trim()) return;
-    runMapRequest({ ...lastMapRequest, previousOutput: output }, { append: true });
+    runMapRequest({
+      ...lastMapRequest,
+      previousOutput: output,
+      continuationSection: inferNextMappingSection(output),
+    }, { append: true });
   }
 
   function handleOutputChange(nextOutput) {
@@ -413,6 +540,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setSaved(false);
     setSavedPath("");
     setMapPartial(false);
+    setVerifyFindings(null);
   }
 
   async function handleSave() {
@@ -433,6 +561,18 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       if (!res.ok) throw new Error(data.error || "Save failed");
       setSaved(true);
       setSavedPath(data.savedPath);
+      const account = detectAccount(selectedFolder, settings.accounts);
+      apiFetch("/api/contact-facts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "markMapped",
+          vaultPath: settings.vaultPath,
+          folderPath: selectedFolder,
+          accountName: account.name,
+          savedPath: data.savedPath,
+        }),
+      }).catch(() => {});
     } catch (e) {
       alert(`Failed to save mapping: ${e.message}`);
     } finally {
@@ -456,6 +596,10 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setLastMapRequest(null);
     setPrivacyScanError(null);
     setMappingReviewItems(null);
+    setFactError(null);
+    setMappingFacts(null);
+    setFactStats(null);
+    setVerifyFindings(null);
   }
 
   const folderLabel = selectedFolder || "(Vault root)";
@@ -468,7 +612,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       <FolderSelector
         vaultPath={settings.vaultPath}
         selectedFolder={selectedFolder}
-        onSelect={(f) => { setSelectedFolder(f); setLoadedSources(null); setOutput(""); setShowConfirm(false); setLoadWarning(null); }}
+        onSelect={(f) => { setSelectedFolder(f); clearLoadedMappingSources(); }}
         onSettingsClick={onSettingsClick}
       />
 
@@ -748,6 +892,119 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
                 </div>
               )}
 
+              <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4">
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-900">Structured Fact Index</h4>
+                    <p className="text-xs text-gray-500">
+                      Extract compact contact and site facts first, then generate the map from those facts.
+                    </p>
+                  </div>
+                  {factStats && (
+                    <span className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-full px-2 py-1 whitespace-nowrap">
+                      {activeFacts().length} fact{activeFacts().length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 mb-3">
+                  <label className={`flex items-center gap-1.5 text-xs ${extractingFacts || mapping ? "text-gray-300" : "text-gray-500 cursor-pointer"}`}>
+                    <input
+                      type="checkbox"
+                      checked={changedOnly}
+                      disabled={extractingFacts || mapping}
+                      onChange={(e) => { setChangedOnly(e.target.checked); setMappingFacts(null); setFactStats(null); }}
+                      className="accent-obsidian-600"
+                    />
+                    Changed since last saved map
+                  </label>
+                  <label className={`flex items-center gap-1.5 text-xs ${extractingFacts || mapping ? "text-gray-300" : "text-gray-500 cursor-pointer"}`}>
+                    <input
+                      type="checkbox"
+                      checked={forceExtract}
+                      disabled={extractingFacts || mapping}
+                      onChange={(e) => { setForceExtract(e.target.checked); setMappingFacts(null); setFactStats(null); }}
+                      className="accent-obsidian-600"
+                    />
+                    Force re-extract
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => handleExtractFacts({ keepExisting: true })}
+                    disabled={extractingFacts || mapping}
+                    className="btn-secondary text-xs px-3 py-1.5"
+                  >
+                    {extractingFacts ? (
+                      <>
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Extracting...
+                      </>
+                    ) : mappingFacts ? "Refresh Facts" : "Extract Facts"}
+                  </button>
+                </div>
+
+                {factStats && (
+                  <div className="mb-3 flex flex-wrap gap-3 text-xs text-gray-500">
+                    <span>{factStats.totalSources} source{factStats.totalSources !== 1 ? "s" : ""}</span>
+                    <span>{factStats.reusedSources} reused</span>
+                    <span>{factStats.extractedSources} extracted</span>
+                    {factStats.skippedSources > 0 && <span>{factStats.skippedSources} unchanged skipped</span>}
+                    {factStats.batches > 0 && <span>{factStats.batches} batch{factStats.batches !== 1 ? "es" : ""}</span>}
+                  </div>
+                )}
+
+                {factError && (
+                  <p className="mb-3 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
+                    {factError}
+                  </p>
+                )}
+
+                {mappingFacts !== null && (
+                  mappingFacts.length === 0 ? (
+                    <p className="text-sm text-gray-500">No contact or site facts found for this run.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                      {mappingFacts.map((fact, i) => (
+                        <div
+                          key={fact.reviewId || `${fact.sourceId}-${fact.name}-${i}`}
+                          className={`grid gap-2 rounded-lg border p-3 sm:grid-cols-[auto_minmax(0,1fr)] ${
+                            fact.enabled !== false ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50 opacity-60"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={fact.enabled !== false}
+                            onChange={() => updateFactItem(i, "enabled", fact.enabled === false)}
+                            className="mt-1 w-4 h-4 accent-obsidian-600"
+                            title="Include this fact in the final mapping run"
+                          />
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs uppercase tracking-wide text-gray-400">{fact.type}</span>
+                              <span className="text-sm font-medium text-gray-900">{fact.name}</span>
+                              {fact.sourceTitle && (
+                                <span className="text-xs text-gray-400">
+                                  {fact.sourceDate || "undated"} - {fact.sourceTitle}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-600 mt-1">{fact.evidence}</p>
+                            {(fact.role || fact.site || fact.relationship) && (
+                              <p className="text-xs text-gray-400 mt-1">
+                                {[fact.role, fact.site, fact.relationship].filter(Boolean).join(" | ")}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+
               {mappingReviewItems === null ? (
                 <div className="flex gap-3">
                   <button
@@ -795,7 +1052,14 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
           )}
 
           {loadedSources?.length > 0 && showConfirm && (() => {
-            const est = estimateUsage(loadedSources, model, ESTIMATED_OUTPUT_TOKENS);
+            const factsForEstimate = activeFacts();
+            const estimationSources = factsForEstimate.length
+              ? factsForEstimate.map((fact) => ({
+                  title: fact.name,
+                  content: JSON.stringify(fact),
+                }))
+              : loadedSources;
+            const est = estimateUsage(estimationSources, model, ESTIMATED_OUTPUT_TOKENS);
             const limit = contextLimit(model);
             const warnAt = limit - 20_000;
             const reviewedCount = (mappingReviewItems || []).filter((item) => item.enabled).length;
@@ -825,7 +1089,8 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
                 </div>
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3 text-sm">
                   <p className="text-xs text-gray-600">
-                    Sending <strong>{loadedSources.length}</strong> account source{loadedSources.length !== 1 ? "s" : ""} to Claude for customer and site mapping.
+                    Sending <strong>{factsForEstimate.length || loadedSources.length}</strong>{" "}
+                    {factsForEstimate.length ? "structured fact" : "account source"}{(factsForEstimate.length || loadedSources.length) !== 1 ? "s" : ""} to Claude for customer and site mapping.
                   </p>
                   {loadCounts && (
                     <div className="flex gap-4 text-xs text-gray-600 flex-wrap">
@@ -856,19 +1121,24 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
                       Reviewed {reviewedCount} term{reviewedCount !== 1 ? "s" : ""}; {contextCount} context note{contextCount !== 1 ? "s" : ""} will guide the map.
                     </p>
                   )}
+                  {factStats && (
+                    <p className="text-xs text-amber-700">
+                      Fact index reused {factStats.reusedSources} source{factStats.reusedSources !== 1 ? "s" : ""} and extracted {factStats.extractedSources} changed source{factStats.extractedSources !== 1 ? "s" : ""}.
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-3 mt-3">
                   <button onClick={() => setShowConfirm(false)} className="btn-secondary flex-1">
                     Cancel
                   </button>
-                  <button onClick={handleGenerateMap} disabled={mapping} className="btn-primary flex-1 py-3">
-                    {mapping ? (
+                  <button onClick={handleGenerateMap} disabled={mapping || extractingFacts} className="btn-primary flex-1 py-3">
+                    {mapping || extractingFacts ? (
                       <>
                         <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                         </svg>
-                        Mapping...
+                        {extractingFacts ? "Extracting..." : "Mapping..."}
                       </>
                     ) : "Confirm - Send to Claude"}
                   </button>
@@ -916,6 +1186,30 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
                 >
                   Continue
                 </button>
+              )}
+            </div>
+          )}
+          {(verifyingMap || verifyFindings) && (
+            <div className={`text-xs rounded-lg px-3 py-2 border ${
+              verifyFindings?.some((finding) => finding.severity === "error")
+                ? "text-red-700 bg-red-50 border-red-200"
+                : verifyFindings?.length
+                ? "text-amber-700 bg-amber-50 border-amber-200"
+                : "text-green-700 bg-green-50 border-green-200"
+            }`}>
+              {verifyingMap ? (
+                <span>Verifying map...</span>
+              ) : verifyFindings.length === 0 ? (
+                <span>Verification passed: sections, placeholders, account terms, and source citations look clean.</span>
+              ) : (
+                <div className="space-y-1">
+                  <p className="font-medium">Verification findings</p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    {verifyFindings.map((finding, i) => (
+                      <li key={`${finding.message}-${i}`}>{finding.message}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           )}

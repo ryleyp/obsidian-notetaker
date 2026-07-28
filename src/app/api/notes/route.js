@@ -33,6 +33,8 @@ function readFolder(dir, cutoff, source, sourceLabel, options = {}) {
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
     const filePath = path.join(dir, entry.name);
+    let stat = null;
+    try { stat = fs.statSync(filePath); } catch { continue; }
 
     const filenameDate = parseDateFromFilename(entry.name);
     if (filenameDate && dateOutsideWindow(filenameDate, cutoff)) continue;
@@ -58,6 +60,9 @@ function readFolder(dir, cutoff, source, sourceLabel, options = {}) {
 
     notes.push({
       filename: entry.name,
+      relativePath: path.relative(options.basePath || dir, filePath),
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
       date: date ? date.toISOString().split("T")[0] : "",
       title: entry.name.replace(/^\d{4}-\d{2}-\d{2}\s*-\s*/, "").replace(/\.md$/, ""),
       content,
@@ -122,7 +127,7 @@ export async function GET(request) {
   if (end && isNaN(end.getTime())) end = null;
   if (end) end.setHours(23, 59, 59, 999);
   const cutoff = { start, end };
-  const readOptions = { includeUndated: allTime };
+  const readOptions = { includeUndated: allTime, basePath: resolvedVault };
 
   // 1. Primary Obsidian folder notes
   const primaryNotes = readFolder(targetDir, cutoff, "obsidian", folderPath || "Vault root", readOptions);
@@ -135,7 +140,7 @@ export async function GET(request) {
     try {
       const resolvedTranscripts = assertAllowedRoot(transcriptsPath, "Transcripts archive path");
       const transcriptDir = assertExistingChildDirectory(resolvedTranscripts, transcriptFolder, "Transcript folder");
-      transcriptNotes = readFolder(transcriptDir, cutoff, "transcript", transcriptFolder, { useMtimeDate: true, includeUndated: allTime });
+      transcriptNotes = readFolder(transcriptDir, cutoff, "transcript", transcriptFolder, { useMtimeDate: true, includeUndated: allTime, basePath: resolvedTranscripts });
     } catch (error) {
       transcriptWarning = error?.message || "Transcript archive could not be scanned";
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildStakeholderMapPrompt } from "./route";
+import { buildStakeholderMapFactPrompt, buildStakeholderMapPrompt } from "./route";
 
 describe("buildStakeholderMapPrompt", () => {
   it("requires source-by-source stakeholder and site mapping", () => {
@@ -74,5 +74,26 @@ describe("buildStakeholderMapPrompt", () => {
     expect(prompt).toContain("Continue the same Markdown document from exactly where the previous output ended");
     expect(prompt).toContain("Previous partial output:");
     expect(prompt).toContain("- **Jordan**");
+  });
+
+  it("can generate from extracted facts instead of raw notes", () => {
+    const prompt = buildStakeholderMapFactPrompt([
+      {
+        type: "person",
+        name: "PERSON_1",
+        role: "lab owner",
+        site: "Dallas Lab",
+        evidence: "Owns the rollout plan.",
+        sourceId: "S1",
+        sourceDate: "2026-07-10",
+        sourceTitle: "Planning Sync",
+        sourceLabel: "Acme",
+      },
+    ], "2026-07-23", "Acme", [], "recent");
+
+    expect(prompt).toContain("EXTRACTED FACTS");
+    expect(prompt).toContain("**person: PERSON_1**");
+    expect(prompt).toContain("Source: 2026-07-10 Planning Sync (Acme)");
+    expect(prompt).toContain("Use the extracted facts as the evidence source");
   });
 });
