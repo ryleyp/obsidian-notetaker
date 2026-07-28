@@ -54,14 +54,10 @@ export default function StakeholderMap({ settings, onSettingsClick }) {
     setDroppedCount(0);
 
     try {
-      const { archiveFolder, aliases } = detectAccount(selectedFolder, settings.accounts);
+      const { aliases } = detectAccount(selectedFolder, settings.accounts);
       const params = new URLSearchParams({ vaultPath: settings.vaultPath });
       if (selectedFolder) params.set("folderPath", selectedFolder);
       if (aliases?.length) params.set("accountAliases", aliases.join(","));
-      if (settings.transcriptsPath && archiveFolder) {
-        params.set("transcriptsPath", settings.transcriptsPath);
-        params.set("transcriptFolder", archiveFolder);
-      }
 
       const res = await apiFetch(`/api/notes?${params}`);
       const data = await res.json();
@@ -222,15 +218,15 @@ export default function StakeholderMap({ settings, onSettingsClick }) {
             <div>
               <h3 className="text-base font-semibold text-gray-900 mb-1">Customer & Site Mapping</h3>
               <p className="text-sm text-gray-500">
-                Scanning <span className="font-medium text-gray-700">{folderLabel}</span> and the matching transcript archive
-                for sources dated <span className="font-medium text-gray-700">{threeMonthsAgoLabel()}</span> or later.
+                Scanning Obsidian meeting notes in <span className="font-medium text-gray-700">{folderLabel}</span>
+                {" "}for sources dated <span className="font-medium text-gray-700">{threeMonthsAgoLabel()}</span> or later.
               </p>
 
               {loadedSources !== null && (
                 <div className="mt-3">
                   {loadedSources.length === 0 ? (
                     <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200 inline-block">
-                      No account notes or transcripts with dates in the past 3 months found.
+                      No Obsidian meeting notes with dates in the past 3 months found.
                     </p>
                   ) : (
                     <div className="space-y-1">
@@ -239,9 +235,8 @@ export default function StakeholderMap({ settings, onSettingsClick }) {
                       </p>
                       {loadCounts && (
                         <div className="flex gap-3 text-xs text-gray-500 flex-wrap">
-                          {loadCounts.obsidian > 0 && <span>{loadCounts.obsidian} Obsidian</span>}
-                          {loadCounts.transcripts > 0 && <span>{loadCounts.transcripts} transcript{loadCounts.transcripts !== 1 ? "s" : ""}</span>}
-                          {loadCounts.crossVault > 0 && <span>{loadCounts.crossVault} Cross-folder</span>}
+                          {loadCounts.obsidian > 0 && <span>{loadCounts.obsidian} account-folder note{loadCounts.obsidian !== 1 ? "s" : ""}</span>}
+                          {loadCounts.crossVault > 0 && <span>{loadCounts.crossVault} cross-folder note{loadCounts.crossVault !== 1 ? "s" : ""}</span>}
                         </div>
                       )}
                       <ul className="text-xs text-gray-500 space-y-0.5 max-h-32 overflow-y-auto">
@@ -361,9 +356,8 @@ export default function StakeholderMap({ settings, onSettingsClick }) {
                   </p>
                   {loadCounts && (
                     <div className="flex gap-4 text-xs text-gray-600 flex-wrap">
-                      {loadCounts.obsidian > 0 && <span>{loadCounts.obsidian} Obsidian</span>}
-                      {loadCounts.transcripts > 0 && <span>{loadCounts.transcripts} transcript{loadCounts.transcripts !== 1 ? "s" : ""}</span>}
-                      {loadCounts.crossVault > 0 && <span>{loadCounts.crossVault} Cross-folder</span>}
+                      {loadCounts.obsidian > 0 && <span>{loadCounts.obsidian} account-folder note{loadCounts.obsidian !== 1 ? "s" : ""}</span>}
+                      {loadCounts.crossVault > 0 && <span>{loadCounts.crossVault} cross-folder note{loadCounts.crossVault !== 1 ? "s" : ""}</span>}
                     </div>
                   )}
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">

@@ -119,7 +119,7 @@ export function buildStakeholderMapPrompt(notes, today, accountName, allAccounts
 
   return `You are a NI Software Customer Success Manager creating a standalone customer stakeholder and site-level planning map for ${acct}.
 
-Analyze the provided account notes and transcripts from ${rangeLabel}. Extract account-relevant people, customer teams, NI/internal contacts, sites, labs, campuses, cities, buildings, and named locations.
+Analyze the provided Obsidian meeting notes from ${rangeLabel}. Extract account-relevant people, customer teams, NI/internal contacts, sites, labs, campuses, cities, buildings, and named locations.
 
 Scope rules:
 - Map ${acct} only. If a source contains another customer account, ignore that other account completely.
@@ -152,7 +152,7 @@ Generate the Customer & Site Mapping document using EXACTLY this structure:
 
 - **Sources reviewed:** ${notes.length}
 - **Date range:** ${rangeLabel}
-- **Source types:** [summarize Obsidian notes, transcripts, and cross-folder notes represented in the sources]
+- **Source types:** [summarize account-folder Obsidian meeting notes and cross-folder Obsidian meeting notes represented in the sources]
 
 ---
 
