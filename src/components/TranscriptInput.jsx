@@ -4,8 +4,15 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { StepBadge } from "@/components/MeetingDetails";
 import { apiFetch } from "@/lib/apiClient";
 
-export default function TranscriptInput({ transcript, setTranscript, onTitleSuggest }) {
+export default function TranscriptInput({
+  transcript,
+  setTranscript,
+  extendedTranscript,
+  setExtendedTranscript,
+  onTitleSuggest,
+}) {
   const [isDragging, setIsDragging] = useState(false);
+  const [isDraggingExtended, setIsDraggingExtended] = useState(false);
   const [activeTab, setActiveTab] = useState("paste");
   const [waiting, setWaiting] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -15,34 +22,55 @@ export default function TranscriptInput({ transcript, setTranscript, onTitleSugg
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [showChunks, setShowChunks] = useState(false);
   const fileInputRef = useRef(null);
+  const extendedFileInputRef = useRef(null);
   const textAreaRef = useRef(null);
   const pollRef = useRef(null);
 
-  const handleFile = useCallback((file) => {
+  const handleFile = useCallback((file, destination = "primary") => {
     if (!file) return;
-    if (!file.type.startsWith("text/") && !file.name.endsWith(".txt") && !file.name.endsWith(".md")) {
+    const lowerName = file.name.toLowerCase();
+    if (!file.type.startsWith("text/") && !lowerName.endsWith(".txt") && !lowerName.endsWith(".md")) {
       alert("Please upload a plain text file (.txt or .md)");
       return;
     }
     const reader = new FileReader();
     reader.onload = (e) => {
-      setTranscript(e.target.result);
-      if (onTitleSuggest) {
+      if (destination === "extended") {
+        setExtendedTranscript(e.target.result);
+      } else {
+        setTranscript(e.target.result);
+      }
+      if (destination === "primary" && onTitleSuggest) {
         const name = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
         onTitleSuggest(name);
       }
     };
     reader.readAsText(file);
-  }, [setTranscript, onTitleSuggest]);
+  }, [setExtendedTranscript, setTranscript, onTitleSuggest]);
+
+  const handleFiles = useCallback((files) => {
+    const selected = Array.from(files || []).slice(0, 2);
+    if (selected[0]) handleFile(selected[0], "primary");
+    if (selected[1]) handleFile(selected[1], "extended");
+  }, [handleFile]);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     setIsDragging(false);
-    handleFile(e.dataTransfer.files[0]);
+    handleFiles(e.dataTransfer.files);
+  }, [handleFiles]);
+
+  const handleExtendedDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingExtended(false);
+    handleFile(e.dataTransfer.files[0], "extended");
   }, [handleFile]);
 
   const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = () => setIsDragging(false);
+  const handleExtendedDragOver = (e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingExtended(true); };
+  const handleExtendedDragLeave = (e) => { e.stopPropagation(); setIsDraggingExtended(false); };
 
   const searchMatches = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -59,12 +87,16 @@ export default function TranscriptInput({ transcript, setTranscript, onTitleSugg
   const transcriptChunks = useMemo(() => buildTranscriptChunks(transcript), [transcript]);
 
   function applyIncomingTranscript(incoming, title) {
-    setTranscript((prev) => {
-      if (voiceImportMode === "append" && prev.trim()) {
-        return `${prev.trimEnd()}\n\n${incoming}`;
-      }
-      return incoming;
-    });
+    if (voiceImportMode === "extended" && transcript.trim()) {
+      setExtendedTranscript(incoming);
+    } else {
+      setTranscript((prev) => {
+        if (voiceImportMode === "append" && prev.trim()) {
+          return `${prev.trimEnd()}\n\n${incoming}`;
+        }
+        return incoming;
+      });
+    }
     if (title && onTitleSuggest) onTitleSuggest(title);
   }
 
@@ -119,6 +151,8 @@ export default function TranscriptInput({ transcript, setTranscript, onTitleSugg
 
   const wordCount = transcript.trim() ? transcript.trim().split(/\s+/).length : 0;
   const lineCount = transcript ? transcript.split(/\n/).length : 0;
+  const extendedWordCount = extendedTranscript.trim() ? extendedTranscript.trim().split(/\s+/).length : 0;
+  const totalWordCount = wordCount + extendedWordCount;
 
   function jumpToMatch(nextIndex) {
     if (!searchMatches.length) return;
@@ -204,14 +238,44 @@ export default function TranscriptInput({ transcript, setTranscript, onTitleSugg
               </button>
             </div>
           )}
-          <textarea
-            ref={textAreaRef}
-            className="input resize-y font-mono text-xs leading-relaxed"
-            rows={14}
-            placeholder="Paste your meeting transcript here..."
-            value={transcript}
-            onChange={(e) => setTranscript(e.target.value)}
-          />
+          <div>
+            {extendedTranscript && (
+              <p className="text-xs font-medium text-gray-600 mb-1.5">Primary transcript</p>
+            )}
+            <textarea
+              ref={textAreaRef}
+              className="input resize-y font-mono text-xs leading-relaxed"
+              rows={extendedTranscript ? 10 : 14}
+              placeholder="Paste your meeting transcript here..."
+              value={transcript}
+              onChange={(e) => setTranscript(e.target.value)}
+            />
+          </div>
+          {extendedTranscript && (
+            <div className="rounded-lg border border-obsidian-200 bg-obsidian-50/40 p-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <div>
+                  <p className="text-xs font-medium text-obsidian-800">Extended transcript</p>
+                  <p className="text-[11px] text-gray-500">Optional second recording of the same meeting</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExtendedTranscript("")}
+                  className="text-xs text-red-500 hover:text-red-700"
+                >
+                  Remove
+                </button>
+              </div>
+              <textarea
+                className="input resize-y font-mono text-xs leading-relaxed bg-white"
+                rows={8}
+                placeholder="Paste the extended transcript here..."
+                value={extendedTranscript}
+                onChange={(e) => setExtendedTranscript(e.target.value)}
+              />
+              <p className="text-[11px] text-gray-500 mt-1.5">{extendedWordCount.toLocaleString()} words</p>
+            </div>
+          )}
           {showChunks && transcriptChunks.length > 0 && (
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 max-h-72 overflow-y-auto space-y-2">
               {transcriptChunks.slice(0, 24).map((chunk, index) => (
@@ -232,39 +296,95 @@ export default function TranscriptInput({ transcript, setTranscript, onTitleSugg
       )}
 
       {activeTab === "upload" && (
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={() => fileInputRef.current?.click()}
-          className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-12 cursor-pointer transition-colors ${
-            isDragging
-              ? "border-obsidian-400 bg-obsidian-50"
-              : "border-gray-300 hover:border-obsidian-400 hover:bg-gray-50"
-          }`}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".txt,.md,text/*"
-            className="hidden"
-            onChange={(e) => handleFile(e.target.files[0])}
-          />
-          <svg className="w-10 h-10 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          {transcript ? (
+        <div className="space-y-3">
+          <p className="text-xs text-gray-500">
+            Select two files at once, or load the primary and extended recordings separately.
+          </p>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Upload primary transcript or select two transcript files"
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") fileInputRef.current?.click();
+            }}
+            className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-8 cursor-pointer transition-colors ${
+              isDragging
+                ? "border-obsidian-400 bg-obsidian-50"
+                : "border-gray-300 hover:border-obsidian-400 hover:bg-gray-50"
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".txt,.md,text/*"
+              className="hidden"
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+            <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
             <div className="text-center">
-              <p className="text-sm font-medium text-green-600">File loaded!</p>
-              <p className="text-xs text-gray-500 mt-1">{wordCount.toLocaleString()} words</p>
-              <p className="text-xs text-gray-400 mt-1">Click to replace</p>
+              <p className={`text-sm font-medium ${transcript ? "text-green-600" : "text-gray-700"}`}>
+                {transcript ? "Primary transcript loaded" : "Primary transcript (for example, Teams)"}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                {transcript ? `${wordCount.toLocaleString()} words · click to replace or select two files` : "Drop one or two files, or click to browse"}
+              </p>
             </div>
-          ) : (
-            <div className="text-center">
-              <p className="text-sm font-medium text-gray-700">Drop your transcript here</p>
-              <p className="text-xs text-gray-500 mt-1">or click to browse — .txt or .md files</p>
+          </div>
+
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Upload extended transcript"
+            onDrop={handleExtendedDrop}
+            onDragOver={handleExtendedDragOver}
+            onDragLeave={handleExtendedDragLeave}
+            onClick={() => extendedFileInputRef.current?.click()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") extendedFileInputRef.current?.click();
+            }}
+            className={`relative flex items-center justify-between gap-4 border-2 border-dashed rounded-lg px-5 py-4 cursor-pointer transition-colors ${
+              isDraggingExtended
+                ? "border-obsidian-400 bg-obsidian-50"
+                : extendedTranscript
+                  ? "border-obsidian-200 bg-obsidian-50/40"
+                  : "border-gray-200 hover:border-obsidian-400 hover:bg-gray-50"
+            }`}
+          >
+            <input
+              ref={extendedFileInputRef}
+              type="file"
+              accept=".txt,.md,text/*"
+              className="hidden"
+              onChange={(e) => handleFile(e.target.files[0], "extended")}
+            />
+            <div>
+              <p className={`text-sm font-medium ${extendedTranscript ? "text-obsidian-700" : "text-gray-700"}`}>
+                {extendedTranscript ? "Extended transcript loaded" : "Add extended transcript (optional)"}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {extendedTranscript ? `${extendedWordCount.toLocaleString()} words · click to replace` : "For example, the longer Voice Memos recording"}
+              </p>
             </div>
-          )}
+            {extendedTranscript && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setExtendedTranscript("");
+                }}
+                className="text-xs text-red-500 hover:text-red-700"
+              >
+                Remove
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -278,7 +398,7 @@ export default function TranscriptInput({ transcript, setTranscript, onTitleSugg
                 </svg>
                 <span className="text-base font-medium">Transcript received!</span>
               </div>
-              <p className="text-xs text-gray-500">{wordCount.toLocaleString()} words loaded — switch to Paste Text to review</p>
+              <p className="text-xs text-gray-500">{totalWordCount.toLocaleString()} total words loaded — switch to Paste Text to review</p>
             </div>
           ) : waiting ? (
             <div className="text-center">
@@ -307,8 +427,9 @@ export default function TranscriptInput({ transcript, setTranscript, onTitleSugg
               <p className="text-sm font-medium text-gray-700 mb-1">Import from Voice Memos</p>
               <div className="flex items-center justify-center gap-2 my-4">
                 {[
-                  { id: "replace", label: "Replace" },
-                  { id: "append", label: "Append" },
+                  { id: "replace", label: "Replace primary" },
+                  { id: "extended", label: "Use as extended" },
+                  { id: "append", label: "Append to primary" },
                 ].map((option) => (
                   <button
                     key={option.id}
@@ -335,10 +456,18 @@ export default function TranscriptInput({ transcript, setTranscript, onTitleSugg
       {transcript && activeTab !== "voice" && (
         <div className="flex items-center justify-between mt-2">
           <p className="text-xs text-gray-500">
-            {wordCount.toLocaleString()} words · {lineCount.toLocaleString()} lines · {transcriptChunks.length.toLocaleString()} chunks
+            {extendedTranscript
+              ? `${totalWordCount.toLocaleString()} total words across 2 transcripts`
+              : `${wordCount.toLocaleString()} words · ${lineCount.toLocaleString()} lines · ${transcriptChunks.length.toLocaleString()} chunks`}
           </p>
-          <button onClick={() => setTranscript("")} className="text-xs text-red-500 hover:text-red-700">
-            Clear
+          <button
+            onClick={() => {
+              setTranscript("");
+              setExtendedTranscript("");
+            }}
+            className="text-xs text-red-500 hover:text-red-700"
+          >
+            Clear all
           </button>
         </div>
       )}

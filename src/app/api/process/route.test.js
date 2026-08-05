@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildPrompt } from "./route";
+import { buildSourceBundle } from "@/lib/sourceBundle";
 
 describe("buildPrompt", () => {
   it("includes user and site callouts before action items", () => {
@@ -32,6 +33,18 @@ describe("buildPrompt", () => {
     expect(prompt).toContain("[T1] Transcript");
     expect(prompt).toContain("[N1] Raw notes");
     expect(prompt).toContain("SOURCE CITATION RULES");
+  });
+
+  it("tells Claude how to reconcile overlapping recordings of one meeting", () => {
+    const transcript = "Teams captured the opening and a decision.";
+    const extendedTranscript = "Voice Memos captured the opening, the decision, and a follow-up.";
+    const sourceBundle = buildSourceBundle({ transcript, extendedTranscript });
+    const prompt = buildPrompt(transcript, "Planning Sync", [], "", { sourceBundle });
+
+    expect(prompt).toContain("MULTIPLE TRANSCRIPTS OF THE SAME MEETING");
+    expect(prompt).toContain("[T1] Primary transcript");
+    expect(prompt).toContain("[T2] Extended transcript");
+    expect(prompt).toContain("do not repeat a point, decision, or action item");
   });
 
   it("carries no note-template or recipe instruction", () => {

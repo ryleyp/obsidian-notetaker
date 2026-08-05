@@ -28,14 +28,19 @@ export function useSanitizeReview({ settings, applySettingsPatch, actions, onSca
       : actions.saveTranscript(replacements);
   }
 
-  async function run(action, { meetingTitle, transcript, meetingContext }) {
+  async function run(action, { meetingTitle, transcript, extendedTranscript, meetingContext }) {
     const savedReplacements = settings.replacements || [];
     const corrections = settings.corrections || [];
     setSanitizing(true);
     setPendingAction(action);
 
     const preSanitize = (text) => applyReplacements(applyCorrections(text, corrections), savedReplacements);
-    const scanText = [preSanitize(meetingTitle), preSanitize(transcript), preSanitize(meetingContext)]
+    const scanText = [
+      preSanitize(meetingTitle),
+      preSanitize(transcript),
+      preSanitize(extendedTranscript),
+      preSanitize(meetingContext),
+    ]
       .filter((part) => part && part.trim())
       .join("\n\n");
 

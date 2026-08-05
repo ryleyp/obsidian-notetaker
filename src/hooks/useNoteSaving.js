@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/sanitize";
 import { matchVaultFolder } from "@/lib/accounts";
 import { apiFetch } from "@/lib/apiClient";
+import { formatTranscriptArchive } from "@/lib/sourceBundle";
 
 // Writing to the vault: the note itself, plus the two best-effort weekly
 // side files (todos and the SFDC activity report), plus the transcript-only
@@ -98,9 +99,10 @@ export function useNoteSaving({ settings, meeting }) {
   }
 
   async function saveTranscript(replacements) {
-    const { transcript, meetingTitle } = meeting;
+    const { transcript, extendedTranscript, meetingTitle } = meeting;
     if (!transcript.trim() || !settings.vaultPath) return;
-    const withCorrections = applyCorrections(transcript, settings.corrections || []);
+    const archiveTranscript = formatTranscriptArchive(transcript, extendedTranscript);
+    const withCorrections = applyCorrections(archiveTranscript, settings.corrections || []);
     const corrected = replacements.length
       ? reverseReplacements(applyReplacements(withCorrections, replacements), replacements)
       : withCorrections;

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildSourceBundle, extractReferencedSourceIds, formatSourceBundleForPrompt } from "./sourceBundle";
+import {
+  buildSourceBundle,
+  extractReferencedSourceIds,
+  formatSourceBundleForPrompt,
+  formatTranscriptArchive,
+} from "./sourceBundle";
 
 describe("sourceBundle", () => {
   it("creates stable transcript and raw-note source IDs", () => {
@@ -19,5 +24,27 @@ describe("sourceBundle", () => {
 
   it("extracts referenced IDs in source order", () => {
     expect(extractReferencedSourceIds("Point one [T2] [E1] [N1]. Point two [T1].")).toEqual(["T1", "T2", "N1", "E1"]);
+  });
+
+  it("keeps two recordings of one meeting as separately labeled transcript sources", () => {
+    const bundle = buildSourceBundle({
+      transcript: "Teams captured the opening discussion.",
+      extendedTranscript: "Voice Memos captured the opening discussion and the follow-up decision.",
+      rawNotes: "The follow-up matters.",
+    });
+
+    expect(bundle.transcriptSources).toEqual([
+      expect.objectContaining({ id: "T1", label: "Primary transcript" }),
+      expect.objectContaining({ id: "T2", label: "Extended transcript" }),
+    ]);
+    expect(bundle.rawNoteSources[0].id).toBe("N1");
+    expect(formatSourceBundleForPrompt(bundle)).toContain("[T2] Extended transcript");
+  });
+
+  it("formats both recordings clearly when they are archived", () => {
+    expect(formatTranscriptArchive("Teams text", "Voice Memo text")).toBe(
+      "## Primary transcript\n\nTeams text\n\n---\n\n## Extended transcript\n\nVoice Memo text"
+    );
+    expect(formatTranscriptArchive("Only one", "")).toBe("Only one");
   });
 });

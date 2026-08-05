@@ -38,11 +38,12 @@ export default function Home() {
   // Meeting inputs
   const [meetingTitle, setMeetingTitle] = useState("");
   const [transcript, setTranscript] = useState("");
+  const [extendedTranscript, setExtendedTranscript] = useState("");
   const [meetingContext, setMeetingContext] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
   const [model, setModel] = useState(FAST_MODEL);
 
-  const meeting = { transcript, meetingTitle, meetingContext, selectedFolder };
+  const meeting = { transcript, extendedTranscript, meetingTitle, meetingContext, selectedFolder };
 
   const {
     settings,
@@ -84,7 +85,7 @@ export default function Home() {
   const { clearTranscriptSaved } = saving;
   useEffect(() => {
     clearTranscriptSaved();
-  }, [transcript, meetingTitle, clearTranscriptSaved]);
+  }, [transcript, extendedTranscript, meetingTitle, clearTranscriptSaved]);
 
   async function handleProcess() {
     if (!transcript.trim()) return;
@@ -112,6 +113,7 @@ export default function Home() {
 
   function handleNewNote() {
     setTranscript("");
+    setExtendedTranscript("");
     setMeetingContext("");
     setMeetingTitle("");
     generation.reset();
@@ -228,6 +230,8 @@ export default function Home() {
               <TranscriptInput
                 transcript={transcript}
                 setTranscript={setTranscript}
+                extendedTranscript={extendedTranscript}
+                setExtendedTranscript={setExtendedTranscript}
                 onTitleSuggest={(suggested) => { if (!meetingTitle) setMeetingTitle(suggested); }}
               />
 

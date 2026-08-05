@@ -58,8 +58,36 @@ export function makeSourceBlocks(text, { prefix, label, maxChars = DEFAULT_CHUNK
   }));
 }
 
-export function buildSourceBundle({ transcript = "", rawNotes = "", emailThread = "" } = {}) {
-  const transcriptSources = makeSourceBlocks(transcript, { prefix: "T", label: "Transcript" });
+function makeTranscriptSources(transcript, extendedTranscript) {
+  const hasExtendedTranscript = Boolean(cleanText(extendedTranscript));
+  const inputs = [
+    {
+      text: transcript,
+      label: hasExtendedTranscript ? "Primary transcript" : "Transcript",
+    },
+    ...(hasExtendedTranscript
+      ? [{ text: extendedTranscript, label: "Extended transcript" }]
+      : []),
+  ];
+
+  let nextId = 1;
+  return inputs.flatMap(({ text, label }) =>
+    makeSourceBlocks(text, { prefix: "T", label }).map((source) => ({
+      ...source,
+      id: `T${nextId++}`,
+    }))
+  );
+}
+
+export function formatTranscriptArchive(transcript, extendedTranscript = "") {
+  const primary = cleanText(transcript);
+  const extended = cleanText(extendedTranscript);
+  if (!extended) return primary;
+  return `## Primary transcript\n\n${primary}\n\n---\n\n## Extended transcript\n\n${extended}`;
+}
+
+export function buildSourceBundle({ transcript = "", extendedTranscript = "", rawNotes = "", emailThread = "" } = {}) {
+  const transcriptSources = makeTranscriptSources(transcript, extendedTranscript);
   const rawNoteSources = makeSourceBlocks(rawNotes, { prefix: "N", label: "Raw notes" });
   const emailSources = makeSourceBlocks(emailThread, { prefix: "E", label: "Email thread" });
   return {

@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/sanitize";
 import { calcCost } from "@/lib/models";
 import { detectAccount, suggestAgreements } from "@/lib/accounts";
-import { buildSourceBundle, mapSourceBundle } from "@/lib/sourceBundle";
+import { buildSourceBundle, formatTranscriptArchive, mapSourceBundle } from "@/lib/sourceBundle";
 import { apiFetch } from "@/lib/apiClient";
 
 // Reads an SSE body of {type: delta|done|error} events, invoking onDelta with
@@ -107,10 +107,11 @@ export function useNoteGeneration({ settings, model, meeting }) {
       setNotes(replacements.length ? reverseReplacements(accumulated, replacements) : accumulated);
 
       if (settings.transcriptsPath) {
-        const { transcript, meetingTitle, selectedFolder } = meeting;
+        const { transcript, extendedTranscript, meetingTitle, selectedFolder } = meeting;
+        const archiveTranscript = formatTranscriptArchive(transcript, extendedTranscript);
         const correctedTranscript = replacements.length
-          ? reverseReplacements(applyReplacements(transcript, replacements), replacements)
-          : transcript;
+          ? reverseReplacements(applyReplacements(archiveTranscript, replacements), replacements)
+          : archiveTranscript;
         apiFetch("/api/save-transcript", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -133,15 +134,17 @@ export function useNoteGeneration({ settings, model, meeting }) {
 
   async function generate(replacements, { onSaved } = {}) {
     setActiveReplacements(replacements);
-    const { transcript, meetingTitle, meetingContext, selectedFolder } = meeting;
+    const { transcript, extendedTranscript, meetingTitle, meetingContext, selectedFolder } = meeting;
     const sanitize = sanitizer(replacements);
 
     const sanitizedTranscript = sanitize(transcript);
+    const sanitizedExtendedTranscript = sanitize(extendedTranscript);
     const sanitizedTitle = sanitize(meetingTitle);
     const sanitizedContext = sanitize(meetingContext);
 
     const promptSourceBundle = buildSourceBundle({
       transcript: sanitizedTranscript,
+      extendedTranscript: sanitizedExtendedTranscript,
       rawNotes: sanitizedContext,
     });
     const displaySourceBundle = replacements.length
@@ -152,7 +155,8 @@ export function useNoteGeneration({ settings, model, meeting }) {
     // Done on the original text (not the pseudonymized copy) so matching is exact.
     const acct = detectAccount(selectedFolder, settings.accounts);
     const account = (settings.accounts || []).find((a) => a.name === acct.name);
-    const suggestedAgreements = account ? suggestAgreements(transcript, account) : [];
+    const agreementText = [transcript, extendedTranscript].filter(Boolean).join("\n\n");
+    const suggestedAgreements = account ? suggestAgreements(agreementText, account) : [];
 
     await streamGenerateRequest({
       payload: {
