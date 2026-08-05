@@ -23,6 +23,10 @@ test("approves a local vault and reaches the ready-to-generate workflow", async 
   await page.getByPlaceholder("Paste your meeting transcript here...").fill(
     "Cardinal confirmed SystemLink deployment is now approved. Older IT blockers are resolved."
   );
+  await page.getByRole("button", { name: "+ Add second transcript from the same meeting" }).click();
+  await page.getByPlaceholder("Paste a second transcript from the same meeting...").fill(
+    "The longer recording also captured Priya agreeing to send the license list by Friday."
+  );
 
   await expect(page.getByRole("button", { name: /Generate Meeting Notes/ })).toBeEnabled();
 });

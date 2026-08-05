@@ -56,7 +56,7 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Usage
 
 1. Enter the meeting title and date
-2. Paste a transcript or upload one or two `.txt`/`.md` files. Use the optional extended transcript for a second recording of the same meeting (for example, Teams plus Voice Memos).
+2. Paste or upload one or two transcripts. Use **Add second transcript** or the optional extended upload for another recording of the same meeting (for example, Teams plus Voice Memos). Uploads accept `.txt` and `.md` files.
 3. Select the target folder in your vault (right panel)
 4. Click **Generate Meeting Notes**
 5. Review the preview, then click **Save to Obsidian**

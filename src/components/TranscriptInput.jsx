@@ -21,6 +21,7 @@ export default function TranscriptInput({
   const [searchQuery, setSearchQuery] = useState("");
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [showChunks, setShowChunks] = useState(false);
+  const [showExtendedPaste, setShowExtendedPaste] = useState(false);
   const fileInputRef = useRef(null);
   const extendedFileInputRef = useRef(null);
   const textAreaRef = useRef(null);
@@ -37,6 +38,7 @@ export default function TranscriptInput({
     reader.onload = (e) => {
       if (destination === "extended") {
         setExtendedTranscript(e.target.result);
+        setShowExtendedPaste(true);
       } else {
         setTranscript(e.target.result);
       }
@@ -89,6 +91,7 @@ export default function TranscriptInput({
   function applyIncomingTranscript(incoming, title) {
     if (voiceImportMode === "extended" && transcript.trim()) {
       setExtendedTranscript(incoming);
+      setShowExtendedPaste(true);
     } else {
       setTranscript((prev) => {
         if (voiceImportMode === "append" && prev.trim()) {
@@ -186,7 +189,7 @@ export default function TranscriptInput({
         <StepBadge n={2} />
         <div>
           <h2 className="text-base font-semibold text-gray-900">Meeting Transcript</h2>
-          <p className="text-xs text-gray-500">Paste, upload, or import from Voice Memos</p>
+          <p className="text-xs text-gray-500">Paste one or two transcripts, upload files, or import from Voice Memos</p>
         </div>
       </div>
 
@@ -239,28 +242,40 @@ export default function TranscriptInput({
             </div>
           )}
           <div>
-            {extendedTranscript && (
-              <p className="text-xs font-medium text-gray-600 mb-1.5">Primary transcript</p>
+            {(showExtendedPaste || extendedTranscript) && (
+              <p className="text-xs font-medium text-gray-600 mb-1.5">Transcript 1 (primary)</p>
             )}
             <textarea
               ref={textAreaRef}
               className="input resize-y font-mono text-xs leading-relaxed"
-              rows={extendedTranscript ? 10 : 14}
+              rows={showExtendedPaste || extendedTranscript ? 10 : 14}
               placeholder="Paste your meeting transcript here..."
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
             />
           </div>
-          {extendedTranscript && (
+          {!showExtendedPaste && !extendedTranscript && (
+            <button
+              type="button"
+              onClick={() => setShowExtendedPaste(true)}
+              className="w-full rounded-lg border border-dashed border-obsidian-300 bg-obsidian-50/40 px-4 py-3 text-sm font-medium text-obsidian-700 hover:border-obsidian-400 hover:bg-obsidian-50 transition-colors"
+            >
+              + Add second transcript from the same meeting
+            </button>
+          )}
+          {(showExtendedPaste || extendedTranscript) && (
             <div className="rounded-lg border border-obsidian-200 bg-obsidian-50/40 p-3">
               <div className="flex items-center justify-between mb-1.5">
                 <div>
-                  <p className="text-xs font-medium text-obsidian-800">Extended transcript</p>
-                  <p className="text-[11px] text-gray-500">Optional second recording of the same meeting</p>
+                  <p className="text-xs font-medium text-obsidian-800">Transcript 2 (extended)</p>
+                  <p className="text-[11px] text-gray-500">Paste the second recording here, such as a longer Voice Memos transcript</p>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setExtendedTranscript("")}
+                  onClick={() => {
+                    setExtendedTranscript("");
+                    setShowExtendedPaste(false);
+                  }}
                   className="text-xs text-red-500 hover:text-red-700"
                 >
                   Remove
@@ -269,7 +284,7 @@ export default function TranscriptInput({
               <textarea
                 className="input resize-y font-mono text-xs leading-relaxed bg-white"
                 rows={8}
-                placeholder="Paste the extended transcript here..."
+                placeholder="Paste a second transcript from the same meeting..."
                 value={extendedTranscript}
                 onChange={(e) => setExtendedTranscript(e.target.value)}
               />
@@ -464,6 +479,7 @@ export default function TranscriptInput({
             onClick={() => {
               setTranscript("");
               setExtendedTranscript("");
+              setShowExtendedPaste(false);
             }}
             className="text-xs text-red-500 hover:text-red-700"
           >
