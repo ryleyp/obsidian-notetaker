@@ -58,8 +58,11 @@ Open [http://localhost:3000](http://localhost:3000).
 1. Enter the meeting title and date
 2. Paste or upload one or two transcripts. Use **Add second transcript** or the optional extended upload for another recording of the same meeting (for example, Teams plus Voice Memos). Uploads accept `.txt` and `.md` files.
 3. Select the target folder in your vault (right panel)
-4. Click **Generate Meeting Notes**
-5. Review the preview, then click **Save to Obsidian**
+4. Optionally select **Also generate a follow-up email** and choose its audience and tone. This adds the email to the same Claude request, separates it from the meeting note, and saves it automatically under `Follow Up Emails`.
+5. Click **Generate Meeting Notes**
+6. Review the preview, then click **Save to Obsidian**
+
+You can also draft or redraft a follow-up after generating notes and save it manually. The `Follow Up Emails` folder is created automatically, and the follow-up uses the same title as the meeting summary. Repeated saves use unique filenames instead of overwriting earlier drafts.
 
 The file is saved as `YYYY-MM-DD - Meeting Title.md` in your chosen folder.
 

@@ -47,6 +47,19 @@ describe("buildPrompt", () => {
     expect(prompt).toContain("do not repeat a point, decision, or action item");
   });
 
+  it("requests a separable follow-up email only when selected", () => {
+    const withFollowUp = buildPrompt("Jordan discussed the rollout.", "Planning Sync", [], "", {
+      followUp: { enabled: true, audience: "internal", tone: "technical" },
+    });
+    const withoutFollowUp = buildPrompt("Jordan discussed the rollout.", "Planning Sync");
+
+    expect(withFollowUp).toContain("FOLLOW-UP EMAIL OUTPUT (required)");
+    expect(withFollowUp).toContain("## Follow-Up Email Draft");
+    expect(withFollowUp).toContain("Audience: internal");
+    expect(withFollowUp).toContain("Tone: technical");
+    expect(withoutFollowUp).not.toContain("## Follow-Up Email Draft");
+  });
+
   it("carries no note-template or recipe instruction", () => {
     const prompt = buildPrompt("Jordan discussed the rollout.", "Planning Sync");
     expect(prompt).not.toContain("TEMPLATE AND RECIPE");

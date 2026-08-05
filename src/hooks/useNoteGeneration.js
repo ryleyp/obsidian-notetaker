@@ -5,6 +5,7 @@ import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/
 import { calcCost } from "@/lib/models";
 import { detectAccount, suggestAgreements } from "@/lib/accounts";
 import { buildSourceBundle, formatTranscriptArchive, mapSourceBundle } from "@/lib/sourceBundle";
+import { splitGeneratedFollowUp } from "@/lib/followUpDraft";
 import { apiFetch } from "@/lib/apiClient";
 
 // Reads an SSE body of {type: delta|done|error} events, invoking onDelta with
@@ -58,6 +59,9 @@ export function useNoteGeneration({ settings, model, meeting }) {
   const [followUpLoading, setFollowUpLoading] = useState(false);
   const [followUpError, setFollowUpError] = useState(null);
   const [followUpCost, setFollowUpCost] = useState(null);
+  const [followUpSaving, setFollowUpSaving] = useState(false);
+  const [followUpSavedPath, setFollowUpSavedPath] = useState("");
+  const [followUpSaveError, setFollowUpSaveError] = useState(null);
 
   const controllerRef = useRef(null);
 
@@ -65,6 +69,9 @@ export function useNoteGeneration({ settings, model, meeting }) {
     setFollowUpDraft("");
     setFollowUpError(null);
     setFollowUpCost(null);
+    setFollowUpSaving(false);
+    setFollowUpSavedPath("");
+    setFollowUpSaveError(null);
   }
 
   function sanitizer(replacements) {
@@ -104,7 +111,19 @@ export function useNoteGeneration({ settings, model, meeting }) {
 
       const { accumulated, usage } = await consumeStream(res, setNotes);
       if (usage) setNoteCost(calcCost(usage, model));
-      setNotes(replacements.length ? reverseReplacements(accumulated, replacements) : accumulated);
+      const restoredOutput = replacements.length
+        ? reverseReplacements(accumulated, replacements)
+        : accumulated;
+      const separated = splitGeneratedFollowUp(restoredOutput);
+      setNotes(separated.notes);
+      if (separated.followUpDraft) {
+        setFollowUpDraft(separated.followUpDraft);
+        if (payload.followUp?.enabled) {
+          await saveFollowUpDraft(separated.followUpDraft);
+        }
+      } else if (payload.followUp?.enabled) {
+        setFollowUpSaveError("Claude did not return a separate follow-up draft. You can draft one from the summary screen.");
+      }
 
       if (settings.transcriptsPath) {
         const { transcript, extendedTranscript, meetingTitle, selectedFolder } = meeting;
@@ -168,6 +187,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
         suggestedAgreements,
         sourceBundle: promptSourceBundle,
         accounts: settings.accounts || [],
+        followUp: meeting.followUp || { enabled: false },
       },
       replacements,
       displaySourceBundle,
@@ -225,6 +245,8 @@ export function useNoteGeneration({ settings, model, meeting }) {
     setFollowUpError(null);
     setFollowUpDraft("");
     setFollowUpCost(null);
+    setFollowUpSavedPath("");
+    setFollowUpSaveError(null);
     try {
       const res = await apiFetch("/api/follow-up", {
         method: "POST",
@@ -249,6 +271,39 @@ export function useNoteGeneration({ settings, model, meeting }) {
     } finally {
       setFollowUpLoading(false);
     }
+  }
+
+  async function saveFollowUpDraft(draft) {
+    if (!draft.trim()) return;
+    if (!settings.vaultPath) {
+      setFollowUpSaveError("Configure your Obsidian vault path in Settings first.");
+      return;
+    }
+
+    setFollowUpSaving(true);
+    setFollowUpSaveError(null);
+    try {
+      const res = await apiFetch("/api/save-follow-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draft,
+          meetingTitle: meeting.meetingTitle || "Meeting",
+          vaultPath: settings.vaultPath,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Follow-up email save failed");
+      setFollowUpSavedPath(data.savedPath);
+    } catch (e) {
+      setFollowUpSaveError(e.message);
+    } finally {
+      setFollowUpSaving(false);
+    }
+  }
+
+  function saveFollowUp() {
+    return saveFollowUpDraft(followUpDraft);
   }
 
   function cancel() {
@@ -285,10 +340,14 @@ export function useNoteGeneration({ settings, model, meeting }) {
     followUpLoading,
     followUpError,
     followUpCost,
+    followUpSaving,
+    followUpSavedPath,
+    followUpSaveError,
     clearFollowUp,
     generate,
     regenerate,
     generateFollowUp,
+    saveFollowUp,
     cancel,
     retry,
     reset,

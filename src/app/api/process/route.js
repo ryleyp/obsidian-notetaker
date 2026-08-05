@@ -99,7 +99,7 @@ export function buildPrompt(
   meetingTitle,
   suggestedAgreements = [],
   meetingContext = "",
-  { sourceBundle, accounts = [] } = {}
+  { sourceBundle, accounts = [], followUp } = {}
 ) {
   const title = meetingTitle || "Meeting Notes";
   const sources = sourceBundle || buildSourceBundle({ transcript, rawNotes: meetingContext });
@@ -143,6 +143,24 @@ CONFLICT FLAGGING: If the CSM's notes DIRECTLY conflict with the transcript on a
   const speakerGuidance = looksSpeakerLabeled(transcriptEvidence)
     ? `
 This transcript has been segmented by speaker — each turn is preceded by a label like **Name:** or **Speaker 1:**. Use these labels to attribute statements, decisions, questions, and commitments to the correct person throughout your notes (e.g. "David raised concerns about..." or "Speaker 2 confirmed..."). Do not blend or merge different speakers' statements together. When listing action item owners, use the specific speaker who committed to the item rather than a generic "team," unless it is genuinely a group commitment. The labels are a best-effort inference from conversational patterns, not verified — if a label is a generic "Speaker N" (no real name was available), it's fine to refer to that person by that label in your notes.
+`
+    : "";
+
+  const followUpOutput = followUp?.enabled
+    ? `
+
+FOLLOW-UP EMAIL OUTPUT (required):
+After the complete SFDC Activity Entry, append this exact separator and heading:
+
+---
+
+## Follow-Up Email Draft
+
+Draft a concise email with a subject line for this audience and tone:
+- Audience: ${followUp.audience || "customer"}
+- Tone: ${followUp.tone || "warm-professional"}
+
+Lead with thanks and the meeting outcome. Include only supported follow-ups, asks, owners, due dates, and relevant context. Separate CSM-owned actions from customer-owned actions when both exist. Do not include source citations, internal-only commentary, account strategy, or sentiment analysis. This section will be removed from the meeting note and stored as a separate Obsidian file.
 `
     : "";
 
@@ -261,7 +279,7 @@ Summary: <what was covered and what happened>
 Outcomes: <explicit outcomes, or "None stated">
 Next steps: <the CSM's own 1-3 owned actions, or "None">
 ${SFDC_ACTIVITY_RULES}
-${agreementBlock}`;
+${agreementBlock}${followUpOutput}`;
 }
 
 export async function POST(request) {
@@ -278,6 +296,7 @@ export async function POST(request) {
       meetingContext = "",
       sourceBundle,
       accounts = [],
+      followUp,
     } = body;
 
     if (!transcript || transcript.trim().length === 0) {
@@ -303,6 +322,7 @@ export async function POST(request) {
         content: buildPrompt(transcript, meetingTitle, suggestedAgreements, meetingContext, {
           accounts,
           sourceBundle,
+          followUp,
         }),
       }],
     });

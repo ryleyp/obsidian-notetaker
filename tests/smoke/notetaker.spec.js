@@ -27,6 +27,11 @@ test("approves a local vault and reaches the ready-to-generate workflow", async 
   await page.getByPlaceholder("Paste a second transcript from the same meeting...").fill(
     "The longer recording also captured Priya agreeing to send the license list by Friday."
   );
+  await page.getByRole("checkbox", { name: /Also generate a follow-up email/ }).check();
+  await page.getByLabel("Follow-up audience").selectOption("internal");
+  await page.getByLabel("Follow-up tone").selectOption("technical");
+  await expect(page.getByLabel("Follow-up audience")).toHaveValue("internal");
+  await expect(page.getByLabel("Follow-up tone")).toHaveValue("technical");
 
   await expect(page.getByRole("button", { name: /Generate Meeting Notes/ })).toBeEnabled();
 });

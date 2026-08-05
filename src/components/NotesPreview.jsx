@@ -56,6 +56,10 @@ export default function NotesPreview({
   followUpLoading,
   followUpError,
   followUpCost,
+  onSaveFollowUp,
+  followUpSaving,
+  followUpSavedPath,
+  followUpSaveError,
 }) {
   const [viewMode, setViewMode] = useState("preview");
   const [regenerationInstruction, setRegenerationInstruction] = useState("");
@@ -255,9 +259,29 @@ export default function NotesPreview({
                   {followUpLoading ? "Drafting..." : "Draft Follow-Up"}
                 </button>
                 {followUpDraft && (
-                  <button type="button" onClick={copyFollowUp} className="btn-secondary text-xs">Copy Draft</button>
+                  <>
+                    <button type="button" onClick={copyFollowUp} className="btn-secondary text-xs">Copy Draft</button>
+                    <button
+                      type="button"
+                      onClick={onSaveFollowUp}
+                      disabled={followUpSaving || Boolean(followUpSavedPath)}
+                      className="btn-secondary text-xs"
+                    >
+                      {followUpSaving
+                        ? "Saving..."
+                        : followUpSavedPath
+                          ? "Saved to Obsidian"
+                          : "Save to Follow Up Emails"}
+                    </button>
+                  </>
                 )}
               </div>
+              {followUpSaveError && <p className="mt-2 text-xs text-red-600">{followUpSaveError}</p>}
+              {followUpSavedPath && (
+                <p className="mt-2 text-xs text-green-700">
+                  Saved to <code className="font-mono bg-green-50 px-1 rounded">{followUpSavedPath}</code>
+                </p>
+              )}
               {followUpDraft && (
                 <pre className="mt-3 max-h-60 overflow-y-auto whitespace-pre-wrap rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs leading-relaxed text-gray-700">
                   {followUpDraft}

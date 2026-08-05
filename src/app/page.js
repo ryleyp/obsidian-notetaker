@@ -42,8 +42,22 @@ export default function Home() {
   const [meetingContext, setMeetingContext] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
   const [model, setModel] = useState(FAST_MODEL);
+  const [includeFollowUp, setIncludeFollowUp] = useState(false);
+  const [followUpAudience, setFollowUpAudience] = useState("customer");
+  const [followUpTone, setFollowUpTone] = useState("warm-professional");
 
-  const meeting = { transcript, extendedTranscript, meetingTitle, meetingContext, selectedFolder };
+  const meeting = {
+    transcript,
+    extendedTranscript,
+    meetingTitle,
+    meetingContext,
+    selectedFolder,
+    followUp: {
+      enabled: includeFollowUp,
+      audience: followUpAudience,
+      tone: followUpTone,
+    },
+  };
 
   const {
     settings,
@@ -116,6 +130,9 @@ export default function Home() {
     setExtendedTranscript("");
     setMeetingContext("");
     setMeetingTitle("");
+    setIncludeFollowUp(false);
+    setFollowUpAudience("customer");
+    setFollowUpTone("warm-professional");
     generation.reset();
     saving.reset();
     sanitize.reset();
@@ -216,6 +233,10 @@ export default function Home() {
                 followUpLoading={generation.followUpLoading}
                 followUpError={generation.followUpError}
                 followUpCost={generation.followUpCost}
+                onSaveFollowUp={generation.saveFollowUp}
+                followUpSaving={generation.followUpSaving}
+                followUpSavedPath={generation.followUpSavedPath}
+                followUpSaveError={generation.followUpSaveError}
               />
             </div>
           ) : (
@@ -302,6 +323,55 @@ export default function Home() {
 
               {!sanitize.pendingReview && (
                 <div className="space-y-2">
+                  <div className="card p-4">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={includeFollowUp}
+                        onChange={(event) => setIncludeFollowUp(event.target.checked)}
+                        className="mt-0.5 w-4 h-4 rounded accent-obsidian-600"
+                      />
+                      <span>
+                        <span className="block text-sm font-medium text-gray-800">Also generate a follow-up email</span>
+                        <span className="block text-xs text-gray-500 mt-0.5">
+                          Generated in the same Claude call, then saved separately in Follow Up Emails.
+                        </span>
+                      </span>
+                    </label>
+
+                    {includeFollowUp && (
+                      <div className="grid sm:grid-cols-2 gap-3 mt-3 pl-7">
+                        <label className="text-xs font-medium text-gray-600">
+                          Audience
+                          <select
+                            aria-label="Follow-up audience"
+                            className="input text-xs mt-1"
+                            value={followUpAudience}
+                            onChange={(event) => setFollowUpAudience(event.target.value)}
+                          >
+                            <option value="customer">Customer</option>
+                            <option value="internal">Internal team</option>
+                            <option value="mixed">Customer plus NI owners</option>
+                          </select>
+                        </label>
+                        <label className="text-xs font-medium text-gray-600">
+                          Tone
+                          <select
+                            aria-label="Follow-up tone"
+                            className="input text-xs mt-1"
+                            value={followUpTone}
+                            onChange={(event) => setFollowUpTone(event.target.value)}
+                          >
+                            <option value="warm-professional">Warm professional</option>
+                            <option value="concise-direct">Concise direct</option>
+                            <option value="technical">Technical</option>
+                            <option value="executive">Executive</option>
+                          </select>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex items-center gap-3">
                     <ModelPicker model={model} setModel={setModel} />
 
