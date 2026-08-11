@@ -165,6 +165,7 @@ export function useNoteSaving({ settings, meeting }) {
           vaultPath: settings.vaultPath,
           folderPath,
           meetingTitle: title,
+          dedupeContent: true,
         }),
       });
       const data = await res.json();

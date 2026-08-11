@@ -66,6 +66,10 @@ You can also draft or redraft a follow-up after generating notes and save it man
 
 The file is saved as `YYYY-MM-DD - Meeting Title.md` in your chosen folder.
 
+Raw transcript saves are deduplicated. Uploading identical transcript content reuses
+the existing file, and saving changed content under the same transcript title updates
+that archive file instead of creating a numbered copy.
+
 ### Upgrade an old meeting note
 
 1. Paste the old meeting transcript and select its customer folder.

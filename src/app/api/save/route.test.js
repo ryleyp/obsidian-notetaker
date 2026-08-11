@@ -52,6 +52,71 @@ describe("/api/save", () => {
     expect(fs.readFileSync(path.join(notesDir, "Weekly Sync (1).md"), "utf-8")).toBe("# Weekly Sync");
   });
 
+  it("reuses an identical file when content deduplication is requested", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const notesDir = path.join(vault, "Acme");
+    fs.mkdirSync(notesDir, { recursive: true });
+    allowDirectory(vault, "Vault path");
+    fs.writeFileSync(path.join(notesDir, "Transcript.md"), "# Transcript\r\n\r\nSame words\n");
+
+    const response = await postSave({
+      notes: "# Transcript\n\nSame words",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "Transcript",
+      dedupeContent: true,
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.alreadyExists).toBe(true);
+    expect(data.savedPath).toBe(path.join("Acme", "Transcript.md"));
+    expect(fs.readdirSync(notesDir)).toEqual(["Transcript.md"]);
+  });
+
+  it("recognizes duplicate transcript content even when the title changes", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const notesDir = path.join(vault, "Acme");
+    fs.mkdirSync(notesDir, { recursive: true });
+    allowDirectory(vault, "Vault path");
+    fs.writeFileSync(path.join(notesDir, "Original title.md"), "# Original title\n\nSame transcript body\n");
+
+    const response = await postSave({
+      notes: "# Renamed title\n\nSame transcript body",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "Renamed title",
+      dedupeContent: true,
+    });
+    const data = await response.json();
+
+    expect(data.alreadyExists).toBe(true);
+    expect(data.savedPath).toBe(path.join("Acme", "Original title.md"));
+    expect(fs.readdirSync(notesDir)).toEqual(["Original title.md"]);
+  });
+
+  it("keeps normal note saves non-destructively unique", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const notesDir = path.join(vault, "Acme");
+    fs.mkdirSync(notesDir, { recursive: true });
+    allowDirectory(vault, "Vault path");
+    fs.writeFileSync(path.join(notesDir, "Meeting.md"), "same content");
+
+    const response = await postSave({
+      notes: "same content",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "Meeting",
+    });
+    const data = await response.json();
+
+    expect(data.alreadyExists).toBeUndefined();
+    expect(data.savedPath).toBe(path.join("Acme", "Meeting (1).md"));
+  });
+
   it("backs up and replaces an explicitly selected existing note", async () => {
     const root = makeTmp();
     const vault = path.join(root, "vault");

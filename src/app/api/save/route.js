@@ -18,6 +18,26 @@ function normalizedEmailThreadTitle(value) {
     .toLowerCase();
 }
 
+function normalizedFileContent(value) {
+  return String(value || "").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").trimEnd();
+}
+
+function normalizedTranscriptBody(value) {
+  return normalizedFileContent(value).replace(/^#[^\n]*\n+/, "").trim();
+}
+
+export function findDuplicateContentFile(targetDir, notes) {
+  const wanted = normalizedTranscriptBody(notes);
+  if (!wanted) return null;
+
+  for (const entry of fs.readdirSync(targetDir, { withFileTypes: true })) {
+    if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".md") continue;
+    const filePath = path.join(targetDir, entry.name);
+    if (normalizedTranscriptBody(fs.readFileSync(filePath, "utf-8")) === wanted) return filePath;
+  }
+  return null;
+}
+
 function emailThreadTitleFromFilename(filename) {
   const base = path.basename(filename, path.extname(filename)).replace(/ \(\d+\)$/, "");
   return base.match(/^\d{4}-\d{2}-\d{2} - Email - (.+)$/i)?.[1] || "";
@@ -68,13 +88,34 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { notes, vaultPath, folderPath, meetingTitle, existingRelativePath, upsertEmailThreadTitle } = body;
+    const {
+      notes,
+      vaultPath,
+      folderPath,
+      meetingTitle,
+      existingRelativePath,
+      upsertEmailThreadTitle,
+      dedupeContent,
+    } = body;
 
     if (!notes) return NextResponse.json({ error: "Notes content is required" }, { status: 400 });
     if (!vaultPath) return NextResponse.json({ error: "Vault path is required" }, { status: 400 });
 
     const resolvedVault = assertAllowedRoot(vaultPath, "Vault path");
     const targetDir = assertExistingChildDirectory(resolvedVault, folderPath, "Target folder");
+
+    if (dedupeContent && !existingRelativePath) {
+      const duplicatePath = findDuplicateContentFile(targetDir, notes);
+      if (duplicatePath) {
+        return NextResponse.json({
+          savedPath: path.relative(resolvedVault, duplicatePath),
+          filename: path.basename(duplicatePath),
+          updated: false,
+          alreadyExists: true,
+          backupPath: null,
+        });
+      }
+    }
 
     let finalPath;
     let backupPath = null;
