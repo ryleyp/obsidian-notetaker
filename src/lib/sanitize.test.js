@@ -120,4 +120,12 @@ describe("assignAliases", () => {
     expect(result[0].alias).toBe("PERSON_2");
     expect(result[1].alias).toBe("ORG_1");
   });
+
+  it("assigns email-specific aliases", () => {
+    const result = assignAliases(
+      [{ text: "admin@acme.test", type: "email" }, { text: "ops@acme.test", type: "email" }],
+      [{ original: "old@acme.test", alias: "EMAIL_1" }]
+    );
+    expect(result.map((item) => item.alias)).toEqual(["EMAIL_2", "EMAIL_3"]);
+  });
 });

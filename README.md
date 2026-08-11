@@ -90,6 +90,19 @@ Because the file is rebuilt from the folder's meeting notes, rerunning the same 
 refreshes its contribution without appending a duplicate. Historical migrations do not
 append another copy of the meeting to weekly ToDo or SFDC activity files.
 
+### Email thread notes
+
+Email thread generation uses the streaming Claude request path, including with Haiku.
+Email addresses are detected locally and shown in Privacy Review as `EMAIL_#` aliases
+before any content is sent to Claude, even when AI privacy scanning is disabled. After
+the email note is saved, its generated SFDC Activity Entry is also added to the weekly
+SFDC Activity Report.
+
+The thread title is the stable email-note identity. Uploading the same title again
+updates the existing note (after creating a backup), replaces the previous SFDC
+activity even when the note date moves to another week, and rebuilds the customer
+facts and callouts note from the latest content.
+
 ## Requirements
 
 - Node.js 18+

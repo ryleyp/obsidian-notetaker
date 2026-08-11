@@ -48,6 +48,36 @@ function blockDate(block) {
   return m ? m[1] : "0000-00-00";
 }
 
+function blockTitle(block) {
+  return block.match(/^\*\*(.+?)\*\*(?:\n|$)/)?.[1]?.trim() || "";
+}
+
+function normalizeIdentity(value) {
+  return String(value || "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function emailThreadTitleFromMeetingTitle(value) {
+  return String(value || "").match(/^\d{4}-\d{2}-\d{2} - Email - (.+)$/i)?.[1] || "";
+}
+
+function matchingActivityBlock(block, meetingTitle, emailThreadTitle) {
+  const existingTitle = blockTitle(block);
+  if (normalizeIdentity(existingTitle) === normalizeIdentity(meetingTitle)) return true;
+  if (!emailThreadTitle) return false;
+  return normalizeIdentity(emailThreadTitleFromMeetingTitle(existingTitle)) === normalizeIdentity(emailThreadTitle);
+}
+
+function parseReport(content, fallbackHeader) {
+  const headerMatch = String(content || "").match(/^# .+\n/);
+  const header = headerMatch ? headerMatch[0] : fallbackHeader;
+  const bodyText = String(content || "").slice(headerMatch ? header.length : 0).trim();
+  return { header, blocks: bodyText ? bodyText.split(BLOCK_SEP).filter((block) => block.trim()) : [] };
+}
+
+function reportContent(header, blocks) {
+  return blocks.length ? `${header}\n${blocks.join(BLOCK_SEP)}\n` : `${header}\n`;
+}
+
 // Insert the new meeting block, newest date first (same ordering as Todos).
 function insertInOrder(blocks, newBlock, meetingTitle) {
   const newDate = (meetingTitle.match(/(\d{4}-\d{2}-\d{2})/) || [])[1] || "0000-00-00";
@@ -66,7 +96,7 @@ export async function POST(request) {
   try {
     assertTrustedRequest(request);
 
-    const { notes, vaultPath, meetingTitle } = await request.json();
+    const { notes, vaultPath, meetingTitle, emailThreadTitle } = await request.json();
     if (!notes || !vaultPath) return NextResponse.json({ ok: true });
 
     const section = extractSfdcSection(notes);
@@ -80,26 +110,39 @@ export async function POST(request) {
     const filePath = path.join(reportsDir, `${monday} - SFDC Activity Report.md`);
     const title = meetingTitle || "Untitled Meeting";
 
-    let content;
-    if (fs.existsSync(filePath)) {
-      const existing = fs.readFileSync(filePath, "utf-8");
-      // Don't double-append if this meeting is already in the file
-      // (e.g. the note was saved twice).
-      if (existing.includes(`**${title}**`)) {
-        return NextResponse.json({ ok: true, savedPath: path.relative(resolvedVault, filePath), alreadyAdded: true });
+    let updated = false;
+    let targetReport = fs.existsSync(filePath)
+      ? parseReport(fs.readFileSync(filePath, "utf-8"), `# ${monday} - SFDC Activity Report\n`)
+      : { header: `# ${monday} - SFDC Activity Report\n`, blocks: [] };
+
+    // Remove the previous version before inserting the new one. For email
+    // threads, the user-entered subject is the stable identity even when the
+    // note date (and therefore weekly report) changes between uploads.
+    const reportFiles = fs.readdirSync(reportsDir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && /^\d{4}-\d{2}-\d{2} - SFDC Activity Report\.md$/.test(entry.name));
+
+    for (const entry of reportFiles) {
+      const candidatePath = path.join(reportsDir, entry.name);
+      const candidate = candidatePath === filePath
+        ? targetReport
+        : parseReport(fs.readFileSync(candidatePath, "utf-8"), `# ${path.basename(entry.name, ".md")}\n`);
+      const remaining = candidate.blocks.filter((block) => !matchingActivityBlock(block, title, emailThreadTitle));
+      if (remaining.length === candidate.blocks.length) continue;
+      updated = true;
+      if (candidatePath === filePath) {
+        targetReport = { ...candidate, blocks: remaining };
+      } else {
+        fs.writeFileSync(candidatePath, reportContent(candidate.header, remaining), "utf-8");
       }
-      const headerMatch = existing.match(/^# .+\n/);
-      const header = headerMatch ? headerMatch[0] : `# ${monday} - SFDC Activity Report\n`;
-      const bodyText = existing.slice(header.length).trim();
-      const blocks = bodyText ? bodyText.split(BLOCK_SEP).filter((b) => b.trim()) : [];
-      insertInOrder(blocks, meetingBlock(section, title), title);
-      content = `${header}\n${blocks.join(BLOCK_SEP)}\n`;
-    } else {
-      content = `# ${monday} - SFDC Activity Report\n\n${meetingBlock(section, title)}\n`;
     }
 
-    fs.writeFileSync(filePath, content, "utf-8");
-    return NextResponse.json({ ok: true, savedPath: path.relative(resolvedVault, filePath) });
+    insertInOrder(targetReport.blocks, meetingBlock(section, title), title);
+    fs.writeFileSync(filePath, reportContent(targetReport.header, targetReport.blocks), "utf-8");
+    return NextResponse.json({
+      ok: true,
+      savedPath: path.relative(resolvedVault, filePath),
+      updated,
+    });
   } catch (error) {
     // Best-effort side effect of saving a note: never fail the save. Surface
     // the reason so an auth/allowlist rejection is diagnosable, not silent.

@@ -62,19 +62,52 @@ describe("/api/sfdc-report", () => {
     expect(written).not.toContain("ignored");
   });
 
-  it("does not double-append when the same meeting is saved twice", async () => {
+  it("replaces the activity when the same meeting is saved twice", async () => {
     const vault = path.join(makeTmp(), "vault");
     fs.mkdirSync(vault, { recursive: true });
     allowDirectory(vault, "Vault path");
 
     const body = { notes: NOTE, vaultPath: vault, meetingTitle: "2026-05-14 - Acme Sync" };
     await postReport(body);
-    const second = await postReport(body);
+    const second = await postReport({
+      ...body,
+      notes: NOTE.replace("Reviewed rollout.", "Reviewed the updated rollout plan."),
+    });
     const data = await second.json();
 
-    expect(data.alreadyAdded).toBe(true);
+    expect(data.updated).toBe(true);
     const written = fs.readFileSync(path.join(vault, data.savedPath), "utf-8");
     expect(written.match(/\*\*2026-05-14 - Acme Sync\*\*/g)).toHaveLength(1);
+    expect(written).toContain("Reviewed the updated rollout plan.");
+    expect(written).not.toContain("Summary: Reviewed rollout.");
+  });
+
+  it("moves and refreshes a same-title email activity when its date changes", async () => {
+    const vault = path.join(makeTmp(), "vault");
+    fs.mkdirSync(vault, { recursive: true });
+    allowDirectory(vault, "Vault path");
+
+    await postReport({
+      notes: NOTE,
+      vaultPath: vault,
+      meetingTitle: "2026-05-14 - Email - License cleanup",
+      emailThreadTitle: "License cleanup",
+    });
+    const second = await postReport({
+      notes: NOTE.replace("Reviewed rollout.", "Captured the final license plan."),
+      vaultPath: vault,
+      meetingTitle: "2026-05-25 - Email - License cleanup",
+      emailThreadTitle: " license   CLEANUP ",
+    });
+    const data = await second.json();
+
+    expect(data.updated).toBe(true);
+    expect(data.savedPath).toBe(path.join("Reports", "2026-05-25 - SFDC Activity Report.md"));
+    const oldReport = fs.readFileSync(path.join(vault, "Reports", "2026-05-11 - SFDC Activity Report.md"), "utf-8");
+    const newReport = fs.readFileSync(path.join(vault, data.savedPath), "utf-8");
+    expect(oldReport).not.toContain("License cleanup");
+    expect(newReport.match(/Email - License cleanup/g)).toHaveLength(1);
+    expect(newReport).toContain("Captured the final license plan.");
   });
 
   it("skips notes with no SFDC Activity Entry section", async () => {

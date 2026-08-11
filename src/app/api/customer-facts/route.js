@@ -7,15 +7,35 @@ import { assertTrustedRequest } from "@/lib/requestSafety";
 import { buildCustomerFactsRollup, CUSTOMER_FACTS_FILENAME } from "@/lib/customerFacts";
 
 function readMarkdownNotes(targetDir) {
-  return fs.readdirSync(targetDir, { withFileTypes: true })
+  const notes = fs.readdirSync(targetDir, { withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== CUSTOMER_FACTS_FILENAME)
     .map((entry) => {
       const filePath = path.join(targetDir, entry.name);
       return {
         filename: entry.name,
         content: fs.readFileSync(filePath, "utf-8"),
+        modified: fs.statSync(filePath).mtimeMs,
       };
     });
+
+  // Old versions created "(1)" copies when the same email thread was run
+  // again. Keep those source files untouched, but only use the newest copy in
+  // the generated rollup so stale callouts do not survive a refresh.
+  const newestEmailByTitle = new Map();
+  const output = [];
+  for (const note of notes) {
+    const base = path.basename(note.filename, ".md").replace(/ \(\d+\)$/, "");
+    const emailTitle = base.match(/^\d{4}-\d{2}-\d{2} - Email - (.+)$/i)?.[1];
+    if (!emailTitle) {
+      output.push(note);
+      continue;
+    }
+    const key = emailTitle.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+    const current = newestEmailByTitle.get(key);
+    if (!current || note.modified > current.modified) newestEmailByTitle.set(key, note);
+  }
+
+  return [...output, ...newestEmailByTitle.values()].map(({ filename, content }) => ({ filename, content }));
 }
 
 export async function POST(request) {

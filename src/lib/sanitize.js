@@ -80,7 +80,7 @@ export function reverseReplacements(text, replacements) {
 export function assignAliases(entities, existingReplacements) {
   const usedAliases = new Set(existingReplacements.map((r) => r.alias));
   return entities.map((e) => {
-    const prefix = e.type === "person" ? "PERSON" : "ORG";
+    const prefix = e.type === "person" ? "PERSON" : e.type === "email" ? "EMAIL" : "ORG";
     let n = 1;
     while (usedAliases.has(`${prefix}_${n}`)) n++;
     const alias = `${prefix}_${n}`;

@@ -1,6 +1,6 @@
 {
   "name": "notetaker-webapp",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "private": true,
   "scripts": {
     "dev": "WATCHPACK_POLLING=true next dev --webpack --hostname 127.0.0.1",

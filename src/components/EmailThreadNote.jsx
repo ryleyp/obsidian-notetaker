@@ -14,10 +14,11 @@ import {
   mergeCorrections,
   reverseReplacements,
 } from "@/lib/sanitize";
-import { aliasesFromReplacements } from "@/lib/privacy";
+import { aliasesFromReplacements, extractEmailEntities, mergeSensitiveEntities } from "@/lib/privacy";
 import { buildSourceBundle, mapSourceBundle } from "@/lib/sourceBundle";
 import { apiFetch } from "@/lib/apiClient";
 import { FAST_MODEL, calcCost, formatCost } from "@/lib/models";
+import { detectAccount } from "@/lib/accounts";
 
 function todayIso() {
   const now = new Date();
@@ -51,6 +52,11 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   const [error, setError] = useState(null);
   const [note, setNote] = useState("");
   const [savedPath, setSavedPath] = useState("");
+  const [sfdcReportPath, setSfdcReportPath] = useState("");
+  const [sfdcReportUpdated, setSfdcReportUpdated] = useState(false);
+  const [sfdcReportError, setSfdcReportError] = useState("");
+  const [customerFactsPath, setCustomerFactsPath] = useState("");
+  const [updatedExisting, setUpdatedExisting] = useState(false);
   const [cost, setCost] = useState(null);
 
   const wordCount = emailThread.trim() ? emailThread.trim().split(/\s+/).length : 0;
@@ -60,6 +66,11 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setPendingReview(null);
     setNote("");
     setSavedPath("");
+    setSfdcReportPath("");
+    setSfdcReportUpdated(false);
+    setSfdcReportError("");
+    setCustomerFactsPath("");
+    setUpdatedExisting(false);
     setError(null);
     setCost(null);
   }
@@ -88,7 +99,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setProcessing(true);
     setError(null);
     try {
-      let newEntities = [];
+      let newEntities = extractEmailEntities(scanText);
       let scanSkipped = !settings.aiPrivacyScan;
       if (settings.aiPrivacyScan) {
         try {
@@ -103,7 +114,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           });
           const data = await res.json();
           if (data.skipped) scanSkipped = true;
-          newEntities = data.entities || [];
+          newEntities = mergeSensitiveEntities(newEntities, data.entities || []);
         } catch {
           scanSkipped = true;
         }
@@ -176,6 +187,11 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     }
 
     setSavedPath("");
+    setSfdcReportPath("");
+    setSfdcReportUpdated(false);
+    setSfdcReportError("");
+    setCustomerFactsPath("");
+    setUpdatedExisting(false);
     setCost(null);
     setError(null);
     setNote("");
@@ -213,6 +229,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       if (data.usage) setCost(calcCost(data.usage, model));
 
       setSaving(true);
+      const saveTitle = filenameTitle(threadDate, correctedTitle || "Email Thread");
       const saveRes = await apiFetch("/api/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -220,12 +237,54 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           notes: restoredNote,
           vaultPath: settings.vaultPath,
           folderPath: selectedFolder,
-          meetingTitle: filenameTitle(threadDate, correctedTitle || "Email Thread"),
+          meetingTitle: saveTitle,
+          upsertEmailThreadTitle: correctedTitle.trim() || undefined,
         }),
       });
       const saveData = await saveRes.json();
       if (!saveRes.ok) throw new Error(saveData.error || "Save failed");
       setSavedPath(saveData.savedPath);
+      setUpdatedExisting(!!saveData.updated);
+
+      const account = detectAccount(selectedFolder, settings.accounts || []);
+      if (account.name !== "Internal") {
+        try {
+          const factsRes = await apiFetch("/api/customer-facts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              vaultPath: settings.vaultPath,
+              folderPath: selectedFolder,
+              accountName: account.name,
+            }),
+          });
+          const factsData = await factsRes.json();
+          if (factsRes.ok && factsData.savedPath) setCustomerFactsPath(factsData.savedPath);
+        } catch {
+          // Best-effort rollup refresh; the email note itself is already safe.
+        }
+      }
+
+      try {
+        const reportRes = await apiFetch("/api/sfdc-report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            notes: restoredNote,
+            vaultPath: settings.vaultPath,
+            meetingTitle: saveTitle,
+            emailThreadTitle: correctedTitle.trim() || undefined,
+          }),
+        });
+        const reportData = await reportRes.json();
+        if (!reportRes.ok || !reportData.savedPath) {
+          throw new Error(reportData.error || "No SFDC Activity Entry was saved");
+        }
+        setSfdcReportPath(reportData.savedPath);
+        setSfdcReportUpdated(!!reportData.updated);
+      } catch (reportError) {
+        setSfdcReportError(reportError.message);
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -243,6 +302,11 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setPendingReview(null);
     setNote("");
     setSavedPath("");
+    setSfdcReportPath("");
+    setSfdcReportUpdated(false);
+    setSfdcReportError("");
+    setCustomerFactsPath("");
+    setUpdatedExisting(false);
     setError(null);
     setCost(null);
   }
@@ -363,10 +427,25 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
 
       {savedPath && (
         <div className="card p-4 border-l-4 border-l-green-400">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm text-green-700">
-              Saved to <code className="font-mono text-xs bg-green-50 px-1.5 py-0.5 rounded">{savedPath}</code>
-            </p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1.5">
+              <p className="text-sm text-green-700">
+                {updatedExisting ? "Updated existing note at" : "Saved to"} <code className="font-mono text-xs bg-green-50 px-1.5 py-0.5 rounded">{savedPath}</code>
+              </p>
+              {sfdcReportPath && (
+                <p className="text-sm text-teal-700">
+                  SFDC activity {sfdcReportUpdated ? "updated in" : "added to"} <code className="font-mono text-xs bg-teal-50 px-1.5 py-0.5 rounded">{sfdcReportPath}</code>
+                </p>
+              )}
+              {customerFactsPath && (
+                <p className="text-sm text-violet-700">
+                  Customer callouts rebuilt at <code className="font-mono text-xs bg-violet-50 px-1.5 py-0.5 rounded">{customerFactsPath}</code>
+                </p>
+              )}
+              {sfdcReportError && (
+                <p className="text-xs text-amber-700">Email note saved, but the SFDC report was not updated: {sfdcReportError}</p>
+              )}
+            </div>
             {cost && <span className="text-xs text-gray-400 font-mono">{formatCost(cost)}</span>}
           </div>
         </div>

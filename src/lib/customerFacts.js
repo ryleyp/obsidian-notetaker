@@ -24,6 +24,7 @@ const SECTION_GROUPS = [
     headings: [
       "Things NI SW Customer Success Should Take Note Of",
       "Customer Success Callouts",
+      "Customer Success Takeaways",
       "CS Callouts",
       "Customer Facts",
     ],

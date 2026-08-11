@@ -77,6 +77,55 @@ describe("/api/save", () => {
     expect(fs.readFileSync(path.join(vault, data.backupPath), "utf-8")).toBe("old note");
   });
 
+  it("updates an existing email note when the thread title matches", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const notesDir = path.join(vault, "Acme");
+    fs.mkdirSync(notesDir, { recursive: true });
+    allowDirectory(vault, "Vault path");
+    const existingName = "2026-05-01 - Email - License cleanup.md";
+    fs.writeFileSync(path.join(notesDir, existingName), "old email note");
+
+    const response = await postSave({
+      notes: "# updated email note",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "2026-05-08 - Email - License cleanup",
+      upsertEmailThreadTitle: "  LICENSE   cleanup ",
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.updated).toBe(true);
+    expect(data.matchedByTitle).toBe(true);
+    expect(data.savedPath).toBe(path.join("Acme", existingName));
+    expect(data.previousMeetingTitle).toBe("2026-05-01 - Email - License cleanup");
+    expect(fs.readFileSync(path.join(notesDir, existingName), "utf-8")).toBe("# updated email note");
+    expect(fs.existsSync(path.join(notesDir, "2026-05-08 - Email - License cleanup.md"))).toBe(false);
+    expect(fs.readFileSync(path.join(vault, data.backupPath), "utf-8")).toBe("old email note");
+  });
+
+  it("does not merge different email thread titles", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const notesDir = path.join(vault, "Acme");
+    fs.mkdirSync(notesDir, { recursive: true });
+    allowDirectory(vault, "Vault path");
+    fs.writeFileSync(path.join(notesDir, "2026-05-01 - Email - License cleanup.md"), "old email note");
+
+    const response = await postSave({
+      notes: "new thread",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "2026-05-08 - Email - Training plan",
+      upsertEmailThreadTitle: "Training plan",
+    });
+    const data = await response.json();
+
+    expect(data.updated).toBe(false);
+    expect(data.savedPath).toBe(path.join("Acme", "2026-05-08 - Email - Training plan.md"));
+  });
+
   it("does not update a note outside the selected folder", async () => {
     const root = makeTmp();
     const vault = path.join(root, "vault");

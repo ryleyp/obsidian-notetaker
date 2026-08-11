@@ -71,15 +71,58 @@ List action items as Markdown task checkboxes. Format:
 
 ---
 
-## Customer Success Takeaways
+## Attendee Callouts
 
-Capture account-planning implications, risks, adoption signals, renewal/expansion relevance, stakeholder signals, and sensitive context the CSM should remember.
+Capture named people, roles, stated responsibilities, preferences, concerns, commitments, and relationship context. Write "Nothing noted." when the thread contains none.
+
+---
+
+## Site-Level Callouts
+
+Capture specific customer sites, labs, campuses, buildings, cities, or named locations and the people, work, risks, or plans tied to each. Write "Nothing noted." when the thread contains none.
+
+---
+
+## Customer Success Callouts
+
+Capture account-planning implications, risks, adoption signals, renewal/expansion relevance, stakeholder signals, and sensitive context the CSM should remember. Write "Nothing noted." when the thread contains none.
 
 ---
 
 ## Source Email Content
 
-Summarize the thread chronologically, newest-to-oldest if the source makes that clear. Preserve the substance of important asks, replies, decisions, and commitments, but do not copy long disclaimers or signatures.`;
+Summarize the thread chronologically, newest-to-oldest if the source makes that clear. Preserve the substance of important asks, replies, decisions, and commitments, but do not copy long disclaimers or signatures.
+
+---
+
+## SFDC Activity Entry
+
+Create a Salesforce-ready activity entry for this email thread. Output exactly this shape inside this section:
+
+**Type:** <one approved type below>
+**Subtype:** <a subtype listed under that type>
+**EA/EP Number(s):** <a number explicitly present in the sources, or "None on file">
+
+**Summary/Notes:**
+Summary: <what the email thread covered and what happened>
+Outcomes: <explicit outcomes, or "None stated">
+Next steps: <the CSM's own 1-3 actions, or "None">
+
+Approved Type → Subtype pairs:
+- Training or Support Webinar → Other
+- Internal Alignment and Collaboration → Account Planning; Account Team Kickoff; Product Feedback
+- Onboarding & Kick-off → EA Admin Onboarding; EA End-User Kick-off; Other
+- Strategic Relationship Management → EA Admin Sync; Escalation / Risk Management; QBR / EBR; Product Roadmap Review; SystemLink Enterprise Governance; Other
+- User Groups → Demo Day; User Group; Other
+- Value Realization and Success Stories → Case Study; Customer Testimonial; Outcome Review; SystemLink ROI Review; Other
+- Other → Other
+
+Choose the primary purpose of the thread and the most specific valid pair. The Summary/Notes block must be 120 words or fewer and 800 characters or fewer. Use past tense, no first person, no citations, and do not invent outcomes, owners, numbers, or next steps.`;
+}
+
+export async function createEmailThreadMessage(client, request) {
+  const stream = client.messages.stream(request);
+  return stream.finalMessage();
 }
 
 export async function POST(request) {
@@ -111,7 +154,7 @@ export async function POST(request) {
 
     const client = new Anthropic({ apiKey: key });
     const selectedModel = model || DEFAULT_MODEL;
-    const msg = await client.messages.create({
+    const msg = await createEmailThreadMessage(client, {
       model: selectedModel,
       max_tokens: maxOutputTokens(selectedModel),
       system: SYSTEM_PROMPT,

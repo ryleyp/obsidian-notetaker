@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { aliasesFromReplacements, buildSanitizePrompt, parseEntityList } from "@/lib/privacy";
+import {
+  aliasesFromReplacements,
+  buildSanitizePrompt,
+  extractEmailEntities,
+  mergeSensitiveEntities,
+  parseEntityList,
+} from "@/lib/privacy";
 
 describe("aliasesFromReplacements", () => {
   it("returns only aliases, never original terms", () => {
@@ -19,6 +25,27 @@ describe("buildSanitizePrompt", () => {
     expect(prompt).toContain("ORG_1");
     expect(prompt).not.toContain("Acme");
     expect(prompt).toContain("Placeholder aliases");
+    expect(prompt).toContain("Email addresses");
+  });
+});
+
+describe("email privacy", () => {
+  it("extracts and deduplicates email addresses without an AI scan", () => {
+    expect(extractEmailEntities("From: Dana.Example@acme.test\nCC: dana.example@ACME.test, ops+lab@acme.test"))
+      .toEqual([
+        { text: "Dana.Example@acme.test", type: "email" },
+        { text: "ops+lab@acme.test", type: "email" },
+      ]);
+  });
+
+  it("prefers the email type when merging duplicate detections", () => {
+    expect(mergeSensitiveEntities(
+      [{ text: "admin@acme.test", type: "email" }],
+      [{ text: "admin@acme.test", type: "org" }, { text: "Dana", type: "person" }]
+    )).toEqual([
+      { text: "admin@acme.test", type: "email" },
+      { text: "Dana", type: "person" },
+    ]);
   });
 });
 
@@ -30,6 +57,7 @@ describe("parseEntityList", () => {
         { text: "PERSON_12", type: "person" },
         { text: "Jane Doe", type: "person" },
         { text: "Acme", type: "company" },
+        { text: "jane@acme.test", type: "email" },
       ]),
       ["ORG_1"]
     );
@@ -37,6 +65,7 @@ describe("parseEntityList", () => {
     expect(entities).toEqual([
       { text: "Jane Doe", type: "person" },
       { text: "Acme", type: "org" },
+      { text: "jane@acme.test", type: "email" },
     ]);
   });
 });
