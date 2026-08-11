@@ -66,6 +66,30 @@ You can also draft or redraft a follow-up after generating notes and save it man
 
 The file is saved as `YYYY-MM-DD - Meeting Title.md` in your chosen folder.
 
+### Upgrade an old meeting note
+
+1. Paste the old meeting transcript and select its customer folder.
+2. Under **Save behavior**, choose **Update existing** and select the matching Obsidian note.
+3. Generate and review the current-format note, then click **Update in Obsidian**.
+
+The old note is included as a secondary source so manually recorded attendee roles,
+site facts, and callouts can survive the migration. The transcript remains authoritative.
+When you save, Notetaker backs up the original under `.notetaker/backups/` and replaces
+the exact selected file instead of creating a numbered duplicate.
+
+### Customer facts and callouts
+
+Every saved customer meeting rebuilds `Customer Facts & Callouts.md` in that customer
+folder. It combines, with links back to each meeting:
+
+- people and attendee callouts;
+- site, lab, and location callouts; and
+- NI Software Customer Success callouts and facts.
+
+Because the file is rebuilt from the folder's meeting notes, rerunning the same meeting
+refreshes its contribution without appending a duplicate. Historical migrations do not
+append another copy of the meeting to weekly ToDo or SFDC activity files.
+
 ## Requirements
 
 - Node.js 18+

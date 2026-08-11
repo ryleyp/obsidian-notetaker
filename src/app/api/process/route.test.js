@@ -60,6 +60,25 @@ describe("buildPrompt", () => {
     expect(withoutFollowUp).not.toContain("## Follow-Up Email Draft");
   });
 
+  it("treats an existing note as a secondary migration source", () => {
+    const sourceBundle = buildSourceBundle({
+      transcript: "Dana confirmed the Dallas rollout.",
+      existingNote: "Dana is the EA admin. The old note used a legacy layout.",
+    });
+    const prompt = buildPrompt(
+      "Dana confirmed the Dallas rollout.",
+      "Planning Sync",
+      [],
+      "",
+      { sourceBundle }
+    );
+
+    expect(prompt).toContain("[O1] Existing meeting note");
+    expect(prompt).toContain("EXISTING NOTE MIGRATION");
+    expect(prompt).toContain("The transcript is authoritative");
+    expect(prompt).toContain("Use [O#]");
+  });
+
   it("carries no note-template or recipe instruction", () => {
     const prompt = buildPrompt("Jordan discussed the rollout.", "Planning Sync");
     expect(prompt).not.toContain("TEMPLATE AND RECIPE");

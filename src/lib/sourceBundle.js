@@ -86,15 +86,23 @@ export function formatTranscriptArchive(transcript, extendedTranscript = "") {
   return `## Primary transcript\n\n${primary}\n\n---\n\n## Extended transcript\n\n${extended}`;
 }
 
-export function buildSourceBundle({ transcript = "", extendedTranscript = "", rawNotes = "", emailThread = "" } = {}) {
+export function buildSourceBundle({
+  transcript = "",
+  extendedTranscript = "",
+  rawNotes = "",
+  emailThread = "",
+  existingNote = "",
+} = {}) {
   const transcriptSources = makeTranscriptSources(transcript, extendedTranscript);
   const rawNoteSources = makeSourceBlocks(rawNotes, { prefix: "N", label: "Raw notes" });
   const emailSources = makeSourceBlocks(emailThread, { prefix: "E", label: "Email thread" });
+  const existingNoteSources = makeSourceBlocks(existingNote, { prefix: "O", label: "Existing meeting note" });
   return {
     transcriptSources,
     rawNoteSources,
     emailSources,
-    allSources: [...transcriptSources, ...rawNoteSources, ...emailSources],
+    existingNoteSources,
+    allSources: [...transcriptSources, ...rawNoteSources, ...emailSources, ...existingNoteSources],
   };
 }
 
@@ -112,24 +120,26 @@ export function mapSourceBundle(sourceBundle, mapper) {
   const transcriptSources = (sourceBundle?.transcriptSources || []).map(mapOne);
   const rawNoteSources = (sourceBundle?.rawNoteSources || []).map(mapOne);
   const emailSources = (sourceBundle?.emailSources || []).map(mapOne);
+  const existingNoteSources = (sourceBundle?.existingNoteSources || []).map(mapOne);
   return {
     transcriptSources,
     rawNoteSources,
     emailSources,
-    allSources: [...transcriptSources, ...rawNoteSources, ...emailSources],
+    existingNoteSources,
+    allSources: [...transcriptSources, ...rawNoteSources, ...emailSources, ...existingNoteSources],
   };
 }
 
 export function extractReferencedSourceIds(markdown) {
   const found = new Set();
-  const regex = /\[([TNE]\d+)\]/g;
+  const regex = /\[([TNEO]\d+)\]/g;
   let match;
   while ((match = regex.exec(markdown || ""))) {
     found.add(match[1]);
   }
 
   return [...found].sort((a, b) => {
-    const priority = { T: 0, N: 1, E: 2 };
+    const priority = { T: 0, N: 1, E: 2, O: 3 };
     const prefixCompare = (priority[a[0]] ?? 9) - (priority[b[0]] ?? 9);
     if (prefixCompare !== 0) return prefixCompare;
     return Number(a.slice(1)) - Number(b.slice(1));

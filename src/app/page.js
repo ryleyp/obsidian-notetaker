@@ -6,6 +6,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import MeetingDetails from "@/components/MeetingDetails";
 import TranscriptInput from "@/components/TranscriptInput";
 import FolderSelector from "@/components/FolderSelector";
+import ExistingNoteSelector from "@/components/ExistingNoteSelector";
 import NotesPreview from "@/components/NotesPreview";
 import EmailThreadNote from "@/components/EmailThreadNote";
 import AccountStatus from "@/components/AccountStatus";
@@ -41,6 +42,8 @@ export default function Home() {
   const [extendedTranscript, setExtendedTranscript] = useState("");
   const [meetingContext, setMeetingContext] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
+  const [updateExisting, setUpdateExisting] = useState(false);
+  const [existingNote, setExistingNote] = useState(null);
   const [model, setModel] = useState(FAST_MODEL);
   const [includeFollowUp, setIncludeFollowUp] = useState(false);
   const [followUpAudience, setFollowUpAudience] = useState("customer");
@@ -52,6 +55,7 @@ export default function Home() {
     meetingTitle,
     meetingContext,
     selectedFolder,
+    existingNote,
     followUp: {
       enabled: includeFollowUp,
       audience: followUpAudience,
@@ -67,7 +71,12 @@ export default function Home() {
     saveSettings,
     updateAccounts,
     applySettingsPatch,
-  } = useAppSettings({ onSettingsSaved: () => setSelectedFolder("") });
+  } = useAppSettings({
+    onSettingsSaved: () => {
+      setSelectedFolder("");
+      setExistingNote(null);
+    },
+  });
 
   const saving = useNoteSaving({ settings, meeting });
 
@@ -133,6 +142,8 @@ export default function Home() {
     setIncludeFollowUp(false);
     setFollowUpAudience("customer");
     setFollowUpTone("warm-professional");
+    setUpdateExisting(false);
+    setExistingNote(null);
     generation.reset();
     saving.reset();
     sanitize.reset();
@@ -145,7 +156,10 @@ export default function Home() {
   }
 
   const modelLabel = MODEL_OPTIONS.find((m) => m.id === model)?.label || "Claude";
-  const canProcess = transcript.trim().length > 0 && !generation.processing && !sanitize.sanitizing;
+  const canProcess = transcript.trim().length > 0
+    && (!updateExisting || !!existingNote)
+    && !generation.processing
+    && !sanitize.sanitizing;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -223,6 +237,10 @@ export default function Home() {
                 canRetry={!generation.processing}
                 todosSaved={saving.todosSaved}
                 sfdcReportSaved={saving.sfdcReportSaved}
+                customerFactsSaved={saving.customerFactsSaved}
+                updatedExisting={saving.updatedExisting}
+                backupPath={saving.backupPath}
+                updatingExisting={!!existingNote}
                 cost={generation.noteCost}
                 sourceBundle={generation.sourceBundle}
                 onRegenerate={(instruction) => generation.regenerate(instruction, { onSaved: saving.clearSaved })}
@@ -294,8 +312,23 @@ export default function Home() {
               <FolderSelector
                 vaultPath={settings.vaultPath}
                 selectedFolder={selectedFolder}
-                onSelect={setSelectedFolder}
+                onSelect={(folder) => {
+                  setSelectedFolder(folder);
+                  setExistingNote(null);
+                }}
                 onSettingsClick={() => setShowSettings(true)}
+              />
+
+              <ExistingNoteSelector
+                vaultPath={settings.vaultPath}
+                folderPath={selectedFolder}
+                updateMode={updateExisting}
+                onUpdateModeChange={setUpdateExisting}
+                selectedNote={existingNote}
+                onSelect={(note) => {
+                  setExistingNote(note);
+                  if (note?.filename) setMeetingTitle(note.filename.replace(/\.md$/i, ""));
+                }}
               />
 
               {sanitize.pendingReview && (

@@ -46,6 +46,10 @@ export default function NotesPreview({
   canRetry,
   todosSaved,
   sfdcReportSaved,
+  customerFactsSaved,
+  updatedExisting,
+  backupPath,
+  updatingExisting,
   cost,
   sourceBundle,
   onRegenerate,
@@ -299,8 +303,18 @@ export default function NotesPreview({
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              <span>Saved to <code className="font-mono text-xs bg-green-100 px-1 rounded">{savedPath}</code></span>
+              <span>{updatedExisting ? "Updated" : "Saved to"} <code className="font-mono text-xs bg-green-100 px-1 rounded">{savedPath}</code></span>
             </div>
+            {backupPath && (
+              <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
+                <span>Original backed up to <code className="font-mono text-xs bg-amber-100 px-1 rounded">{backupPath}</code></span>
+              </div>
+            )}
+            {customerFactsSaved && (
+              <div className="flex items-center gap-2 text-sm text-violet-700 bg-violet-50 rounded-lg px-3 py-2 border border-violet-200">
+                <span>Customer callouts rebuilt at <code className="font-mono text-xs bg-violet-100 px-1 rounded">{customerFactsSaved.path}</code></span>
+              </div>
+            )}
             {todosSaved && (
               <div className="flex items-center gap-2 text-sm text-blue-700 bg-blue-50 rounded-lg px-3 py-2 border border-blue-200">
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -347,7 +361,7 @@ export default function NotesPreview({
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
               </svg>
-              Save to Obsidian
+              {updatingExisting ? "Update in Obsidian" : "Save to Obsidian"}
             </>
           )}
         </button>

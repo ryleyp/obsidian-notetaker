@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/sanitize";
-import { matchVaultFolder } from "@/lib/accounts";
+import { detectAccount, matchVaultFolder } from "@/lib/accounts";
 import { apiFetch } from "@/lib/apiClient";
 import { formatTranscriptArchive } from "@/lib/sourceBundle";
 
@@ -15,6 +15,9 @@ export function useNoteSaving({ settings, meeting }) {
   const [savedPath, setSavedPath] = useState("");
   const [todosSaved, setTodosSaved] = useState(null);
   const [sfdcReportSaved, setSfdcReportSaved] = useState(null);
+  const [customerFactsSaved, setCustomerFactsSaved] = useState(null);
+  const [updatedExisting, setUpdatedExisting] = useState(false);
+  const [backupPath, setBackupPath] = useState("");
 
   const [savingTranscript, setSavingTranscript] = useState(false);
   const [transcriptSaved, setTranscriptSaved] = useState(false);
@@ -43,53 +46,96 @@ export function useNoteSaving({ settings, meeting }) {
     setSavedPath("");
     setTodosSaved(null);
     setSfdcReportSaved(null);
+    setCustomerFactsSaved(null);
+    setUpdatedExisting(false);
+    setBackupPath("");
   }, []);
 
   async function saveNote(notes) {
-    const { meetingTitle } = meeting;
+    const { meetingTitle, existingNote } = meeting;
     if (!notes || !settings.vaultPath) return;
     setSaving(true);
     try {
-      const folderPath = await resolveAutoFolder(`${meetingTitle} ${notes}`);
+      const folderPath = existingNote
+        ? meeting.selectedFolder
+        : await resolveAutoFolder(`${meetingTitle} ${notes}`);
       const res = await apiFetch("/api/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes, vaultPath: settings.vaultPath, folderPath, meetingTitle }),
+        body: JSON.stringify({
+          notes,
+          vaultPath: settings.vaultPath,
+          folderPath,
+          meetingTitle,
+          existingRelativePath: existingNote?.relativePath || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Save failed");
       setSaved(true);
       setSavedPath(data.savedPath);
+      setUpdatedExisting(!!data.updated);
+      setBackupPath(data.backupPath || "");
+
+      // Rebuild the stable customer facts/callouts note from every meeting in
+      // the folder. This is a full rebuild, so migrated meetings replace their
+      // old contribution instead of creating duplicate callouts.
+      const account = detectAccount(folderPath, settings.accounts || []);
+      if (account.name !== "Internal") {
+        try {
+          const factsRes = await apiFetch("/api/customer-facts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              vaultPath: settings.vaultPath,
+              folderPath,
+              accountName: account.name,
+            }),
+          });
+          const factsData = await factsRes.json();
+          if (factsRes.ok && factsData.savedPath) {
+            setCustomerFactsSaved({ path: factsData.savedPath, sourceCount: factsData.sourceCount });
+          }
+        } catch {
+          // Best-effort index refresh; the meeting note itself is already safe.
+        }
+      }
 
       // Append this note's action items to the weekly todos file.
-      try {
-        const todosRes = await apiFetch("/api/todos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            notes,
-            vaultPath: settings.vaultPath,
-            meetingTitle,
-            ownerNames: settings.ownerNames || [],
-          }),
-        });
-        const todosData = await todosRes.json();
-        if (todosData.count > 0) setTodosSaved({ count: todosData.count, path: todosData.savedPath });
-      } catch {
-        // Todos extraction is best-effort.
+      // Migrations skip append-only side files to avoid duplicating historical
+      // ToDos or SFDC entries when an old transcript is rerun.
+      if (!existingNote) {
+        try {
+          const todosRes = await apiFetch("/api/todos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              notes,
+              vaultPath: settings.vaultPath,
+              meetingTitle,
+              ownerNames: settings.ownerNames || [],
+            }),
+          });
+          const todosData = await todosRes.json();
+          if (todosData.count > 0) setTodosSaved({ count: todosData.count, path: todosData.savedPath });
+        } catch {
+          // Todos extraction is best-effort.
+        }
       }
 
       // Append the SFDC Activity Entry to this week's report file.
-      try {
-        const reportRes = await apiFetch("/api/sfdc-report", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ notes, vaultPath: settings.vaultPath, meetingTitle }),
-        });
-        const reportData = await reportRes.json();
-        if (reportData.savedPath) setSfdcReportSaved({ path: reportData.savedPath });
-      } catch {
-        // Weekly report append is best-effort.
+      if (!existingNote) {
+        try {
+          const reportRes = await apiFetch("/api/sfdc-report", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ notes, vaultPath: settings.vaultPath, meetingTitle }),
+          });
+          const reportData = await reportRes.json();
+          if (reportData.savedPath) setSfdcReportSaved({ path: reportData.savedPath });
+        } catch {
+          // Weekly report append is best-effort.
+        }
       }
     } catch (e) {
       alert(`Failed to save: ${e.message}`);
@@ -162,6 +208,9 @@ export function useNoteSaving({ settings, meeting }) {
     savedPath,
     todosSaved,
     sfdcReportSaved,
+    customerFactsSaved,
+    updatedExisting,
+    backupPath,
     savingTranscript,
     transcriptSaved,
     transcriptSavedPath,

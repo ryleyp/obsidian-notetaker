@@ -153,18 +153,20 @@ export function useNoteGeneration({ settings, model, meeting }) {
 
   async function generate(replacements, { onSaved } = {}) {
     setActiveReplacements(replacements);
-    const { transcript, extendedTranscript, meetingTitle, meetingContext, selectedFolder } = meeting;
+    const { transcript, extendedTranscript, meetingTitle, meetingContext, selectedFolder, existingNote } = meeting;
     const sanitize = sanitizer(replacements);
 
     const sanitizedTranscript = sanitize(transcript);
     const sanitizedExtendedTranscript = sanitize(extendedTranscript);
     const sanitizedTitle = sanitize(meetingTitle);
     const sanitizedContext = sanitize(meetingContext);
+    const sanitizedExistingNote = sanitize(existingNote?.content || "");
 
     const promptSourceBundle = buildSourceBundle({
       transcript: sanitizedTranscript,
       extendedTranscript: sanitizedExtendedTranscript,
       rawNotes: sanitizedContext,
+      existingNote: sanitizedExistingNote,
     });
     const displaySourceBundle = replacements.length
       ? mapSourceBundle(promptSourceBundle, (content) => reverseReplacements(content, replacements))

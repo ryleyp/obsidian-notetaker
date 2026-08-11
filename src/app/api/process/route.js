@@ -120,6 +120,20 @@ MULTIPLE TRANSCRIPTS OF THE SAME MEETING:
 `
     : "";
 
+  const isMigration = (sources.existingNoteSources || []).length > 0;
+
+  const migrationBlock = isMigration
+    ? `
+EXISTING NOTE MIGRATION
+This run updates an existing Obsidian note for the same meeting. Source blocks labeled [O#] contain the old note.
+- Rebuild the document in the required format below; do not preserve the old layout just because it appears in [O#].
+- Preserve useful manual details, attendee roles, customer/site facts, decisions, and callouts from [O#] when the transcript does not contradict them.
+- The transcript is authoritative for what was said. When [O#] conflicts with [T#], use [T#] and do not repeat the stale claim.
+- Do not duplicate a fact merely because it appears in both the transcript and old note.
+- Treat summaries, inferred sentiment, action-item wording, and other generated prose in [O#] as secondary; independently regenerate them from the underlying evidence.
+`
+    : "";
+
   // Extra background and/or the CSM's own handwritten notes, typed in by the
   // CSM alongside the transcript. Treated as a trusted second source.
   const contextBlock = meetingContext.trim()
@@ -172,6 +186,7 @@ ${speakerGuidance}${multiTranscriptGuidance}${contextBlock}
 SOURCE BLOCKS:
 ${sourceBlock}
 ---
+${migrationBlock}
 
 ${buildTagCategories(accounts)}
 
@@ -180,6 +195,7 @@ SOURCE CITATION RULES
 - Add citations to every factual bullet or factual paragraph outside the SFDC Activity Entry, using markers like [T1] or [N1].
 - Put citations at the end of the sentence or bullet they support.
 - Use [N#] for claims that come from the CSM's raw notes/context and [T#] for transcript claims.
+- Use [O#] for details preserved from the existing meeting note during a migration.
 - If a point is synthesized from multiple sources, cite each relevant source, e.g. [T2] [N1].
 - Do not put citation markers inside the SFDC Activity Entry because it is copied into Salesforce.
 

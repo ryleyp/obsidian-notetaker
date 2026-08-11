@@ -87,6 +87,12 @@ describe("detectAccount", () => {
     expect(detectAccount("Cardinal", custom).name).toBe("Internal");
   });
 
+  it("detects configured account and Obsidian folder names even without an alias match", () => {
+    const custom = [{ name: "Acme Aerospace", obsidianFolder: "01 Customers/AA Program", aliases: ["acme"] }];
+    expect(detectAccount("01 Customers/AA Program", custom).name).toBe("Acme Aerospace");
+    expect(detectAccount("Customers/Acme Aerospace", custom).name).toBe("Acme Aerospace");
+  });
+
   it("falls back to defaults for an empty account list", () => {
     expect(detectAccount("Acme", []).name).toBe("Acme Aerospace");
   });

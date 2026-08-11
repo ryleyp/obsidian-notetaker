@@ -66,7 +66,10 @@ export function suggestAgreements(text, account) {
 export function detectAccount(folderName, accounts) {
   const f = (folderName || "").toLowerCase();
   for (const acct of resolve(accounts)) {
-    if ((acct.aliases || []).some((a) => f.includes(a.toLowerCase()))) {
+    const folderHints = [acct.obsidianFolder, acct.name, ...(acct.aliases || [])]
+      .filter(Boolean)
+      .map((value) => value.toLowerCase());
+    if (folderHints.some((hint) => f.includes(hint))) {
       return { name: acct.name, archiveFolder: acct.archiveFolder, aliases: acct.aliases || [] };
     }
   }
