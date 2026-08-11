@@ -162,7 +162,7 @@ export default function Home() {
     && !sanitize.sanitizing;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       <Header
         onSettingsClick={() => setShowSettings((v) => !v)}
         isSettingsOpen={showSettings}
@@ -170,7 +170,7 @@ export default function Home() {
         onModeChange={handleModeChange}
       />
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-4">
+      <main className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-8 space-y-4 flex-1">
         {showSettings && (
           <SettingsPanel
             settings={settings}
@@ -271,7 +271,9 @@ export default function Home() {
                 setTranscript={setTranscript}
                 extendedTranscript={extendedTranscript}
                 setExtendedTranscript={setExtendedTranscript}
-                onTitleSuggest={(suggested) => { if (!meetingTitle) setMeetingTitle(suggested); }}
+                onTitleSuggest={(suggested, options = {}) => {
+                  if (options.replace || !meetingTitle) setMeetingTitle(suggested);
+                }}
               />
 
 
@@ -322,6 +324,7 @@ export default function Home() {
               <ExistingNoteSelector
                 vaultPath={settings.vaultPath}
                 folderPath={selectedFolder}
+                meetingTitle={meetingTitle}
                 updateMode={updateExisting}
                 onUpdateModeChange={setUpdateExisting}
                 selectedNote={existingNote}
@@ -463,6 +466,12 @@ export default function Home() {
           )
         )}
       </main>
+
+      <footer className="border-t border-gray-200 bg-white/80">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3 text-center text-xs text-gray-400">
+          Obsidian Meeting Notes · v{process.env.NEXT_PUBLIC_APP_VERSION || "development"}
+        </div>
+      </footer>
     </div>
   );
 }

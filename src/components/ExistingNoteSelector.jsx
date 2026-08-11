@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/apiClient";
+import { findExactMeetingNote } from "@/lib/transcriptFiles";
 
 function isRollupOrMapping(note) {
   const name = String(note?.filename || "").toLowerCase();
@@ -13,6 +14,7 @@ function isRollupOrMapping(note) {
 export default function ExistingNoteSelector({
   vaultPath,
   folderPath,
+  meetingTitle,
   updateMode,
   onUpdateModeChange,
   selectedNote,
@@ -22,9 +24,11 @@ export default function ExistingNoteSelector({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
+  const [ignoredExactMatch, setIgnoredExactMatch] = useState("");
+  const exactMatchKey = `${folderPath || ""}\n${meetingTitle || ""}`;
 
   useEffect(() => {
-    if (!updateMode || !vaultPath) {
+    if (!vaultPath) {
       setNotes([]);
       setError(null);
       return;
@@ -51,7 +55,15 @@ export default function ExistingNoteSelector({
       });
 
     return () => { canceled = true; };
-  }, [vaultPath, folderPath, updateMode]);
+  }, [vaultPath, folderPath]);
+
+  useEffect(() => {
+    if (!meetingTitle || ignoredExactMatch === exactMatchKey) return;
+    const match = findExactMeetingNote(notes, meetingTitle);
+    if (!match || selectedNote?.relativePath === match.relativePath) return;
+    onUpdateModeChange(true);
+    onSelect(match);
+  }, [exactMatchKey, ignoredExactMatch, meetingTitle, notes, onSelect, onUpdateModeChange, selectedNote]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -61,8 +73,15 @@ export default function ExistingNoteSelector({
 
   function setMode(nextMode) {
     onUpdateModeChange(nextMode);
-    if (!nextMode) onSelect(null);
+    if (!nextMode) {
+      setIgnoredExactMatch(exactMatchKey);
+      onSelect(null);
+    } else {
+      setIgnoredExactMatch("");
+    }
   }
+
+  const wasExactMatch = selectedNote && findExactMeetingNote([selectedNote], meetingTitle);
 
   return (
     <div className="card p-6">
@@ -130,9 +149,10 @@ export default function ExistingNoteSelector({
           )}
 
           {selectedNote && (
-            <p className="text-xs text-green-700">
-              Updating <code className="font-mono bg-green-50 px-1 rounded">{selectedNote.relativePath}</code>
-            </p>
+            <div className="text-xs text-green-700 space-y-1">
+              {wasExactMatch && <p>Exact filename match found — update mode selected automatically.</p>}
+              <p>Updating <code className="font-mono bg-green-50 px-1 rounded">{selectedNote.relativePath}</code></p>
+            </div>
           )}
         </div>
       )}

@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { StepBadge } from "@/components/MeetingDetails";
 import { apiFetch } from "@/lib/apiClient";
+import { titleFromTranscriptFilename } from "@/lib/transcriptFiles";
 
 export default function TranscriptInput({
   transcript,
@@ -43,8 +44,7 @@ export default function TranscriptInput({
         setTranscript(e.target.result);
       }
       if (destination === "primary" && onTitleSuggest) {
-        const name = file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ");
-        onTitleSuggest(name);
+        onTitleSuggest(titleFromTranscriptFilename(file.name), { replace: true, source: "file" });
       }
     };
     reader.readAsText(file);
