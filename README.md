@@ -135,7 +135,7 @@ facts and callouts note from the latest content.
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 20.9 or newer (`node -v`) — Next.js 16 refuses to start on anything older
 - An Anthropic API key
 - Your Obsidian vault accessible on the local file system
 - macOS, Windows, or Linux
