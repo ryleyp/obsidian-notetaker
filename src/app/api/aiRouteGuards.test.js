@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import nodePath from "node:path";
 import { POST as detectSpeakers } from "./detect-speakers/route";
 import { POST as emailThread } from "./email-thread/route";
 import { POST as sanitize } from "./sanitize/route";
@@ -63,17 +66,26 @@ describe("AI routes reject unauthenticated callers", () => {
 
 describe("/api/suggest-keywords", () => {
   const accounts = encodeURIComponent(JSON.stringify([{ name: "Acme", aliases: ["acme"] }]));
+  // A real directory that exists but was never approved: the route checks that
+  // a directory exists before it checks the allowlist, so a path that does not
+  // exist would be rejected for the wrong reason.
+  const unapprovedDir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "notetaker-unapproved-"));
+  const unapproved = encodeURIComponent(unapprovedDir);
+
+  afterAll(() => {
+    fs.rmSync(unapprovedDir, { recursive: true, force: true });
+  });
 
   // This one is a GET that walks a caller-supplied directory and returns terms
   // harvested from the .md files it finds — an unauthenticated read primitive
   // over any directory on the machine.
   it("rejects a missing session token", async () => {
-    const response = await get(suggestKeywords, `/api/suggest-keywords?vaultPath=/etc&accounts=${accounts}`, { token: null });
+    const response = await get(suggestKeywords, `/api/suggest-keywords?vaultPath=${unapproved}&accounts=${accounts}`, { token: null });
     expect(response.status).toBeGreaterThanOrEqual(400);
   });
 
   it("rejects an untrusted origin", async () => {
-    const response = await get(suggestKeywords, `/api/suggest-keywords?vaultPath=/etc&accounts=${accounts}`, {
+    const response = await get(suggestKeywords, `/api/suggest-keywords?vaultPath=${unapproved}&accounts=${accounts}`, {
       token: getSessionToken(),
       origin: "https://evil.example.com",
     });
@@ -81,7 +93,7 @@ describe("/api/suggest-keywords", () => {
   });
 
   it("rejects a directory that was never approved for this session", async () => {
-    const response = await get(suggestKeywords, `/api/suggest-keywords?vaultPath=/etc&accounts=${accounts}`, {
+    const response = await get(suggestKeywords, `/api/suggest-keywords?vaultPath=${unapproved}&accounts=${accounts}`, {
       token: getSessionToken(),
     });
     expect(response.status).toBe(403);

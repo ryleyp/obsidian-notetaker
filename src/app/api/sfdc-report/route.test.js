@@ -54,7 +54,7 @@ describe("/api/sfdc-report", () => {
     });
     const data = await response.json();
 
-    expect(data.savedPath).toMatch(/^Reports\//);
+    expect(data.savedPath).toMatch(/^Reports[\\/]/);
     const written = fs.readFileSync(path.join(vault, data.savedPath), "utf-8");
     expect(written).toContain("**2026-05-14 - Acme Sync**");
     expect(written).toContain("Summary: Reviewed rollout.");
