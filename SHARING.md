@@ -27,6 +27,9 @@ git clone <the-repo-url>
 cd notetaker-webapp
 ```
 
+(On Windows, open **PowerShell** or **Command Prompt** in the folder you want
+the project in and run the same commands.)
+
 ### If you were sent a zip file
 Unzip it, then open a terminal in that folder. (The zip should NOT contain
 `node_modules` or a `.env.local` file — you'll create those below.)
@@ -47,6 +50,10 @@ Copy the example env file:
 ```bash
 cp .env.example .env.local
 ```
+On Windows (PowerShell):
+```powershell
+Copy-Item .env.example .env.local
+```
 Then open `.env.local` in any text editor and paste your key:
 ```
 ANTHROPIC_API_KEY=sk-ant-your-key-here
@@ -62,8 +69,9 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### 4. Point it at your vault
 - Open **Settings** in the app
-- Enter the full path to your Obsidian vault
-  (e.g. `/Users/yourname/Documents/MyVault`)
+- Enter the full path to your Obsidian vault —
+  `/Users/yourname/Documents/MyVault` on Mac,
+  `C:\Users\yourname\Documents\MyVault` on Windows
 - Click **Test Path** to confirm it works
 
 ---
@@ -77,8 +85,13 @@ npm run dev
 ```
 Then open http://localhost:3000. Close the terminal when you're done.
 
-(On Mac there's also a `Start Notetaker.command` file you can double-click
-to launch it without typing commands.)
+There's also a double-click launcher so you don't have to type commands:
+
+- **Mac:** `Start Notetaker.command`
+- **Windows:** `Start Notetaker.bat`
+
+Both start the server and open the browser. On Windows the server keeps
+running in a minimised window — close it to stop the app.
 
 ---
 
@@ -123,7 +136,13 @@ tailored and you may want to adjust them:
 
 ## Troubleshooting
 
-- **"command not found: npm"** — Node.js isn't installed. See step 1 above.
+- **"command not found: npm"** (or `'npm' is not recognized` on Windows) —
+  Node.js isn't installed, or the terminal was open before you installed it.
+  See step 1 above, then open a new terminal.
+- **Windows: "running scripts is disabled on this system"** — PowerShell's
+  execution policy is blocking the launcher. Use `Start Notetaker.bat`, which
+  bypasses it for that one script, or run
+  `powershell -ExecutionPolicy Bypass -File scripts\start-notetaker-local.ps1`.
 - **Blank page / port in use** — something else is on port 3000. Stop it, or
   the app will pick another port (check the terminal output for the URL).
 - **"API key required"** — add your key to `.env.local` or paste it into

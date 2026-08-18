@@ -53,14 +53,22 @@ export function assertExistingChildDirectory(basePath, childPath = "", label = "
   return target;
 }
 
+// Windows refuses these device names even with an extension (NUL.md is invalid).
+const WINDOWS_RESERVED_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
 export function sanitizeFilename(name, fallback = "Untitled") {
   const safe = String(name || fallback)
     .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 200);
+    .slice(0, 200)
+    // Windows also refuses names that end in a dot or a space.
+    .replace(/[. ]+$/, "");
 
-  return safe || fallback;
+  if (!safe) return fallback;
+  if (WINDOWS_RESERVED_NAMES.test(safe.split(".")[0])) return `${safe}-file`;
+
+  return safe;
 }
 
 export function uniqueFilePath(filePath) {

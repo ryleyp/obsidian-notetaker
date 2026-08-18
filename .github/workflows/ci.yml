@@ -8,7 +8,13 @@ on:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    # The app runs locally on contributors' own machines, so both supported
+    # host platforms are verified.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v5
 

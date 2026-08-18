@@ -153,7 +153,8 @@ export async function GET(request) {
     let vaultEntries;
     try { vaultEntries = fs.readdirSync(resolvedVault, { withFileTypes: true }); } catch {}
     if (vaultEntries) {
-      const excludeName = folderPath.split("/")[0];
+      // folderPath is vault-relative, so its separator is the host OS one.
+      const excludeName = folderPath.split(/[\\/]/)[0];
       for (const entry of vaultEntries) {
         if (!entry.isDirectory()) continue;
         if (entry.name.startsWith(".") || entry.name === excludeName) continue;

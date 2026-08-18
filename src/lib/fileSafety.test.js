@@ -57,4 +57,12 @@ describe("filename helpers", () => {
     expect(sanitizeFilename('Bad:/Name*')).toBe("Bad--Name-");
     expect(uniqueFilePath(first)).toBe(path.join(root, "Meeting (1).md"));
   });
+
+  it("avoids names Windows cannot create", () => {
+    expect(sanitizeFilename("Sync with Acme.")).toBe("Sync with Acme");
+    expect(sanitizeFilename("NUL")).toBe("NUL-file");
+    expect(sanitizeFilename("com1.notes")).toBe("com1.notes-file");
+    expect(sanitizeFilename("Console")).toBe("Console");
+    expect(sanitizeFilename("...", "Untitled")).toBe("Untitled");
+  });
 });

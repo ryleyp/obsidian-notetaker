@@ -30,6 +30,12 @@ Create a `.env.local` file in the project root:
 cp .env.example .env.local
 ```
 
+On Windows (PowerShell):
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
 Then edit `.env.local` and add your key:
 
 ```
@@ -50,8 +56,28 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ### 4. Configure in the app
 
-- Open **Settings** and enter your Obsidian vault path (e.g. `/Users/yourname/Documents/MyVault`)
+- Open **Settings** and enter your Obsidian vault path — `/Users/yourname/Documents/MyVault`
+  on macOS, `C:\Users\yourname\Documents\MyVault` on Windows
 - Click **Test Path** to verify it works
+
+## Windows
+
+Everything above works the same on Windows; `npm run dev` sets the environment it
+needs from Node, so PowerShell and `cmd.exe` both work.
+
+Instead of typing commands each time, double-click **`Start Notetaker.bat`** in the
+project folder. It installs dependencies on first run, starts the server in a
+minimised window, and opens the browser. Close that minimised window to stop the app.
+
+Notes on paths:
+
+- Use the full path including the drive letter, e.g. `C:\Users\yourname\Documents\MyVault`.
+  Both `\` and `/` are accepted.
+- A vault synced through OneDrive works, but use the local path OneDrive keeps on
+  disk (usually under `C:\Users\yourname\OneDrive\...`), not a web link.
+- If PowerShell blocks the launcher with an execution-policy error, run it as
+  `powershell -ExecutionPolicy Bypass -File scripts\start-notetaker-local.ps1`
+  (this is what the `.bat` file already does).
 
 ## Usage
 
@@ -112,3 +138,4 @@ facts and callouts note from the latest content.
 - Node.js 18+
 - An Anthropic API key
 - Your Obsidian vault accessible on the local file system
+- macOS, Windows, or Linux

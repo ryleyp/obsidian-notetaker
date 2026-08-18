@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { DEFAULT_ACCOUNTS } from "@/lib/accounts";
 import { apiFetch, approveLocalPaths } from "@/lib/apiClient";
+import { EXAMPLE_TRANSCRIPTS_PATH, EXAMPLE_VAULT_PATH } from "@/lib/hostPlatform";
 import ModelPicker from "@/components/ModelPicker";
 
 const CONFIG_VERSION = 1;
@@ -360,13 +361,14 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           <label className="label">Obsidian Vault Path</label>
           <p className="text-xs text-gray-500 mb-2">
             The full path to your Obsidian vault folder on your machine. Example:{" "}
-            <code className="bg-gray-100 px-1 rounded">/Users/yourname/Documents/MyVault</code>
+            <code className="bg-gray-100 px-1 rounded">{EXAMPLE_VAULT_PATH}</code>
           </p>
           <div className="flex gap-2">
             <input
               type="text"
               className="input flex-1"
-              placeholder="/Users/yourname/Documents/MyVault"
+              aria-label="Obsidian vault path"
+              placeholder={EXAMPLE_VAULT_PATH}
               value={form.vaultPath}
               onChange={(e) => handleChange("vaultPath", e.target.value)}
             />
@@ -394,7 +396,8 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           <input
             type="text"
             className="input"
-            placeholder="/Users/yourname/Documents/Claude"
+            aria-label="Transcripts archive path"
+            placeholder={EXAMPLE_TRANSCRIPTS_PATH}
             value={form.transcriptsPath}
             onChange={(e) => handleChange("transcriptsPath", e.target.value)}
           />

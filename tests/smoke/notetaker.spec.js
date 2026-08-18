@@ -11,7 +11,7 @@ test("approves a local vault and reaches the ready-to-generate workflow", async 
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-  await page.getByPlaceholder("/Users/yourname/Documents/MyVault").fill(vault);
+  await page.getByLabel("Obsidian vault path").fill(vault);
   await page.getByRole("button", { name: "Test Path" }).click();
   await expect(page.getByText(/Found \d+ folders in vault/)).toBeVisible();
   await page.getByRole("button", { name: "Save Settings" }).click();
