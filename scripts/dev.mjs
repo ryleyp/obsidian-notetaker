@@ -9,6 +9,27 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 
+const MIN_NODE = "20.9.0";
+
+function isTooOld(current, minimum) {
+  const a = current.split(".").map(Number);
+  const b = minimum.split(".").map(Number);
+  for (let i = 0; i < b.length; i++) {
+    if ((a[i] || 0) !== b[i]) return (a[i] || 0) < b[i];
+  }
+  return false;
+}
+
+// Next.js checks this too, but only after npm has printed its own banner, which
+// buries the reason. Say it first, and say what to do about it.
+if (isTooOld(process.versions.node, MIN_NODE)) {
+  console.error(
+    `Node.js ${MIN_NODE} or newer is required — this is Node.js ${process.versions.node}.\n` +
+    "Install the current LTS build from https://nodejs.org, then open a new terminal and run `npm install` again."
+  );
+  process.exit(1);
+}
+
 const require = createRequire(import.meta.url);
 const nextBin = require.resolve("next/dist/bin/next");
 
