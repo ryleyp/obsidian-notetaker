@@ -13,9 +13,11 @@ Domain context — interpret the transcript through this lens:
 - Test & measurement engineering: automated test systems, HIL, validation/production test, instrument control, measurement data management. Terms like "DAQ", "rigs", "test stands", "sequences", and "drivers" mean their T&M sense, not general IT.
 - Ambiguous transcription of product names should resolve to the closest NI product (e.g. "test stand" in a software context is likely TestStand).
 
-Your notes must be extremely thorough — do not omit any important information, decisions, or discussions from the transcript. Frame relevance from the CSM's perspective: customer adoption signals, license/EA questions, support issues, expansion or renewal implications, and commitments the CSM made. Honor section-specific word limits even when the rest of the note should stay detailed.
+Your notes must be complete AND tight — capture every important fact, decision, and discussion from the transcript, but state each one exactly once, in the fewest words that preserve the specifics. Consolidate related points instead of scattering them; never pad, restate, or editorialize. Frame relevance from the CSM's perspective: customer adoption signals, license/EA questions, support issues, expansion or renewal implications, and commitments the CSM made. Honor section-specific word limits even when the rest of the note should stay detailed.
 
 Do NOT include personal updates, personal check-ins, or personal anecdotes (e.g. weekend plans, health updates, family news, personal status). Focus only on business-relevant content.
+
+Keep the notes factual, not emotional. Do not include sentiment analysis, vibe reads, mood commentary, or speculation about how people felt. Stated positions are facts and belong in the notes — record an objection, concern, or agreement as what the person said ("Dana pushed back on the migration timeline"), without emotional interpretation ("Dana seemed frustrated").
 
 Always respond with ONLY the Markdown content, no preamble or explanation.`;
 
@@ -131,6 +133,7 @@ This run updates an existing Obsidian note for the same meeting. Source blocks l
 - The transcript is authoritative for what was said. When [O#] conflicts with [T#], use [T#] and do not repeat the stale claim.
 - Do not duplicate a fact merely because it appears in both the transcript and old note.
 - Treat summaries, inferred sentiment, action-item wording, and other generated prose in [O#] as secondary; independently regenerate them from the underlying evidence.
+- Older notes may contain a "Sentiment & Vibe" section or other sentiment commentary. Drop it entirely — the current format contains no sentiment analysis. Preserve any factual detail inside it (a stated objection, a named blocker) by moving that fact into the appropriate section, stripped of emotional interpretation.
 `
     : "";
 
@@ -202,8 +205,9 @@ SOURCE CITATION RULES
 Generate the meeting notes with EXACTLY this structure. Do NOT include a YAML frontmatter block.
 
 Length: Meeting Notes is the section of record and has no length limit — make it as long as the
-material genuinely warrants. The only capped section in this note is the SFDC Activity Entry, whose
-limit is a Salesforce field constraint and still applies exactly as specified above.
+material genuinely warrants, measured in facts captured, not words spent. Consolidation rules still
+apply: every fact once, tersely. The only capped section in this note is the SFDC Activity Entry,
+whose limit is a Salesforce field constraint and still applies exactly as specified above.
 
 # ${title}
 
@@ -213,41 +217,30 @@ limit is a Salesforce field constraint and still applies exactly as specified ab
 
 ## Executive Summary
 
-Write 3-5 sentences capturing the overall purpose, key outcomes, and most important decisions from this meeting. This is a scannable overview, so keep it tight even though the notes below are exhaustive.
+Write 3-5 sentences capturing the overall purpose, key outcomes, and most important decisions from this meeting. This is a scannable overview, so keep it tight even though the notes below are complete.
 
 ---
 
 ## Meeting Notes
 
-Provide exhaustive bulleted notes covering everything of substance in the sources. This is the section of record: someone who missed the meeting should be able to read it instead of the transcript and miss nothing that matters.
+Provide complete, consolidated bulleted notes covering everything of substance in the sources. This is the section of record: someone who missed the meeting should be able to read it instead of the transcript and miss nothing that matters — but read it in a fraction of the time. Completeness is about facts, not word count: keep every specific, cut every wasted word.
 
-- Cover every topic discussed, in the order it came up. Use sub-bullets to keep related detail together under its topic.
+- Cover every topic discussed, one bullet per topic thread with sub-bullets for its supporting detail. If a topic resurfaces later in the meeting, fold the new detail into that topic's existing bullet instead of starting a new one.
+- State each fact, decision, and detail exactly once. Merge overlapping points into a single bullet; never restate the same point in different words or under multiple topics.
 - Capture the specifics that get lost in summaries: names, numbers, dates, versions, product names, license and entitlement details, system and environment details, error messages, quantities, and timelines.
 - Record decisions with the reasoning behind them, not just the outcome, and note who made or drove each one.
 - Record open questions, disagreements, unresolved threads, and anything explicitly deferred — mark them as unresolved rather than implying closure.
-- Preserve the substance of notable exchanges: what was asked, what the answer was, and any concern, objection, hesitation, or enthusiasm expressed.
+- Preserve the substance of notable exchanges: what was asked, what the answer was, and any stated concern or objection. Report what was said, not how anyone seemed to feel about it.
 - Where a speaker is identifiable, attribute the point to them.
+- Write in tight note style: no throat-clearing lead-ins, no transitional filler, no commentary on the meeting itself.
 
-Skip only true noise: filler, verbatim repetition, small talk, and personal updates or check-ins. When in doubt about whether a detail belongs, include it — length is not a concern in this section. Do not compress detail out to save space, and do not editorialize or invent anything absent from the sources.
+Skip entirely: filler, verbatim repetition, small talk, personal updates or check-ins, and sentiment or mood commentary. When in doubt about whether a factual detail belongs, include it — but include it once, tersely. Do not editorialize or invent anything absent from the sources.
 
 ---
 
 ## Things NI SW Customer Success Should Take Note Of
 
-Flag the most important items for NI Software's Customer Success team. Include: adoption signals, product usage concerns, customer frustrations or praise, risks to renewal or expansion, opportunities for CS to engage, and any commitments made to the customer. Be concise — one clear bullet per point, no filler.
-
----
-
-## Sentiment & Vibe
-
-Read between the lines and capture the human dynamics of the meeting — the things a CSM should remember about relationships, not just facts. Cover whichever of these the transcript actually supports (skip the rest):
-- **Overall tone** — one line: how did the meeting feel? (collaborative, tense, rushed, energized, going through the motions...)
-- **People** — who was enthusiastic, skeptical, frustrated, disengaged, or under pressure, and about what. Note shifts mid-meeting ("warmed up once X came up").
-- **Product relationships** — attitudes toward specific NI (or competitor) products: genuine enthusiasm vs. polite interest, fatigue, distrust, or growing reliance.
-- **Team & org dynamics** — tension or deference between attendees, who defers to whom, internal champions or blockers, signs of organizational pressure (budget, deadlines, reorgs) leaking into the conversation.
-- **Callouts** — anything worth remembering before the next interaction: a sore subject to avoid, a win to reference, a person who needs extra attention, an unspoken concern that never got voiced directly.
-
-Ground every observation in something actually said or evident in the transcript — cite the moment briefly ("pushed back twice on the migration timeline"). Do not psychoanalyze or invent feelings that aren't supported. If the transcript genuinely gives no sentiment signal, write "No notable sentiment signals in this transcript."
+Flag the most important items for NI Software's Customer Success team. Include: adoption signals, product usage concerns, explicitly stated customer complaints or positive feedback, risks to renewal or expansion, opportunities for CS to engage, and any commitments made to the customer. Be concise — one clear bullet per point, no filler.
 
 ---
 
@@ -276,7 +269,7 @@ List all action items as Markdown task checkboxes. For each item include who own
 
 ## Next Steps
 
-List the agreed-upon next steps, upcoming milestones, follow-up meetings, or planned deliverables in priority order.
+List the agreed-upon next steps, upcoming milestones, follow-up meetings, or planned deliverables in priority order. Do not restate items already listed under Action Items — this section is for milestones and plans that are not individual owned tasks. If everything agreed upon is already covered by Action Items, write "Covered by Action Items above."
 
 ---
 
@@ -284,7 +277,7 @@ List the agreed-upon next steps, upcoming milestones, follow-up meetings, or pla
 
 A Salesforce-ready activity entry for this meeting, following the rules below. Output EXACTLY this shape and nothing else in this section — no extra headings, bullets, or commentary.
 
-The instruction to write exhaustively applies to Meeting Notes and NOT to this section. This section is pasted into a Salesforce field: the Summary/Notes block (Summary + Outcomes + Next steps, including the labels) must be 120 words or fewer and 800 characters or fewer. Write the block, count the words, and trim until it fits before you output it. Detail that does not fit belongs in Meeting Notes above, not here.
+The no-length-limit instruction applies to Meeting Notes and NOT to this section. This section is pasted into a Salesforce field: the Summary/Notes block (Summary + Outcomes + Next steps, including the labels) must be 120 words or fewer and 800 characters or fewer. Write the block, count the words, and trim until it fits before you output it. Detail that does not fit belongs in Meeting Notes above, not here.
 
 **Type:** <one approved type>
 **Subtype:** <matching subtype from that type's list>

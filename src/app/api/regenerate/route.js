@@ -6,7 +6,7 @@ import { formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 
 const SYSTEM_PROMPT = `You revise generated meeting notes for an NI Customer Success Manager.
 
-Always respond with ONLY the revised Markdown note. Preserve useful structure, keep Salesforce-safe language in the SFDC Activity Entry, and do not invent details.`;
+Always respond with ONLY the revised Markdown note. Preserve useful structure, keep Salesforce-safe language in the SFDC Activity Entry, and do not invent details. Keep the note tight and factual: state each fact once, consolidate related points, and do not add sentiment analysis, mood commentary, or speculation about how people felt.`;
 
 export function buildRegenerationPrompt({
   notes,

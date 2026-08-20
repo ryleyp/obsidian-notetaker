@@ -95,7 +95,28 @@ describe("buildPrompt", () => {
 
     expect(prompt).toContain("must be at most 120 words and 800 characters or fewer");
     expect(prompt).not.toContain("Executive Summary and Meeting Notes sections together must be 120 words");
-    expect(prompt).toMatch(/Provide exhaustive bulleted notes/);
+    expect(prompt).toMatch(/Provide complete, consolidated bulleted notes/);
+  });
+
+  // The note format deliberately excludes sentiment analysis: notes record
+  // stated positions as facts, and consolidation keeps detail without repeats.
+  it("consolidates without sentiment commentary", () => {
+    const prompt = buildPrompt("Jordan discussed the rollout.", "Planning Sync");
+
+    expect(prompt).not.toContain("## Sentiment & Vibe");
+    expect(prompt).toContain("State each fact, decision, and detail exactly once");
+    expect(prompt).toContain("Do not restate items already listed under Action Items");
+  });
+
+  it("tells migrations to drop old sentiment sections but keep their facts", () => {
+    const sourceBundle = buildSourceBundle({
+      transcript: "Dana confirmed the Dallas rollout.",
+      existingNote: "## Sentiment & Vibe\n\nDana seemed frustrated about the timeline.",
+    });
+    const prompt = buildPrompt("Dana confirmed the Dallas rollout.", "Planning Sync", [], "", { sourceBundle });
+
+    expect(prompt).toContain('Older notes may contain a "Sentiment & Vibe" section');
+    expect(prompt).toContain("Drop it entirely");
   });
 
   // The SFDC entry is pasted into a Salesforce field that truncates. The

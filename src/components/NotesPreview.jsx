@@ -6,6 +6,26 @@ import remarkGfm from "remark-gfm";
 import { formatCost } from "@/lib/models";
 import { extractReferencedSourceIds, sourceExcerpt } from "@/lib/sourceBundle";
 
+// One-click revision instructions for the regenerate panel. Each fills the
+// instruction box so the CSM can tweak before submitting.
+const REGENERATE_PRESETS = [
+  {
+    label: "Tighten & consolidate",
+    instruction:
+      "Tighten the whole note: keep every fact, name, number, and date, but merge overlapping bullets, state each point exactly once, and cut filler wording.",
+  },
+  {
+    label: "Remove sentiment",
+    instruction:
+      "Remove all sentiment, mood, and vibe commentary. Keep stated positions as plain facts (who said what), with no emotional interpretation.",
+  },
+  {
+    label: "Sharpen action items",
+    instruction:
+      "Make every action item a concrete, verifiable task with a specific owner, and remove duplicates between Action Items and Next Steps.",
+  },
+];
+
 function textFromChildren(children) {
   return Children.toArray(children)
     .map((child) => (typeof child === "string" ? child : ""))
@@ -206,6 +226,19 @@ export default function NotesPreview({
                 {regenerating && (
                   <span className="text-xs text-obsidian-600 font-medium">Rewriting...</span>
                 )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {REGENERATE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => setRegenerationInstruction(preset.instruction)}
+                    disabled={regenerating}
+                    className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-100 hover:text-gray-800 transition-colors"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
               </div>
               <textarea
                 className="input resize-y text-xs leading-relaxed"

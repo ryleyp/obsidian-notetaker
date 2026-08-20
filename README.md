@@ -7,7 +7,7 @@ A local web app that turns meeting transcripts into structured Obsidian notes us
 Upload or paste a meeting transcript, select a folder in your Obsidian vault, and Claude generates:
 
 1. **Executive Summary** — 3-5 sentence overview of the meeting
-2. **Meeting Notes** — Exhaustive bulleted notes covering every important point
+2. **Meeting Notes** — Complete, consolidated bulleted notes covering every important point once, without filler or sentiment commentary
 3. **NI SW Customer Success Takeaways** — Items your CS team needs to know
 4. **Action Items** — Checkbox-style tasks with owner and due date
 5. **Next Steps** — Agreed follow-ups and upcoming milestones
