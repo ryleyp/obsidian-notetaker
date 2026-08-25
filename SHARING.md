@@ -141,6 +141,17 @@ tailored and you may want to adjust them:
 - **"Node.js version >=20.9.0 is required"** — you have an older Node. Install
   the current LTS from [nodejs.org](https://nodejs.org), open a new terminal,
   then run `npm install` again before `npm run dev`.
+- **Windows: `npm` crashes with `Class extends value undefined`** — `node` and
+  `npm` are coming from different Node installations, usually because
+  nvm-windows left an old version ahead of the new one on your PATH. Check with
+  `where.exe node` and `where.exe npm`: the first hit for each must be the same
+  folder. Fix it with `nvm use <version>` from an **Administrator** PowerShell
+  (nvm needs admin to update its symlink; without it you get
+  `exit status 5: Access is denied`). With no admin rights, put the right Node
+  first for that window instead:
+  ```powershell
+  $env:Path = (Split-Path (Get-Command node).Source) + ";" + $env:Path
+  ```
 - **"command not found: npm"** (or `'npm' is not recognized` on Windows) —
   Node.js isn't installed, or the terminal was open before you installed it.
   See step 1 above, then open a new terminal.

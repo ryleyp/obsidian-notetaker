@@ -79,6 +79,13 @@ Notes on paths:
   `powershell -ExecutionPolicy Bypass -File scripts\start-notetaker-local.ps1`
   (this is what the `.bat` file already does).
 
+If you use **nvm-windows**, make sure `where.exe node` and `where.exe npm` both
+resolve to the same folder first. A stale version left earlier on the PATH makes
+`npm` crash with `Class extends value undefined`, because an old npm is being
+run by a new Node. `nvm use <version>` fixes it, from an Administrator
+PowerShell — see the troubleshooting section in `SHARING.md` for the no-admin
+workaround.
+
 ## Usage
 
 1. Enter the meeting title and date
