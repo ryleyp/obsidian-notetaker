@@ -31,6 +31,15 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
+# The dev server runs in a minimised window, so check the version out here where
+# the message is actually visible.
+$nodeVersion = (& node --version).TrimStart("v")
+if ([version]$nodeVersion -lt [version]"20.9.0") {
+    Write-Host "ERROR: Node.js 20.9.0 or newer is required - this is Node.js $nodeVersion." -ForegroundColor Red
+    Write-Host "Install the current LTS build from https://nodejs.org, then open a new terminal and run 'npm install' again."
+    exit 1
+}
+
 if (-not (Test-Path (Join-Path $projectDir "node_modules"))) {
     Write-Host "Installing dependencies (first run only)..."
     cmd.exe /c "npm install"

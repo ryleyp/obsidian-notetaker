@@ -9,9 +9,11 @@ from zero to a working app.
 
 ## What you need first
 
-1. **Node.js 18 or newer** — check by running `node -v` in a terminal.
-   If you don't have it, install from [nodejs.org](https://nodejs.org)
-   (pick the "LTS" version).
+1. **Node.js 20.9 or newer** — check by running `node -v` in a terminal.
+   If you don't have it, or the version is older, install from
+   [nodejs.org](https://nodejs.org) (pick the "LTS" version). The installer
+   upgrades an existing copy in place; open a new terminal afterwards so the
+   new version is picked up.
 2. **An Anthropic API key** — your own, not the person who shared this with
    you. Get one at [console.anthropic.com](https://console.anthropic.com).
    The key is tied to billing, so everyone uses their own.
@@ -136,6 +138,20 @@ tailored and you may want to adjust them:
 
 ## Troubleshooting
 
+- **"Node.js version >=20.9.0 is required"** — you have an older Node. Install
+  the current LTS from [nodejs.org](https://nodejs.org), open a new terminal,
+  then run `npm install` again before `npm run dev`.
+- **Windows: `npm` crashes with `Class extends value undefined`** — `node` and
+  `npm` are coming from different Node installations, usually because
+  nvm-windows left an old version ahead of the new one on your PATH. Check with
+  `where.exe node` and `where.exe npm`: the first hit for each must be the same
+  folder. Fix it with `nvm use <version>` from an **Administrator** PowerShell
+  (nvm needs admin to update its symlink; without it you get
+  `exit status 5: Access is denied`). With no admin rights, put the right Node
+  first for that window instead:
+  ```powershell
+  $env:Path = (Split-Path (Get-Command node).Source) + ";" + $env:Path
+  ```
 - **"command not found: npm"** (or `'npm' is not recognized` on Windows) —
   Node.js isn't installed, or the terminal was open before you installed it.
   See step 1 above, then open a new terminal.
