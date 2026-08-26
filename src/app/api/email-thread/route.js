@@ -6,7 +6,7 @@ import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBund
 
 const SYSTEM_PROMPT = `You turn customer-success email threads into concise Obsidian notes for an NI Customer Success Manager.
 
-Use only the provided email-thread and CSM context sources. Do not invent decisions, owners, dates, commitments, links, prices, or attendees. Keep internal strategy and customer-visible facts clearly separated. Always respond with only Markdown.`;
+Use only the provided email-thread and CSM context sources. Do not invent decisions, owners, dates, commitments, links, prices, or attendees. Keep internal strategy and customer-visible facts clearly separated. Keep the note tight and factual: state each fact once, consolidate related points, and do not add sentiment analysis, mood commentary, or speculation about how anyone felt — record stated positions as what was said. Always respond with only Markdown.`;
 
 export function buildEmailThreadPrompt({
   emailThread,

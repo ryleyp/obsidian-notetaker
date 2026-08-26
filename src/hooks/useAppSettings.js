@@ -19,9 +19,9 @@ export const EMPTY_SETTINGS = {
   ownerNames: [],
 };
 
-// Settings live in three places, deliberately:
-//   - localStorage  everything except the API key
-//   - sessionStorage  the API key only, so it dies with the tab
+// Settings live in two places, deliberately:
+//   - localStorage  everything, including the API key, so it survives
+//     app restarts (this app only ever runs on the CSM's own machine)
 //   - notetaker-config.json / notetaker-glossary.json in the transcripts
 //     folder, so the glossary and account roster survive a cache clear and
 //     travel between machines
@@ -31,9 +31,7 @@ export function useAppSettings({ onSettingsSaved } = {}) {
   const [initialModel, setInitialModel] = useState(null);
 
   function persistBrowserSettings(nextSettings) {
-    const settingsToPersist = { ...nextSettings };
-    delete settingsToPersist.apiKey;
-    localStorage.setItem(BROWSER_KEY, JSON.stringify(settingsToPersist));
+    localStorage.setItem(BROWSER_KEY, JSON.stringify(nextSettings));
   }
 
   // Write the portable glossary (replacements, corrections, accounts) to a file.
@@ -65,13 +63,12 @@ export function useAppSettings({ onSettingsSaved } = {}) {
       const stored = localStorage.getItem(BROWSER_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        const { apiKey: oldPersistedApiKey, ...persistedSettings } = parsed;
+        // Migration: some earlier builds kept the key in sessionStorage only.
         const sessionApiKey = sessionStorage.getItem(API_KEY_KEY) || "";
-        base = { ...EMPTY_SETTINGS, ...persistedSettings, apiKey: sessionApiKey };
+        base = { ...EMPTY_SETTINGS, ...parsed, apiKey: parsed.apiKey || sessionApiKey };
         setSettings(base);
-        // Migration: earlier builds persisted the key to localStorage.
-        if (oldPersistedApiKey) {
-          localStorage.setItem(BROWSER_KEY, JSON.stringify(persistedSettings));
+        if (!parsed.apiKey && sessionApiKey) {
+          localStorage.setItem(BROWSER_KEY, JSON.stringify({ ...parsed, apiKey: sessionApiKey }));
         }
         if (parsed.model) setInitialModel(parsed.model);
         if (!parsed.vaultPath) setShowSettings(true);
@@ -115,14 +112,12 @@ export function useAppSettings({ onSettingsSaved } = {}) {
   }
 
   async function saveSettings(newSettings) {
-    const { apiKey, ...settingsToPersist } = newSettings;
-    const merged = { replacements: [], ...settingsToPersist, apiKey };
+    const merged = { replacements: [], ...newSettings };
     try {
       await approveLocalPaths(merged);
       setSettings(merged);
-      localStorage.setItem(BROWSER_KEY, JSON.stringify(settingsToPersist));
-      if (apiKey) sessionStorage.setItem(API_KEY_KEY, apiKey);
-      else sessionStorage.removeItem(API_KEY_KEY);
+      persistBrowserSettings(merged);
+      sessionStorage.removeItem(API_KEY_KEY);
       persistConfig(merged);
       setShowSettings(false);
       onSettingsSaved?.(merged);

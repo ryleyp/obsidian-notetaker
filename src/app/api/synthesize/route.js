@@ -71,6 +71,12 @@ ${accountScope}Scope rules:
 - Omit purely hardware or non-NI topics
 - **Demo sessions and user groups:** If a source is a demo session, NI user group, or similar event, do NOT include generic product details or feature overviews from it. Only include content from those sources if there was a specific customer discussion, question, reaction, or account-relevant context around a product — e.g. a customer asked about it, expressed interest, raised a concern, or it was discussed in relation to their environment.
 
+Style rules:
+- Complete AND tight: keep every account-relevant fact, name, number, date, and product detail, but state each one exactly once, in the fewest words that preserve the specifics. When multiple sources cover the same topic, consolidate into a single entry (newest development first) instead of repeating it per source or per section.
+- No filler, no restated context, no commentary about the sources or the reporting process.
+- Factual, not emotional: record stated positions, objections, complaints, and praise as what was said — no sentiment analysis, mood commentary, or speculation about how anyone felt. (Pillar G/Y/R ratings and health assessments are business judgments and belong here; emotional read-outs do not.)
+- Exclude personal updates, check-ins, and anecdotes; business content only.
+
 Sources include Obsidian meeting notes and notes from other folders that mention this account [folder name].
 
 ---
@@ -267,6 +273,12 @@ ${accountScope}Scope rules:
 - Mention integrations with other NI tools only when directly tied to ${p}
 - Omit topics unrelated to ${p}
 - **Demo sessions and user groups:** If a source is a demo session, NI user group, or similar event, do NOT include generic ${p} product details or feature overviews from it. Only include content from those sources if there was a specific customer discussion, question, reaction, or account-relevant context — e.g. a customer asked about ${p}, expressed interest, raised a concern, or it was discussed in relation to their environment.
+
+Style rules:
+- Complete AND tight: keep every ${p}-relevant fact, name, number, date, and tier detail, but state each one exactly once, in the fewest words that preserve the specifics. When multiple sources cover the same topic, consolidate into a single entry (newest development first) instead of repeating it per source or per section.
+- No filler, no restated context, no commentary about the sources or the reporting process.
+- Factual, not emotional: record stated positions, objections, complaints, and praise as what was said — no sentiment analysis, mood commentary, or speculation about how anyone felt. (Pillar G/Y/R ratings and health assessments are business judgments and belong here; emotional read-outs do not.)
+- Exclude personal updates, check-ins, and anecdotes; business content only.
 
 ---
 SOURCES:
@@ -639,7 +651,7 @@ function buildBatchSummaryPrompt(notes, productFocus, accountName) {
 
   return `Compress these older source notes for a later ${scope} report.
 
-Preserve facts, dates, owners, open/closed action items, product/version details, risks, decisions, and relationship context. Do not invent anything.
+Preserve facts, dates, owners, open/closed action items, product/version details, risks, decisions, and relationship context. Do not invent anything. State each fact once, tersely. Drop sentiment or mood commentary and personal small talk — a stated objection, concern, or commitment is a fact and stays; how someone seemed to feel does not.
 
 ${BATCH_TEMPORAL_RULE}
 

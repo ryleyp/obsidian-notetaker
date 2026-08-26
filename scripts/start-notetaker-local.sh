@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# Apps launched through Finder receive a minimal PATH that omits Homebrew.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${NOTETAKER_PORT:-3000}"
 URL="http://127.0.0.1:${PORT}"
@@ -17,7 +20,8 @@ if [ ! -d node_modules ]; then
   npm install
 fi
 
-WATCHPACK_POLLING=true npm run dev -- --port "$PORT" >"$LOG_FILE" 2>&1 &
+nohup env WATCHPACK_POLLING=true npm run dev -- --port "$PORT" \
+  >"$LOG_FILE" 2>&1 </dev/null &
 
 for _ in $(seq 1 60); do
   if curl -s --max-time 2 "$URL" >/dev/null 2>&1; then
