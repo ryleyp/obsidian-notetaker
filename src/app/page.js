@@ -236,6 +236,7 @@ export default function Home() {
                 onRetry={() => generation.retry({ onSaved: saving.clearSaved })}
                 canRetry={!generation.processing}
                 todosSaved={saving.todosSaved}
+                todoistSaved={saving.todoistSaved}
                 sfdcReportSaved={saving.sfdcReportSaved}
                 customerFactsSaved={saving.customerFactsSaved}
                 updatedExisting={saving.updatedExisting}

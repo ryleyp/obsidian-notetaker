@@ -65,6 +65,7 @@ export default function NotesPreview({
   onRetry,
   canRetry,
   todosSaved,
+  todoistSaved,
   sfdcReportSaved,
   customerFactsSaved,
   updatedExisting,
@@ -354,6 +355,15 @@ export default function NotesPreview({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
                 <span>{todosSaved.count} item{todosSaved.count !== 1 ? "s" : ""} added to <code className="font-mono text-xs bg-blue-100 px-1 rounded">{todosSaved.path}</code></span>
+              </div>
+            )}
+            {todoistSaved && (
+              <div className={`flex items-center gap-2 text-sm rounded-lg px-3 py-2 border ${todoistSaved.error || todoistSaved.failed ? "text-amber-700 bg-amber-50 border-amber-200" : "text-rose-700 bg-rose-50 border-rose-200"}`}>
+                <span>
+                  {todoistSaved.error
+                    ? `Todoist tasks were not added: ${todoistSaved.error}`
+                    : `${todoistSaved.count} task${todoistSaved.count !== 1 ? "s" : ""} added to Todoist${todoistSaved.failed ? ` (${todoistSaved.failed} failed)` : ""}`}
+                </span>
               </div>
             )}
             {sfdcReportSaved && (

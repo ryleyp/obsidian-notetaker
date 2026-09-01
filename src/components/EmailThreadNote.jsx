@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import FolderSelector from "@/components/FolderSelector";
@@ -16,9 +16,11 @@ import {
 } from "@/lib/sanitize";
 import { aliasesFromReplacements, extractEmailEntities, mergeSensitiveEntities } from "@/lib/privacy";
 import { buildSourceBundle, mapSourceBundle } from "@/lib/sourceBundle";
+import { latestEmailResponseDate } from "@/lib/emailDates";
 import { apiFetch } from "@/lib/apiClient";
 import { FAST_MODEL, calcCost, formatCost } from "@/lib/models";
 import { detectAccount } from "@/lib/accounts";
+import { pushTodoistTasks, todoistConfigured, todoistLabelForFolder } from "@/lib/todoist";
 
 function todayIso() {
   const now = new Date();
@@ -57,6 +59,9 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   const [sfdcReportError, setSfdcReportError] = useState("");
   const [customerFactsPath, setCustomerFactsPath] = useState("");
   const [updatedExisting, setUpdatedExisting] = useState(false);
+  const [existingNote, setExistingNote] = useState(null);
+  const [updateExisting, setUpdateExisting] = useState(true);
+  const [todoistResult, setTodoistResult] = useState(null);
   const [cost, setCost] = useState(null);
 
   const wordCount = emailThread.trim() ? emailThread.trim().split(/\s+/).length : 0;
@@ -71,6 +76,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setSfdcReportError("");
     setCustomerFactsPath("");
     setUpdatedExisting(false);
+    setTodoistResult(null);
     setError(null);
     setCost(null);
   }
@@ -82,7 +88,46 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       const inferred = inferTitleFromThread(value);
       if (inferred) setThreadTitle(inferred);
     }
+    // Track the newest response so re-pasting a grown thread re-dates the note.
+    const latestResponse = latestEmailResponseDate(value);
+    if (latestResponse) setThreadDate(latestResponse);
   }
+
+  // Look up the existing Obsidian note for this thread (same matcher the save
+  // upsert uses) so it can feed regeneration and the CSM can see what updates.
+  useEffect(() => {
+    const correctedTitle = applyCorrections(threadTitle, settings.corrections || []).trim();
+    if (!settings.vaultPath || !correctedTitle) {
+      setExistingNote(null);
+      return;
+    }
+
+    let canceled = false;
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({
+        vaultPath: settings.vaultPath,
+        folderPath: selectedFolder || "",
+        threadTitle: correctedTitle,
+      });
+      apiFetch(`/api/email-thread-note?${params}`)
+        .then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Lookup failed");
+          return data.note || null;
+        })
+        .then((note) => {
+          if (!canceled) setExistingNote(note);
+        })
+        .catch(() => {
+          if (!canceled) setExistingNote(null);
+        });
+    }, 400);
+
+    return () => {
+      canceled = true;
+      clearTimeout(timer);
+    };
+  }, [threadTitle, selectedFolder, settings.vaultPath, settings.corrections]);
 
   async function runSanitizeDetection() {
     const savedReplacements = settings.replacements || [];
@@ -202,7 +247,19 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     const sanitizedTitle = replacements.length ? applyReplacements(correctedTitle, replacements) : correctedTitle;
     const sanitizedThread = replacements.length ? applyReplacements(correctedThread, replacements) : correctedThread;
     const sanitizedContext = replacements.length ? applyReplacements(correctedContext, replacements) : correctedContext;
-    const sourceBundle = buildSourceBundle({ emailThread: sanitizedThread, rawNotes: sanitizedContext });
+    // When updating, the current note rides along as [O#] source blocks so
+    // manual details and still-open action items survive the regeneration.
+    const existingContent = updateExisting && existingNote?.content
+      ? applyCorrections(existingNote.content, settings.corrections || [])
+      : "";
+    const sanitizedExisting = replacements.length
+      ? applyReplacements(existingContent, replacements)
+      : existingContent;
+    const sourceBundle = buildSourceBundle({
+      emailThread: sanitizedThread,
+      rawNotes: sanitizedContext,
+      existingNote: sanitizedExisting,
+    });
     const displaySourceBundle = replacements.length
       ? mapSourceBundle(sourceBundle, (content) => reverseReplacements(content, replacements))
       : sourceBundle;
@@ -238,13 +295,29 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           vaultPath: settings.vaultPath,
           folderPath: selectedFolder,
           meetingTitle: saveTitle,
-          upsertEmailThreadTitle: correctedTitle.trim() || undefined,
+          upsertEmailThreadTitle: updateExisting ? correctedTitle.trim() || undefined : undefined,
         }),
       });
       const saveData = await saveRes.json();
       if (!saveRes.ok) throw new Error(saveData.error || "Save failed");
       setSavedPath(saveData.savedPath);
       setUpdatedExisting(!!saveData.updated);
+
+      // Reminder to respond, due in 2 days, labeled by account folder. Runs on
+      // updates too — new responses usually warrant a fresh look.
+      if (todoistConfigured(settings)) {
+        try {
+          const result = await pushTodoistTasks(apiFetch, settings, [{
+            content: `Respond to "${correctedTitle.trim() || "email thread"}" (if needed)`,
+            dueString: "in 2 days",
+            labels: todoistLabelForFolder(selectedFolder) ? [todoistLabelForFolder(selectedFolder)] : [],
+            description: `From email note: ${saveTitle}`,
+          }]);
+          setTodoistResult(result?.count ? { ok: true } : { ok: false, error: result?.failed?.[0]?.error || "Task not created" });
+        } catch (todoistError) {
+          setTodoistResult({ ok: false, error: todoistError.message });
+        }
+      }
 
       const account = detectAccount(selectedFolder, settings.accounts || []);
       if (account.name !== "Internal") {
@@ -299,6 +372,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setThreadDate(todayIso());
     setThreadContext("");
     setEmailThread("");
+    setUpdateExisting(true);
     setPendingReview(null);
     setNote("");
     setSavedPath("");
@@ -307,6 +381,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setSfdcReportError("");
     setCustomerFactsPath("");
     setUpdatedExisting(false);
+    setTodoistResult(null);
     setError(null);
     setCost(null);
   }
@@ -348,8 +423,32 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
                 setThreadDate(event.target.value);
               }}
             />
+            <p className="mt-1 text-[10px] text-gray-400">Auto-set to the newest dated response in the pasted thread</p>
           </div>
         </div>
+
+        {existingNote && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-start justify-between gap-3">
+            <span>
+              {updateExisting ? (
+                <>This thread already has a note — it will be used as a source and updated in place (a backup is kept): <code className="font-mono">{existingNote.filename}</code></>
+              ) : (
+                <>This thread already has a note (<code className="font-mono">{existingNote.filename}</code>) — a separate new note will be saved.</>
+              )}
+            </span>
+            <label className="flex items-center gap-1.5 whitespace-nowrap cursor-pointer font-medium">
+              <input
+                type="checkbox"
+                checked={updateExisting}
+                onChange={(event) => {
+                  clearOutput();
+                  setUpdateExisting(event.target.checked);
+                }}
+              />
+              Update existing
+            </label>
+          </div>
+        )}
 
         <div className="mb-4">
           <label className="label">CSM Context <span className="font-normal text-gray-400">(optional)</span></label>
@@ -420,7 +519,13 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
             disabled={!canCreate}
             className="btn-primary flex-1 py-3 text-base"
           >
-            {processing ? "Anonymizing and generating..." : saving ? "Saving..." : "Create Email Note"}
+            {processing
+              ? "Anonymizing and generating..."
+              : saving
+                ? "Saving..."
+                : updateExisting && existingNote
+                  ? "Update Email Note"
+                  : "Create Email Note"}
           </button>
         </div>
       )}
@@ -440,6 +545,13 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               {customerFactsPath && (
                 <p className="text-sm text-violet-700">
                   Customer callouts rebuilt at <code className="font-mono text-xs bg-violet-50 px-1.5 py-0.5 rounded">{customerFactsPath}</code>
+                </p>
+              )}
+              {todoistResult && (
+                <p className={`text-sm ${todoistResult.ok ? "text-rose-700" : "text-amber-700"}`}>
+                  {todoistResult.ok
+                    ? 'Todoist reminder added: respond in 2 days'
+                    : `Todoist reminder was not added: ${todoistResult.error}`}
                 </p>
               )}
               {sfdcReportError && (

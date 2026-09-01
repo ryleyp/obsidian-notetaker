@@ -5,6 +5,8 @@ import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/
 import { detectAccount, matchVaultFolder } from "@/lib/accounts";
 import { apiFetch } from "@/lib/apiClient";
 import { formatTranscriptArchive } from "@/lib/sourceBundle";
+import { extractItems } from "@/lib/todoItems";
+import { pushTodoistTasks, todoistConfigured, todoistLabelForFolder, todoistTaskFromItemLine } from "@/lib/todoist";
 
 // Writing to the vault: the note itself, plus the two best-effort weekly
 // side files (todos and the SFDC activity report), plus the transcript-only
@@ -14,6 +16,7 @@ export function useNoteSaving({ settings, meeting }) {
   const [saved, setSaved] = useState(false);
   const [savedPath, setSavedPath] = useState("");
   const [todosSaved, setTodosSaved] = useState(null);
+  const [todoistSaved, setTodoistSaved] = useState(null);
   const [sfdcReportSaved, setSfdcReportSaved] = useState(null);
   const [customerFactsSaved, setCustomerFactsSaved] = useState(null);
   const [updatedExisting, setUpdatedExisting] = useState(false);
@@ -45,6 +48,7 @@ export function useNoteSaving({ settings, meeting }) {
     setSaved(false);
     setSavedPath("");
     setTodosSaved(null);
+    setTodoistSaved(null);
     setSfdcReportSaved(null);
     setCustomerFactsSaved(null);
     setUpdatedExisting(false);
@@ -120,6 +124,24 @@ export function useNoteSaving({ settings, meeting }) {
           if (todosData.count > 0) setTodosSaved({ count: todosData.count, path: todosData.savedPath });
         } catch {
           // Todos extraction is best-effort.
+        }
+      }
+
+      // Push the CSM's own action items to Todoist, labeled by account folder.
+      // Migrations skip this like the other append-only side effects.
+      if (!existingNote && todoistConfigured(settings)) {
+        try {
+          const { actionItems } = extractItems(notes, settings.ownerNames || []);
+          const label = todoistLabelForFolder(folderPath);
+          const tasks = actionItems
+            .map((line) => todoistTaskFromItemLine(line, { noteTitle: meetingTitle, label }))
+            .filter(Boolean);
+          if (tasks.length) {
+            const result = await pushTodoistTasks(apiFetch, settings, tasks);
+            setTodoistSaved({ count: result?.count || 0, failed: result?.failed?.length || 0 });
+          }
+        } catch (todoistError) {
+          setTodoistSaved({ count: 0, failed: 0, error: todoistError.message });
         }
       }
 
@@ -208,6 +230,7 @@ export function useNoteSaving({ settings, meeting }) {
     saved,
     savedPath,
     todosSaved,
+    todoistSaved,
     sfdcReportSaved,
     customerFactsSaved,
     updatedExisting,

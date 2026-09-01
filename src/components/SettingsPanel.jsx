@@ -28,6 +28,8 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
     vaultPath: settings.vaultPath || "",
     transcriptsPath: settings.transcriptsPath || "",
     apiKey: settings.apiKey || "",
+    todoistApiToken: settings.todoistApiToken || "",
+    todoistProject: settings.todoistProject || "",
     aiPrivacyScan: settings.aiPrivacyScan !== false,
     ownerNamesText: (settings.ownerNames || []).join(", "),
     model: settings.model || "claude-haiku-4-5",
@@ -235,8 +237,9 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       vaultPath: form.vaultPath.trim(),
       transcriptsPath: form.transcriptsPath.trim(),
       apiKey: form.apiKey.trim(),
+      todoistApiToken: form.todoistApiToken.trim(),
+      todoistProject: form.todoistProject.trim(),
       aiPrivacyScan: form.aiPrivacyScan,
-      ownerNames: form.ownerNamesText.split(",").map((n) => n.trim()).filter(Boolean),
       model: form.model,
       replacements: form.replacements,
       corrections: form.corrections,
@@ -259,7 +262,9 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       replacements: form.replacements,
       corrections: form.corrections,
       accounts: serializeAccounts(),
+      todoistProject: form.todoistProject.trim(),
       ...(includeKeyInExport && form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
+      ...(includeKeyInExport && form.todoistApiToken.trim() ? { todoistApiToken: form.todoistApiToken.trim() } : {}),
     };
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -289,6 +294,8 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           transcriptsPath: typeof cfg.transcriptsPath === "string" ? cfg.transcriptsPath : f.transcriptsPath,
           model: cfg.model || f.model,
           apiKey: typeof cfg.apiKey === "string" && cfg.apiKey ? cfg.apiKey : f.apiKey,
+          todoistApiToken: typeof cfg.todoistApiToken === "string" && cfg.todoistApiToken ? cfg.todoistApiToken : f.todoistApiToken,
+          todoistProject: typeof cfg.todoistProject === "string" && cfg.todoistProject ? cfg.todoistProject : f.todoistProject,
           replacements: Array.isArray(cfg.replacements) ? cfg.replacements : f.replacements,
           corrections: Array.isArray(cfg.corrections) ? cfg.corrections : f.corrections,
           ownerNamesText: Array.isArray(cfg.ownerNames) ? cfg.ownerNames.join(", ") : f.ownerNamesText,
@@ -418,6 +425,31 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
             value={form.apiKey}
             onChange={(e) => handleChange("apiKey", e.target.value)}
           />
+        </div>
+
+        <div>
+          <label className="label">Todoist <span className="font-normal text-gray-400">(optional)</span></label>
+          <p className="text-xs text-gray-500 mb-2">
+            When both fields are set, your own action items (owner matches your names, CS, or CSM) are added to this
+            Todoist project after a meeting note saves, and each email note adds a &quot;respond in 2 days&quot; reminder.
+            Tasks are labeled with the account folder. Token: Todoist Settings → Integrations → Developer.
+          </p>
+          <div className="space-y-2">
+            <input
+              type="password"
+              className="input"
+              placeholder="Todoist API token"
+              value={form.todoistApiToken}
+              onChange={(e) => handleChange("todoistApiToken", e.target.value)}
+            />
+            <input
+              type="text"
+              className="input"
+              placeholder="Project URL or ID, e.g. https://app.todoist.com/app/project/work-tasks-..."
+              value={form.todoistProject}
+              onChange={(e) => handleChange("todoistProject", e.target.value)}
+            />
+          </div>
         </div>
 
         <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
