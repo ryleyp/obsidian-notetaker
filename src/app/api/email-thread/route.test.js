@@ -25,6 +25,8 @@ describe("buildEmailThreadPrompt", () => {
     expect(prompt).toContain("Cite every factual bullet or factual paragraph");
     expect(prompt).not.toContain("EXISTING NOTE UPDATE");
     expect(prompt).toContain("Create an Obsidian note from this email thread.");
+    expect(prompt).toContain("**Response needed:**");
+    expect(prompt).toContain("To/Cc recipients from the email headers");
   });
 
   it("adds update guidance when the existing note rides along as a source", () => {

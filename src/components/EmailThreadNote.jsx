@@ -19,8 +19,9 @@ import { buildSourceBundle, mapSourceBundle } from "@/lib/sourceBundle";
 import { latestEmailResponseDate } from "@/lib/emailDates";
 import { apiFetch } from "@/lib/apiClient";
 import { FAST_MODEL, calcCost, formatCost } from "@/lib/models";
-import { detectAccount } from "@/lib/accounts";
-import { pushTodoistTasks, todoistConfigured, todoistLabelForNote } from "@/lib/todoist";
+import { accountForEmailDomains, detectAccount, folderForAccount, matchVaultFolder } from "@/lib/accounts";
+import { completeTodoistTasks, pushTodoistTasks, todoistConfigured, todoistLabelForNote } from "@/lib/todoist";
+import { parseResponseNeeded } from "@/lib/emailFollowUp";
 
 function todayIso() {
   const now = new Date();
@@ -38,7 +39,9 @@ function filenameTitle(threadDate, threadTitle) {
 function inferTitleFromThread(text) {
   const subject = text.match(/^subject:\s*(.+)$/im)?.[1]?.trim();
   if (!subject) return "";
-  return subject.replace(/^(re|fw|fwd):\s*/i, "").trim();
+  // Clients stack "RE: RE: FW:" prefixes with every reply; strip them all so
+  // every paste of the same thread infers the same title.
+  return subject.replace(/^(\s*(re|fw|fwd|aw)\s*:\s*)+/i, "").trim();
 }
 
 export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsClick }) {
@@ -62,6 +65,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   const [existingNote, setExistingNote] = useState(null);
   const [updateExisting, setUpdateExisting] = useState(true);
   const [todoistResult, setTodoistResult] = useState(null);
+  const [autoPickedFolder, setAutoPickedFolder] = useState(false);
   const [cost, setCost] = useState(null);
 
   const wordCount = emailThread.trim() ? emailThread.trim().split(/\s+/).length : 0;
@@ -92,6 +96,33 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     const latestResponse = latestEmailResponseDate(value);
     if (latestResponse) setThreadDate(latestResponse);
   }
+
+  // Auto-pick the account folder from the pasted thread when none is selected:
+  // participants' email domains beat text alias matching.
+  useEffect(() => {
+    if (selectedFolder || !settings.vaultPath || !emailThread.trim()) return;
+    let canceled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiFetch(`/api/folders?vaultPath=${encodeURIComponent(settings.vaultPath)}`);
+        const data = await res.json();
+        const folders = (data.folders || []).filter((f) => f.path !== "");
+        const account = accountForEmailDomains(emailThread, settings.accounts || []);
+        const folder = folderForAccount(account, folders)
+          || matchVaultFolder(`${threadTitle} ${emailThread}`, folders, settings.accounts || []);
+        if (!canceled && folder) {
+          setSelectedFolder(folder);
+          setAutoPickedFolder(true);
+        }
+      } catch {
+        // Folder auto-pick is a convenience; the CSM can always select one.
+      }
+    }, 600);
+    return () => {
+      canceled = true;
+      clearTimeout(timer);
+    };
+  }, [emailThread, selectedFolder, settings.vaultPath, settings.accounts, threadTitle]);
 
   // Look up the existing Obsidian note for this thread (same matcher the save
   // upsert uses) so it can feed regeneration and the CSM can see what updates.
@@ -287,6 +318,9 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       if (data.usage) setCost(calcCost(data.usage, model));
 
       setSaving(true);
+      // Updates go to the folder the thread already lives in, even when a
+      // different folder is selected, so a thread never splits across folders.
+      const saveFolder = updateExisting && existingNote ? existingNote.folder ?? selectedFolder : selectedFolder;
       const saveTitle = filenameTitle(threadDate, correctedTitle || "Email Thread");
       const saveRes = await apiFetch("/api/save", {
         method: "POST",
@@ -294,7 +328,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         body: JSON.stringify({
           notes: restoredNote,
           vaultPath: settings.vaultPath,
-          folderPath: selectedFolder,
+          folderPath: saveFolder,
           meetingTitle: saveTitle,
           upsertEmailThreadTitle: updateExisting ? correctedTitle.trim() || undefined : undefined,
         }),
@@ -304,23 +338,40 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       setSavedPath(saveData.savedPath);
       setUpdatedExisting(!!saveData.updated);
 
-      // Reminder to respond, due in 2 days, labeled by account folder. Runs on
-      // updates too — new responses usually warrant a fresh look.
+      // Reminder to respond, due in 2 days, labeled by account — but only when
+      // the note's own verdict says the newest messages leave a reply owed.
+      // A missing verdict fails safe and still creates the reminder.
       if (todoistConfigured(settings)) {
-        try {
-          const result = await pushTodoistTasks(apiFetch, settings, [{
-            content: `Respond to "${correctedTitle.trim() || "email thread"}" (if needed)`,
-            dueString: "in 2 days",
-            labels: todoistLabelForNote(selectedFolder, settings.accounts) ? [todoistLabelForNote(selectedFolder, settings.accounts)] : [],
-            description: `From email note: ${saveTitle}`,
-          }]);
-          setTodoistResult(result?.count ? { ok: true } : { ok: false, error: result?.failed?.[0]?.error || "Task not created" });
-        } catch (todoistError) {
-          setTodoistResult({ ok: false, error: todoistError.message });
+        const verdict = parseResponseNeeded(restoredNote);
+        if (verdict.needed === false) {
+          // No reply owed anymore — also retire any open "Respond to ..."
+          // reminders this thread created earlier.
+          let closed = 0;
+          if (correctedTitle.trim()) {
+            try {
+              closed = await completeTodoistTasks(apiFetch, settings, `Respond to "${correctedTitle.trim()}"`);
+            } catch {
+              // Closing old reminders is best-effort.
+            }
+          }
+          setTodoistResult({ ok: true, skipped: true, closed });
+        } else {
+          try {
+            const label = todoistLabelForNote(saveFolder, settings.accounts);
+            const result = await pushTodoistTasks(apiFetch, settings, [{
+              content: `Respond to "${correctedTitle.trim() || "email thread"}"${verdict.reason ? ` — ${verdict.reason}` : " (if needed)"}`,
+              dueString: "in 2 days",
+              labels: label ? [label] : [],
+              description: `From email note: ${saveTitle}`,
+            }]);
+            setTodoistResult(result?.count ? { ok: true, reason: verdict.reason } : { ok: false, error: result?.failed?.[0]?.error || "Task not created" });
+          } catch (todoistError) {
+            setTodoistResult({ ok: false, error: todoistError.message });
+          }
         }
       }
 
-      const account = detectAccount(selectedFolder, settings.accounts || []);
+      const account = detectAccount(saveFolder, settings.accounts || []);
       if (account.name !== "Internal") {
         try {
           const factsRes = await apiFetch("/api/customer-facts", {
@@ -328,7 +379,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               vaultPath: settings.vaultPath,
-              folderPath: selectedFolder,
+              folderPath: saveFolder,
               accountName: account.name,
             }),
           });
@@ -374,6 +425,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setThreadContext("");
     setEmailThread("");
     setUpdateExisting(true);
+    setAutoPickedFolder(false);
     setPendingReview(null);
     setNote("");
     setSavedPath("");
@@ -432,7 +484,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-start justify-between gap-3">
             <span>
               {updateExisting ? (
-                <>This thread already has a note — it will be used as a source and updated in place (a backup is kept): <code className="font-mono">{existingNote.filename}</code></>
+                <>This thread already has a note — it will be used as a source and updated in place (a backup is kept): <code className="font-mono">{existingNote.filename}</code>{existingNote.folder !== undefined && existingNote.folder !== selectedFolder ? <> in <code className="font-mono">{existingNote.folder || "vault root"}</code></> : null}</>
               ) : (
                 <>This thread already has a note (<code className="font-mono">{existingNote.filename}</code>) — a separate new note will be saved.</>
               )}
@@ -488,11 +540,17 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         selectedFolder={selectedFolder}
         onSelect={(folder) => {
           clearOutput();
+          setAutoPickedFolder(false);
           setSelectedFolder(folder);
         }}
         onSettingsClick={onSettingsClick}
         stepNumber={2}
       />
+      {autoPickedFolder && selectedFolder && (
+        <p className="text-xs text-gray-500 -mt-2 px-1">
+          Folder auto-selected from the thread&apos;s participants: <code className="font-mono">{selectedFolder}</code> — pick a different one above if that&apos;s wrong.
+        </p>
+      )}
 
       {pendingReview && (
         <SanitizeReview
@@ -550,9 +608,11 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               )}
               {todoistResult && (
                 <p className={`text-sm ${todoistResult.ok ? "text-rose-700" : "text-amber-700"}`}>
-                  {todoistResult.ok
-                    ? 'Todoist reminder added: respond in 2 days'
-                    : `Todoist reminder was not added: ${todoistResult.error}`}
+                  {todoistResult.skipped
+                    ? `No reply owed on this thread — Todoist reminder skipped${todoistResult.closed ? `, and ${todoistResult.closed} earlier reminder${todoistResult.closed !== 1 ? "s" : ""} closed` : ""}.`
+                    : todoistResult.ok
+                      ? `Todoist reminder added: respond in 2 days${todoistResult.reason ? ` — ${todoistResult.reason}` : ""}`
+                      : `Todoist reminder was not added: ${todoistResult.error}`}
                 </p>
               )}
               {sfdcReportError && (

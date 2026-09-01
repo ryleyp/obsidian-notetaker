@@ -37,6 +37,7 @@ This thread already has an Obsidian note from an earlier version of the thread. 
 - The email thread is authoritative for what was written. When [O#] conflicts with [E#], use [E#] and drop the stale claim.
 - Never state a fact twice because it appears in both the old note and the thread — state it once with both citations.
 - Carry forward action items from [O#] that are still open. If a newer response completes one, mark it done (- [x]) instead of dropping it; if a newer response supersedes one, replace it.
+- Directly under the # title line, maintain an italic thread-history line showing each update's date: take the dates from [O#]'s existing "*Thread history:*" line when present (otherwise start with the old note's date) and append this update's date${threadDate ? ` (${threadDate})` : ""}. Format: *Thread history: 2026-08-20 → 2026-08-26*
 `
     : "";
 
@@ -71,6 +72,10 @@ Generate exactly this structure:
 
 Write 2-4 concise bullets describing the business-relevant content of the thread.
 
+End this section with exactly one line assessing whether the CSM owes a reply:
+**Response needed:** Yes — <the specific question, request, or open ball in the CSM's court> | or: **Response needed:** No
+Base it on the NEWEST messages: a thread where the CSM answered last, or that is purely informational with no ask, is "No". A customer question, request, unresolved ask, or anything awaiting the CSM is "Yes".
+
 ---
 
 ## Decisions
@@ -94,7 +99,7 @@ List action items as Markdown task checkboxes. Format:
 
 ## Attendee Callouts
 
-Capture named people, roles, stated responsibilities, preferences, concerns, commitments, and relationship context. Write "Nothing noted." when the thread contains none.
+Track everyone on the thread — senders and To/Cc recipients from the email headers as well as people mentioned in the messages. For each: name, email/company when shown, role if stated, plus responsibilities, preferences, concerns, commitments, and relationship context. When updating an existing note, carry forward participants from [O#] even if they didn't write in the newest messages, and add anyone new. Write "Nothing noted." when the thread contains none.
 
 ---
 

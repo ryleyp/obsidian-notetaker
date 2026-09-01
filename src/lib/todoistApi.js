@@ -69,9 +69,9 @@ export async function listCompletedTaskContents(apiToken, projectId, since) {
   return contents;
 }
 
-// Contents of every active task in a project, for duplicate detection.
-export async function listProjectTaskContents(apiToken, projectId) {
-  const contents = [];
+// Every active task in a project as { id, content }.
+export async function listProjectTasks(apiToken, projectId) {
+  const tasks = [];
   let cursor = null;
 
   do {
@@ -87,10 +87,27 @@ export async function listProjectTaskContents(apiToken, projectId) {
     }
     const data = await res.json();
     for (const task of data.results || []) {
-      if (task?.content) contents.push(task.content);
+      if (task?.content) tasks.push({ id: task.id, content: task.content });
     }
     cursor = data.next_cursor || null;
   } while (cursor);
 
-  return contents;
+  return tasks;
+}
+
+// Contents of every active task in a project, for duplicate detection.
+export async function listProjectTaskContents(apiToken, projectId) {
+  return (await listProjectTasks(apiToken, projectId)).map((task) => task.content);
+}
+
+export async function closeTodoistTask(apiToken, taskId) {
+  const res = await fetch(`${TODOIST_API_BASE}/tasks/${taskId}/close`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiToken}` },
+  });
+  if (!res.ok) {
+    const error = new Error(`Todoist responded ${res.status} while closing a task`);
+    error.status = res.status;
+    throw error;
+  }
 }

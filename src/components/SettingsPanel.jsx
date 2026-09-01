@@ -15,6 +15,7 @@ function accountToFormRow(a) {
     name: a.name || "",
     archiveFolder: a.archiveFolder || "",
     todoistLabel: a.todoistLabel || "",
+    emailDomainsText: (a.emailDomains || []).join(", "),
     aliasesText: (a.aliases || []).join(", "),
     keywordsText: (a.keywords || []).join(", "),
     agreements: (a.agreements || []).map((g) => ({
@@ -159,6 +160,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
         name: a.name.trim(),
         archiveFolder: a.archiveFolder.trim(),
         todoistLabel: (a.todoistLabel || "").trim(),
+        emailDomains: (a.emailDomainsText || "").split(",").map((s) => s.trim()).filter(Boolean),
         aliases: a.aliasesText.split(",").map((s) => s.trim()).filter(Boolean),
         keywords: a.keywordsText.split(",").map((s) => s.trim()).filter(Boolean),
       }));
@@ -277,7 +279,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
   }
 
   function addAccount() {
-    setForm((f) => ({ ...f, accounts: [...f.accounts, { name: "", archiveFolder: "", todoistLabel: "", aliasesText: "", keywordsText: "", agreements: [] }] }));
+    setForm((f) => ({ ...f, accounts: [...f.accounts, { name: "", archiveFolder: "", todoistLabel: "", emailDomainsText: "", aliasesText: "", keywordsText: "", agreements: [] }] }));
   }
 
   function removeAccount(i) {
@@ -322,6 +324,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
         name: a.name.trim(),
         archiveFolder: a.archiveFolder.trim(),
         todoistLabel: (a.todoistLabel || "").trim(),
+        emailDomains: (a.emailDomainsText || "").split(",").map((s) => s.trim()).filter(Boolean),
         aliases: a.aliasesText.split(",").map((s) => s.trim()).filter(Boolean),
         keywords: a.keywordsText.split(",").map((s) => s.trim()).filter(Boolean),
         agreements: (a.agreements || [])
@@ -825,6 +828,13 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
                   placeholder="Todoist tag for this account's tasks (defaults to the note's folder name)"
                   value={a.todoistLabel}
                   onChange={(e) => updateAccount(i, "todoistLabel", e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Email domains, comma-separated (e.g. acme.com) — auto-picks this account's folder for pasted threads"
+                  value={a.emailDomainsText}
+                  onChange={(e) => updateAccount(i, "emailDomainsText", e.target.value)}
                 />
 
                 {/* EA / EP agreement numbers, each tied to identifying keywords */}

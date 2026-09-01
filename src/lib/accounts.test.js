@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_ACCOUNTS,
+  accountForEmailDomains,
   detectAccount,
+  folderForAccount,
   matchVaultFolder,
   textHasAlias,
   suggestAgreements,
@@ -126,5 +128,32 @@ describe("DEFAULT_ACCOUNTS", () => {
       expect(a.archiveFolder).toBeTruthy();
       expect(a.aliases.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("accountForEmailDomains", () => {
+  const accounts = [
+    { name: "Acme Aerospace", aliases: ["acme"], emailDomains: ["acmeaero.com"] },
+    { name: "Globex", aliases: ["globex"], emailDomains: [] },
+  ];
+
+  it("matches a participant domain, including subdomains", () => {
+    expect(accountForEmailDomains("From: dana@acmeaero.com\nTo: me@ni.com", accounts)?.name).toBe("Acme Aerospace");
+    expect(accountForEmailDomains("From: dana@mail.acmeaero.com", accounts)?.name).toBe("Acme Aerospace");
+  });
+
+  it("returns null with no configured or matching domains", () => {
+    expect(accountForEmailDomains("From: someone@globex-corp.com", accounts)).toBeNull();
+    expect(accountForEmailDomains("no addresses here", accounts)).toBeNull();
+  });
+});
+
+describe("folderForAccount", () => {
+  const folders = [{ name: "1. Acme", path: "1. Acme" }, { name: "2. Globex", path: "2. Globex" }];
+
+  it("finds the folder by account name or alias", () => {
+    expect(folderForAccount({ name: "Acme Aerospace", aliases: ["acme"] }, folders)).toBe("1. Acme");
+    expect(folderForAccount(null, folders)).toBeNull();
+    expect(folderForAccount({ name: "Initech", aliases: [] }, folders)).toBeNull();
   });
 });

@@ -95,6 +95,23 @@ export function todoistConfigured(settings) {
   return Boolean(settings?.todoistApiToken?.trim() && parseTodoistProjectId(settings?.todoistProject));
 }
 
+// Closes active "Respond to ..." reminders matching the prefix. Best-effort;
+// returns the number closed.
+export async function completeTodoistTasks(apiFetch, settings, contentPrefix) {
+  const res = await apiFetch("/api/todoist-complete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      apiToken: settings.todoistApiToken.trim(),
+      projectId: parseTodoistProjectId(settings.todoistProject),
+      contentPrefix,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Todoist request failed");
+  return data.closed || 0;
+}
+
 export async function pushTodoistTasks(apiFetch, settings, tasks) {
   if (!tasks.length) return null;
   const res = await apiFetch("/api/todoist", {

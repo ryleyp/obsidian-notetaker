@@ -11,7 +11,10 @@ import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 
 function normalizedEmailThreadTitle(value) {
-  return sanitizeFilename(value || "")
+  // Reply prefixes stack up ("RE: RE: FW: subject"); strip them before
+  // sanitizing so every reply matches the thread's original note.
+  const withoutReplyPrefixes = String(value || "").replace(/^(\s*(re|fw|fwd|aw)\s*:\s*)+/i, "");
+  return sanitizeFilename(withoutReplyPrefixes)
     .normalize("NFKC")
     .replace(/\s+/g, " ")
     .trim()

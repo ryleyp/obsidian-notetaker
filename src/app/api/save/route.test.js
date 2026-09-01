@@ -171,6 +171,27 @@ describe("/api/save", () => {
     expect(fs.readFileSync(path.join(vault, data.backupPath), "utf-8")).toBe("old email note");
   });
 
+  it("matches an existing thread through stacked reply prefixes", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const notesDir = path.join(vault, "Acme");
+    fs.mkdirSync(notesDir, { recursive: true });
+    allowDirectory(vault, "Vault path");
+    fs.writeFileSync(path.join(notesDir, "2026-05-01 - Email - License cleanup.md"), "old email note");
+
+    const response = await postSave({
+      notes: "# updated email note",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "2026-05-08 - Email - RE: RE: FW: License cleanup",
+      upsertEmailThreadTitle: "RE: RE: FW: License cleanup",
+    });
+    const data = await response.json();
+
+    expect(data.updated).toBe(true);
+    expect(data.matchedByTitle).toBe(true);
+  });
+
   it("does not merge different email thread titles", async () => {
     const root = makeTmp();
     const vault = path.join(root, "vault");

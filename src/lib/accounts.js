@@ -76,6 +76,37 @@ export function detectAccount(folderName, accounts) {
   return { ...INTERNAL };
 }
 
+// Match an account by the email domains appearing in a pasted thread
+// (From/To/Cc addresses) against each account's configured emailDomains.
+// Returns the account or null.
+export function accountForEmailDomains(text, accounts) {
+  const domains = new Set(
+    [...String(text || "").matchAll(/@([a-z0-9][a-z0-9.-]*\.[a-z]{2,})/gi)].map((m) => m[1].toLowerCase())
+  );
+  if (!domains.size) return null;
+  for (const acct of resolve(accounts)) {
+    const configured = (acct.emailDomains || []).map((d) => String(d || "").trim().toLowerCase()).filter(Boolean);
+    if (!configured.length) continue;
+    for (const domain of domains) {
+      if (configured.some((c) => domain === c || domain.endsWith(`.${c}`))) return acct;
+    }
+  }
+  return null;
+}
+
+// The vault folder that belongs to an account, from a folder listing.
+export function folderForAccount(account, folders) {
+  if (!account) return null;
+  const hints = [account.obsidianFolder, account.name, ...(account.aliases || [])]
+    .filter(Boolean)
+    .map((value) => value.toLowerCase());
+  const folder = (folders || []).find((fo) => {
+    const fn = (fo.name || "").toLowerCase();
+    return hints.some((hint) => fn.includes(hint));
+  });
+  return folder?.path || null;
+}
+
 // Given free text (title + content), pick the best-matching vault folder path.
 // Returns null when no account alias appears in the text or no folder matches.
 export function matchVaultFolder(text, folders, accounts) {

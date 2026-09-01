@@ -28,6 +28,27 @@ export function noteDate(filePath, filename, content) {
   }
 }
 
+// Every folder that can hold notes (vault root included), excluding hidden
+// and side-file folders. Returns [{ dirPath, folder }] with vault-relative
+// folder paths.
+export function collectFolders(dir, relativeFolder = "", depth = 0, maxDepth = 3) {
+  const folders = [{ dirPath: dir, folder: relativeFolder }];
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return folders;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    if (EXCLUDED_FOLDERS.has(entry.name.trim().toLowerCase())) continue;
+    if (depth < maxDepth) {
+      folders.push(...collectFolders(path.join(dir, entry.name), path.join(relativeFolder, entry.name), depth + 1, maxDepth));
+    }
+  }
+  return folders;
+}
+
 export function collectNoteFiles(dir, relativeFolder = "", depth = 0, maxDepth = 3) {
   const files = [];
   let entries;

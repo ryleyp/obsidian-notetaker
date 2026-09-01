@@ -4,6 +4,7 @@ import path from "path";
 import { assertExistingChildDirectory } from "@/lib/fileSafety";
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
+import { collectFolders } from "@/lib/vaultScan";
 import { findExistingEmailThread } from "../save/route";
 
 // Looks up the existing Obsidian note for an email thread (same matcher the
@@ -24,7 +25,21 @@ export async function GET(request) {
     const resolvedVault = assertAllowedRoot(vaultPath, "Vault path");
     const targetDir = assertExistingChildDirectory(resolvedVault, folderPath, "Target folder");
 
-    const matchedPath = findExistingEmailThread(targetDir, threadTitle);
+    // Prefer the selected folder, but a thread lives wherever its note was
+    // first saved — search the rest of the vault so replies land in the same
+    // place even when a different folder is selected.
+    let matchedPath = findExistingEmailThread(targetDir, threadTitle);
+    let matchedFolder = folderPath || "";
+    if (!matchedPath) {
+      for (const { dirPath, folder } of collectFolders(resolvedVault)) {
+        if (dirPath === targetDir) continue;
+        matchedPath = findExistingEmailThread(dirPath, threadTitle);
+        if (matchedPath) {
+          matchedFolder = folder;
+          break;
+        }
+      }
+    }
     if (!matchedPath) return NextResponse.json({ note: null });
 
     const content = fs.readFileSync(matchedPath, "utf-8");
@@ -32,6 +47,7 @@ export async function GET(request) {
       note: {
         relativePath: path.relative(resolvedVault, matchedPath),
         filename: path.basename(matchedPath),
+        folder: matchedFolder,
         content,
       },
     });
