@@ -6,6 +6,7 @@ import { assertTrustedRequest } from "@/lib/requestSafety";
 import { extractItems } from "@/lib/todoItems";
 import { normalizeTaskContent, todoistLabelForNote, todoistTaskFromItemLine } from "@/lib/todoist";
 import { createTodoistTask, listProjectTaskContents } from "@/lib/todoistApi";
+import { collectNoteFiles, noteDate } from "@/lib/vaultScan";
 
 // One-shot backfill: scan every account folder in the vault for notes from
 // the last month, extract the CSM's own unchecked action items, and push
@@ -13,56 +14,6 @@ import { createTodoistTask, listProjectTaskContents } from "@/lib/todoistApi";
 // so re-running is safe.
 
 const MAX_TASKS_PER_RUN = 100;
-
-// Folders holding generated side files whose items duplicate the meeting and
-// email notes they came from.
-const EXCLUDED_FOLDERS = new Set(["todos", "reports", "follow up emails"]);
-
-const EXCLUDED_FILE_PATTERNS = [
-  /customer facts & callouts/i,
-  /customer (& )?site mapping/i,
-  /todos from meetings/i,
-  /sfdc activity report/i,
-];
-
-function noteDate(filePath, filename, content) {
-  const match = filename.match(/(\d{4}-\d{2}-\d{2})/) || content.match(/^#[^\n]*?(\d{4}-\d{2}-\d{2})/m);
-  if (match) {
-    const parsed = new Date(`${match[1]}T12:00:00`);
-    if (!isNaN(parsed.getTime())) return parsed;
-  }
-  try {
-    return fs.statSync(filePath).mtime;
-  } catch {
-    return null;
-  }
-}
-
-function collectNoteFiles(dir, relativeFolder, depth = 0, maxDepth = 3) {
-  const files = [];
-  let entries;
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return files;
-  }
-
-  for (const entry of entries) {
-    if (entry.name.startsWith(".")) continue;
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (EXCLUDED_FOLDERS.has(entry.name.trim().toLowerCase())) continue;
-      if (depth < maxDepth) {
-        files.push(...collectNoteFiles(fullPath, path.join(relativeFolder, entry.name), depth + 1, maxDepth));
-      }
-      continue;
-    }
-    if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".md") continue;
-    if (EXCLUDED_FILE_PATTERNS.some((pattern) => pattern.test(entry.name))) continue;
-    files.push({ filePath: fullPath, filename: entry.name, folder: relativeFolder });
-  }
-  return files;
-}
 
 export async function POST(request) {
   try {

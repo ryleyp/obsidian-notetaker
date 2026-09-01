@@ -53,6 +53,9 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
   const [includeKeyInExport, setIncludeKeyInExport] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const [backfillResult, setBackfillResult] = useState(null); // { ok, message }
+  const [cleanupBusy, setCleanupBusy] = useState(false);
+  const [cleanupPreview, setCleanupPreview] = useState(null); // route preview response
+  const [cleanupResult, setCleanupResult] = useState(null); // { ok, message }
   const [importMsg, setImportMsg] = useState(null); // { ok, message }
   const importInputRef = useRef(null);
 
@@ -85,6 +88,62 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       setBackfillResult({ ok: false, message: err.message });
     } finally {
       setBackfilling(false);
+    }
+  }
+
+  async function handleCleanupPreview() {
+    setCleanupBusy(true);
+    setCleanupPreview(null);
+    setCleanupResult(null);
+    try {
+      await approveLocalPaths({ vaultPath: form.vaultPath.trim() });
+      const res = await apiFetch("/api/cleanup-action-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vaultPath: form.vaultPath.trim(),
+          mode: "preview",
+          ownerNames: form.ownerNamesText.split(",").map((n) => n.trim()).filter(Boolean),
+          apiKey: form.apiKey.trim() || undefined,
+          todoistToken: form.todoistApiToken.trim() || undefined,
+          todoistProjectId: parseTodoistProjectId(form.todoistProject) || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Cleanup preview failed");
+      setCleanupPreview(data);
+    } catch (err) {
+      setCleanupResult({ ok: false, message: err.message });
+    } finally {
+      setCleanupBusy(false);
+    }
+  }
+
+  async function handleCleanupApply() {
+    if (!cleanupPreview?.files?.length) return;
+    setCleanupBusy(true);
+    setCleanupResult(null);
+    try {
+      const res = await apiFetch("/api/cleanup-action-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vaultPath: form.vaultPath.trim(),
+          mode: "apply",
+          files: cleanupPreview.files,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Cleanup apply failed");
+      setCleanupPreview(null);
+      setCleanupResult({
+        ok: true,
+        message: `${data.editsApplied} edit${data.editsApplied !== 1 ? "s" : ""} applied across ${data.updatedFiles.length} note${data.updatedFiles.length !== 1 ? "s" : ""}${data.editsSkipped ? ` (${data.editsSkipped} skipped — files changed since preview)` : ""}. Originals backed up under .notetaker/backups.`,
+      });
+    } catch (err) {
+      setCleanupResult({ ok: false, message: err.message });
+    } finally {
+      setCleanupBusy(false);
     }
   }
 
@@ -504,6 +563,63 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
               <p className={`text-xs ${backfillResult.ok ? "text-green-700" : "text-red-600"}`}>{backfillResult.message}</p>
             )}
           </div>
+        </div>
+
+        <div>
+          <label className="label">Action Item Cleanup</label>
+          <p className="text-xs text-gray-500 mb-2">
+            Scans notes from the past 2 months: normalizes action-item lines (owners like &quot;me&quot; become your name,
+            duplicates are removed), checks off items you completed in Todoist, and — with your API key — items that
+            later notes show were done. Nothing is written until you apply, and every changed note is backed up first.
+          </p>
+          <button
+            type="button"
+            onClick={handleCleanupPreview}
+            disabled={cleanupBusy || !form.vaultPath.trim()}
+            className="btn-secondary text-xs"
+          >
+            {cleanupBusy && !cleanupPreview ? "Scanning notes..." : "Preview cleanup"}
+          </button>
+          {cleanupPreview && (
+            <div className="mt-2 space-y-2">
+              <p className="text-xs text-gray-600">
+                {cleanupPreview.scannedNotes} notes scanned — {cleanupPreview.counts.mechanical} formatting fix{cleanupPreview.counts.mechanical !== 1 ? "es" : ""},{" "}
+                {cleanupPreview.counts.todoistCompleted} done in Todoist, {cleanupPreview.counts.aiCompleted} done per later notes.
+              </p>
+              {cleanupPreview.warnings?.map((w, i) => (
+                <p key={i} className="text-xs text-amber-700">{w}</p>
+              ))}
+              {cleanupPreview.files.length ? (
+                <>
+                  <div className="max-h-56 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100 text-xs">
+                    {cleanupPreview.files.map((file) => (
+                      <div key={file.relativePath} className="p-2">
+                        <p className="font-medium text-gray-700 truncate">{file.relativePath}</p>
+                        {file.edits.map((edit, i) => (
+                          <p key={i} className="mt-1 text-gray-500 truncate">
+                            {edit.to === "" ? "− " : "• "}{(edit.to || edit.from).trim().slice(0, 110)} <span className="text-gray-400">({edit.reason})</span>
+                          </p>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCleanupApply}
+                    disabled={cleanupBusy}
+                    className="btn-primary text-xs"
+                  >
+                    {cleanupBusy ? "Applying..." : `Apply ${cleanupPreview.files.reduce((n, f) => n + f.edits.length, 0)} edits`}
+                  </button>
+                </>
+              ) : (
+                <p className="text-xs text-green-700">Nothing to clean up — action items look good.</p>
+              )}
+            </div>
+          )}
+          {cleanupResult && (
+            <p className={`mt-2 text-xs ${cleanupResult.ok ? "text-green-700" : "text-red-600"}`}>{cleanupResult.message}</p>
+          )}
         </div>
 
         <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3">

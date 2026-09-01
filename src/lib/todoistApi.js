@@ -20,6 +20,38 @@ export async function createTodoistTask(apiToken, payload) {
   return res.json().catch(() => ({}));
 }
 
+// Contents of tasks completed in the project since `since`, for marking the
+// matching Obsidian action items done.
+export async function listCompletedTaskContents(apiToken, projectId, since) {
+  const contents = [];
+  let cursor = null;
+
+  do {
+    const params = new URLSearchParams({
+      project_id: projectId,
+      since: since.toISOString(),
+      until: new Date().toISOString(),
+      limit: "100",
+    });
+    if (cursor) params.set("cursor", cursor);
+    const res = await fetch(`${TODOIST_API_BASE}/tasks/completed/by_completion_date?${params}`, {
+      headers: { Authorization: `Bearer ${apiToken}` },
+    });
+    if (!res.ok) {
+      const error = new Error(`Todoist responded ${res.status} while listing completed tasks`);
+      error.status = res.status;
+      throw error;
+    }
+    const data = await res.json();
+    for (const task of data.items || data.results || []) {
+      if (task?.content) contents.push(task.content);
+    }
+    cursor = data.next_cursor || null;
+  } while (cursor);
+
+  return contents;
+}
+
 // Contents of every active task in a project, for duplicate detection.
 export async function listProjectTaskContents(apiToken, projectId) {
   const contents = [];
