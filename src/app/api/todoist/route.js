@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { assertTrustedRequest } from "@/lib/requestSafety";
-import { createTodoistTask } from "@/lib/todoistApi";
+import { createTodoistTaskWithDueFallback } from "@/lib/todoistApi";
 
 // Relays task creation to Todoist so the browser never talks to Todoist
 // directly (CORS) and the token stays out of page-visible network calls to
@@ -40,7 +40,7 @@ export async function POST(request) {
       };
 
       try {
-        const data = await createTodoistTask(apiToken.trim(), payload);
+        const { data } = await createTodoistTaskWithDueFallback(apiToken.trim(), payload, task.fallbackDueString ? String(task.fallbackDueString) : undefined);
         created.push({ content, id: data.id || null });
       } catch (err) {
         failed.push({ content, error: err?.message || "Request failed" });

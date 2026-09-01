@@ -79,11 +79,16 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       if (!res.ok) throw new Error(data.error || "Backfill failed");
       const parts = [
         `${data.created} task${data.created !== 1 ? "s" : ""} added`,
+        data.droppedDues ? `${data.droppedDues} dated by their note's date (original due wasn't parseable)` : null,
         data.duplicates ? `${data.duplicates} already in Todoist` : null,
         data.failed?.length ? `${data.failed.length} failed` : null,
         data.capped ? "capped at 100 per run — run again for the rest" : null,
       ].filter(Boolean).join(", ");
-      setBackfillResult({ ok: !data.failed?.length, message: `${parts} (from ${data.scannedNotes} notes in the last month).` });
+      const failDetails = [...new Set((data.failed || []).map((f) => f.error))].slice(0, 3).join(" · ");
+      setBackfillResult({
+        ok: !data.failed?.length,
+        message: `${parts} (from ${data.scannedNotes} notes in the last month).${failDetails ? ` Errors: ${failDetails}` : ""}`,
+      });
     } catch (err) {
       setBackfillResult({ ok: false, message: err.message });
     } finally {

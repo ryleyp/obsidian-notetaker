@@ -32,9 +32,19 @@ export function todoistLabelForNote(folderPath, accounts) {
   return todoistLabelForFolder(folderPath);
 }
 
+// Source-citation markers like [T12] [N1] that generated notes append to
+// bullets; they don't belong in a task or a due date.
+function stripCitations(text) {
+  return String(text || "").replace(/\s*\[[TNEO]\d+\]/g, "").trim();
+}
+
 // Turns one "- [ ] Do the thing — **Owner:** X | **Due:** date" action-item
 // line into a Todoist task. Returns null for completed items.
-export function todoistTaskFromItemLine(line, { noteTitle = "", label = "" } = {}) {
+//
+// noteDate ("YYYY-MM-DD", usually from the note's title) becomes the task's
+// date when the item has no due of its own, and the retry date when Todoist
+// rejects a free-text due — so every task is at least dated by its meeting.
+export function todoistTaskFromItemLine(line, { noteTitle = "", label = "", noteDate = "" } = {}) {
   const trimmed = String(line || "").trim();
   if (!trimmed) return null;
   if (/^-\s*\[[xX]\]/.test(trimmed)) return null;
@@ -46,17 +56,28 @@ export function todoistTaskFromItemLine(line, { noteTitle = "", label = "" } = {
   if (ownerMatch) {
     content = content.slice(0, ownerMatch.index).trim();
     const dueMatch = ownerMatch[1].match(/\*\*Due:\*\*\s*(.+)$/);
-    if (dueMatch) dueString = dueMatch[1].trim();
+    if (dueMatch) dueString = stripCitations(dueMatch[1]);
   }
+  content = stripCitations(content);
   if (/^"?tbd"?\.?$/i.test(dueString)) dueString = "";
   if (!content) return null;
 
+  const fallbackDue = /^\d{4}-\d{2}-\d{2}$/.test(String(noteDate || "").trim())
+    ? noteDate.trim()
+    : undefined;
+
   return {
     content,
-    dueString: dueString || undefined,
+    dueString: dueString || fallbackDue || undefined,
+    fallbackDueString: fallbackDue,
     labels: label ? [label] : [],
     description: noteTitle ? `From: ${noteTitle}` : undefined,
   };
+}
+
+// "YYYY-MM-DD" from a note title like "2026-08-25 - Acme Sync", or "".
+export function noteDateFromTitle(title) {
+  return String(title || "").match(/(\d{4}-\d{2}-\d{2})/)?.[1] || "";
 }
 
 // Comparison key for duplicate detection: markdown emphasis, case, spacing,

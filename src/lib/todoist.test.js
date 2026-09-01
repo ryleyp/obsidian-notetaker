@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeTaskContent,
+  noteDateFromTitle,
   parseTodoistProjectId,
   todoistConfigured,
   todoistLabelForFolder,
@@ -97,5 +98,55 @@ describe("todoistConfigured", () => {
     expect(todoistConfigured({ todoistApiToken: "tok", todoistProject: "" })).toBe(false);
     expect(todoistConfigured({ todoistApiToken: "", todoistProject: "6fwxr0729Mwh88Gj" })).toBe(false);
     expect(todoistConfigured(undefined)).toBe(false);
+  });
+});
+
+describe("todoistTaskFromItemLine citation handling", () => {
+  it("strips citation markers from content and due, and TBD-with-citations means no due", () => {
+    const task = todoistTaskFromItemLine(
+      "- [ ] Send rollout plan to Dana [T12] [N1] — **Owner:** Ryley | **Due:** TBD [T50][T51]"
+    );
+    expect(task.content).toBe("Send rollout plan to Dana");
+    expect(task.dueString).toBeUndefined();
+  });
+
+  it("keeps a real due date after stripping citations", () => {
+    const task = todoistTaskFromItemLine(
+      "- [ ] Book the QBR room — **Owner:** Ryley | **Due:** 2026-09-05 [T3]"
+    );
+    expect(task.dueString).toBe("2026-09-05");
+  });
+});
+
+describe("note-date fallback for task dates", () => {
+  it("dates an item with no due by its note date", () => {
+    const task = todoistTaskFromItemLine("- [ ] Send summary — **Owner:** Ryley | **Due:** TBD", {
+      noteDate: "2026-08-25",
+    });
+    expect(task.dueString).toBe("2026-08-25");
+    expect(task.fallbackDueString).toBe("2026-08-25");
+  });
+
+  it("keeps an explicit due but records the note date as fallback", () => {
+    const task = todoistTaskFromItemLine("- [ ] Send summary — **Owner:** Ryley | **Due:** Week of August 20", {
+      noteDate: "2026-08-25",
+    });
+    expect(task.dueString).toBe("Week of August 20");
+    expect(task.fallbackDueString).toBe("2026-08-25");
+  });
+
+  it("ignores a malformed note date", () => {
+    const task = todoistTaskFromItemLine("- [ ] Send summary — **Owner:** Ryley | **Due:** TBD", {
+      noteDate: "August 25",
+    });
+    expect(task.dueString).toBeUndefined();
+    expect(task.fallbackDueString).toBeUndefined();
+  });
+});
+
+describe("noteDateFromTitle", () => {
+  it("extracts the ISO date from a note title", () => {
+    expect(noteDateFromTitle("2026-08-25 - Acme Sync")).toBe("2026-08-25");
+    expect(noteDateFromTitle("Untitled meeting")).toBe("");
   });
 });

@@ -6,7 +6,7 @@ import { detectAccount, matchVaultFolder } from "@/lib/accounts";
 import { apiFetch } from "@/lib/apiClient";
 import { formatTranscriptArchive } from "@/lib/sourceBundle";
 import { extractItems } from "@/lib/todoItems";
-import { pushTodoistTasks, todoistConfigured, todoistLabelForNote, todoistTaskFromItemLine } from "@/lib/todoist";
+import { noteDateFromTitle, pushTodoistTasks, todoistConfigured, todoistLabelForNote, todoistTaskFromItemLine } from "@/lib/todoist";
 
 // Writing to the vault: the note itself, plus the two best-effort weekly
 // side files (todos and the SFDC activity report), plus the transcript-only
@@ -134,7 +134,7 @@ export function useNoteSaving({ settings, meeting }) {
           const { actionItems } = extractItems(notes, settings.ownerNames || []);
           const label = todoistLabelForNote(folderPath, settings.accounts);
           const tasks = actionItems
-            .map((line) => todoistTaskFromItemLine(line, { noteTitle: meetingTitle, label }))
+            .map((line) => todoistTaskFromItemLine(line, { noteTitle: meetingTitle, label, noteDate: noteDateFromTitle(meetingTitle) }))
             .filter(Boolean);
           if (tasks.length) {
             const result = await pushTodoistTasks(apiFetch, settings, tasks);
