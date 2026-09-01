@@ -48,6 +48,17 @@ export function todoistTaskFromItemLine(line, { noteTitle = "", label = "" } = {
   };
 }
 
+// Comparison key for duplicate detection: markdown emphasis, case, spacing,
+// and trailing punctuation don't make two tasks different.
+export function normalizeTaskContent(content) {
+  return String(content || "")
+    .replace(/\*\*/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[.!]+$/, "")
+    .trim()
+    .toLowerCase();
+}
+
 export function todoistConfigured(settings) {
   return Boolean(settings?.todoistApiToken?.trim() && parseTodoistProjectId(settings?.todoistProject));
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  normalizeTaskContent,
   parseTodoistProjectId,
   todoistConfigured,
   todoistLabelForFolder,
@@ -59,6 +60,14 @@ describe("todoistTaskFromItemLine", () => {
     const task = todoistTaskFromItemLine("- Confirm training credits with Dana");
     expect(task.content).toBe("Confirm training credits with Dana");
     expect(task.dueString).toBeUndefined();
+  });
+});
+
+describe("normalizeTaskContent", () => {
+  it("ignores emphasis, case, spacing, and trailing punctuation", () => {
+    expect(normalizeTaskContent("**Send  License summary.**")).toBe("send license summary");
+    expect(normalizeTaskContent("send license summary")).toBe("send license summary");
+    expect(normalizeTaskContent("")).toBe("");
   });
 });
 

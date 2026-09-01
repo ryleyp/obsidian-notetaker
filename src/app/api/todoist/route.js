@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { assertTrustedRequest } from "@/lib/requestSafety";
-
-const TODOIST_TASKS_URL = "https://api.todoist.com/api/v1/tasks";
+import { createTodoistTask } from "@/lib/todoistApi";
 
 // Relays task creation to Todoist so the browser never talks to Todoist
 // directly (CORS) and the token stays out of page-visible network calls to
@@ -41,25 +40,12 @@ export async function POST(request) {
       };
 
       try {
-        const res = await fetch(TODOIST_TASKS_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiToken.trim()}`,
-          },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          failed.push({ content, error: `Todoist responded ${res.status}${text ? `: ${text.slice(0, 200)}` : ""}` });
-          // A bad token or project fails every task the same way; stop early.
-          if (res.status === 401 || res.status === 403 || res.status === 404) break;
-          continue;
-        }
-        const data = await res.json().catch(() => ({}));
+        const data = await createTodoistTask(apiToken.trim(), payload);
         created.push({ content, id: data.id || null });
       } catch (err) {
         failed.push({ content, error: err?.message || "Request failed" });
+        // A bad token or project fails every task the same way; stop early.
+        if (err?.status === 401 || err?.status === 403 || err?.status === 404) break;
       }
     }
 

@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { DEFAULT_ACCOUNTS } from "@/lib/accounts";
 import { apiFetch, approveLocalPaths } from "@/lib/apiClient";
+import { parseTodoistProjectId } from "@/lib/todoist";
 import { EXAMPLE_TRANSCRIPTS_PATH, EXAMPLE_VAULT_PATH } from "@/lib/hostPlatform";
 import ModelPicker from "@/components/ModelPicker";
 
@@ -49,8 +50,41 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
   const [suggestError, setSuggestError] = useState(null);
   const [pickedTerms, setPickedTerms] = useState(new Set()); // "account||term"
   const [includeKeyInExport, setIncludeKeyInExport] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillResult, setBackfillResult] = useState(null); // { ok, message }
   const [importMsg, setImportMsg] = useState(null); // { ok, message }
   const importInputRef = useRef(null);
+
+  async function handleTodoistBackfill() {
+    setBackfilling(true);
+    setBackfillResult(null);
+    try {
+      await approveLocalPaths({ vaultPath: form.vaultPath.trim() });
+      const res = await apiFetch("/api/todoist-backfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vaultPath: form.vaultPath.trim(),
+          apiToken: form.todoistApiToken.trim(),
+          projectId: parseTodoistProjectId(form.todoistProject),
+          ownerNames: form.ownerNamesText.split(",").map((n) => n.trim()).filter(Boolean),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Backfill failed");
+      const parts = [
+        `${data.created} task${data.created !== 1 ? "s" : ""} added`,
+        data.duplicates ? `${data.duplicates} already in Todoist` : null,
+        data.failed?.length ? `${data.failed.length} failed` : null,
+        data.capped ? "capped at 100 per run — run again for the rest" : null,
+      ].filter(Boolean).join(", ");
+      setBackfillResult({ ok: !data.failed?.length, message: `${parts} (from ${data.scannedNotes} notes in the last month).` });
+    } catch (err) {
+      setBackfillResult({ ok: false, message: err.message });
+    } finally {
+      setBackfilling(false);
+    }
+  }
 
   function formAccounts() {
     return form.accounts
@@ -449,6 +483,22 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
               value={form.todoistProject}
               onChange={(e) => handleChange("todoistProject", e.target.value)}
             />
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleTodoistBackfill}
+                disabled={backfilling || !form.vaultPath.trim() || !form.todoistApiToken.trim() || !parseTodoistProjectId(form.todoistProject)}
+                className="btn-secondary text-xs"
+              >
+                {backfilling ? "Scanning vault..." : "Push last month's to-dos"}
+              </button>
+              <span className="text-xs text-gray-500">
+                Scans every folder for notes from the last month and adds your open action items (your names, CS, or CSM). Items already in the project are skipped, so it&apos;s safe to re-run.
+              </span>
+            </div>
+            {backfillResult && (
+              <p className={`text-xs ${backfillResult.ok ? "text-green-700" : "text-red-600"}`}>{backfillResult.message}</p>
+            )}
           </div>
         </div>
 
