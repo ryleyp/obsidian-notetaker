@@ -101,7 +101,7 @@ export function buildPrompt(
   meetingTitle,
   suggestedAgreements = [],
   meetingContext = "",
-  { sourceBundle, accounts = [], followUp } = {}
+  { sourceBundle, accounts = [], followUp, ownerNames = [] } = {}
 ) {
   const title = meetingTitle || "Meeting Notes";
   const sources = sourceBundle || buildSourceBundle({ transcript, rawNotes: meetingContext });
@@ -157,6 +157,19 @@ CONFLICT FLAGGING: If the CSM's notes DIRECTLY conflict with the transcript on a
     ? `\nEA/EP NUMBERS ON FILE FOR THIS ACCOUNT (matched to this meeting by keyword): ${suggestedAgreements.map((g) => `${g.type} ${g.number}`).join(", ")}. In the SFDC Activity Entry, output an "**EA/EP Number(s):**" line listing the one(s) relevant to what this meeting was actually about, copied verbatim. If more than one clearly applies, list all. Do not invent or alter numbers, and do not list a number if nothing in the meeting relates to it.`
     : `\nNo EA/EP numbers are on file for this account. In the SFDC Activity Entry, output "**EA/EP Number(s):** None on file".`;
 
+  // Who the recording CSM is, so their first-person commitments get a real,
+  // filterable owner instead of "me" or a speaker label.
+  const csmNames = (ownerNames || []).map((n) => String(n || "").trim()).filter(Boolean);
+  const csmIdentityBlock = csmNames.length
+    ? `
+THE CSM (NOTE OWNER): The person who recorded this meeting is the CSM, known as: ${csmNames.join(", ")}.
+- In Action Items and Next Steps, attribute every commitment this person makes to "${csmNames[0]}" as the owner — never "me", "we", "I", or a generic speaker label, even when the transcript phrases it in first person.
+- If a first-person commitment cannot be confidently attributed to the CSM (another speaker may have said it), keep the speaker label as owner and flag it as unattributed.
+- For items owned by NI Customer Success as a team rather than the CSM personally, write "**Owner:** CS/CSM team".
+- Do not miss implicit commitments: "I'll send that over", "let me check on that", "I can set that up" are action items owned by the CSM even when nobody calls them action items.
+`
+    : "";
+
   const speakerGuidance = looksSpeakerLabeled(transcriptEvidence)
     ? `
 This transcript has been segmented by speaker — each turn is preceded by a label like **Name:** or **Speaker 1:**. Use these labels to attribute statements, decisions, questions, and commitments to the correct person throughout your notes (e.g. "David raised concerns about..." or "Speaker 2 confirmed..."). Do not blend or merge different speakers' statements together. When listing action item owners, use the specific speaker who committed to the item rather than a generic "team," unless it is genuinely a group commitment. The labels are a best-effort inference from conversational patterns, not verified — if a label is a generic "Speaker N" (no real name was available), it's fine to refer to that person by that label in your notes.
@@ -184,7 +197,7 @@ Lead with thanks and the meeting outcome. Include only supported follow-ups, ask
   return `Please analyze this meeting transcript and create detailed meeting notes.
 
 Meeting Title: ${title}
-${speakerGuidance}${multiTranscriptGuidance}${contextBlock}
+${csmIdentityBlock}${speakerGuidance}${multiTranscriptGuidance}${contextBlock}
 ---
 SOURCE BLOCKS:
 ${sourceBlock}
@@ -306,6 +319,7 @@ export async function POST(request) {
       sourceBundle,
       accounts = [],
       followUp,
+      ownerNames = [],
     } = body;
 
     if (!transcript || transcript.trim().length === 0) {
@@ -332,6 +346,7 @@ export async function POST(request) {
           accounts,
           sourceBundle,
           followUp,
+          ownerNames,
         }),
       }],
     });

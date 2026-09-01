@@ -276,6 +276,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           apiKey: settings.apiKey || undefined,
           model,
           sourceBundle,
+          ownerNames: settings.ownerNames || [],
         }),
       });
       const data = await res.json();

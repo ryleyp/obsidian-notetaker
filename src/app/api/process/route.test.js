@@ -130,3 +130,20 @@ describe("buildPrompt", () => {
     expect(prompt).toContain("must be at most 120 words and 800 characters or fewer");
   });
 });
+
+describe("buildPrompt CSM identity", () => {
+  it("names the CSM and demands attributed first-person commitments when ownerNames are set", () => {
+    const prompt = buildPrompt("I'll send the rollout summary tomorrow.", "Planning Sync", [], "", {
+      ownerNames: ["Ryley", "Ry"],
+    });
+    expect(prompt).toContain("THE CSM (NOTE OWNER)");
+    expect(prompt).toContain("known as: Ryley, Ry");
+    expect(prompt).toContain('attribute every commitment this person makes to "Ryley"');
+    expect(prompt).toContain("**Owner:** CS/CSM team");
+  });
+
+  it("omits the identity block when no ownerNames are configured", () => {
+    const prompt = buildPrompt("Jordan discussed the rollout.", "Planning Sync");
+    expect(prompt).not.toContain("THE CSM (NOTE OWNER)");
+  });
+});

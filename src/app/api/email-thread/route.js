@@ -14,10 +14,18 @@ export function buildEmailThreadPrompt({
   threadDate,
   context = "",
   sourceBundle,
+  ownerNames = [],
 }) {
   const title = threadTitle || "Email Thread";
   const sources = sourceBundle || buildSourceBundle({ emailThread, rawNotes: context });
   const sourceBlock = formatSourceBundleForPrompt(sources) || `[E1] Email thread\n${emailThread}`;
+
+  const csmNames = (ownerNames || []).map((n) => String(n || "").trim()).filter(Boolean);
+  const csmIdentityBlock = csmNames.length
+    ? `
+THE CSM (NOTE OWNER): The CSM saving this note is known as: ${csmNames.join(", ")}. In Action Items, attribute commitments this person makes in the thread to "${csmNames[0]}" as the owner — never "me" or "I" — and write "**Owner:** CS/CSM team" for NI Customer Success team items.
+`
+    : "";
 
   const isUpdate = (sources.existingNoteSources || []).length > 0;
   const updateBlock = isUpdate
@@ -36,7 +44,7 @@ This thread already has an Obsidian note from an earlier version of the thread. 
 
 Thread Title: ${title}
 Thread Date: ${threadDate || "Not specified"}
-
+${csmIdentityBlock}
 SOURCE BLOCKS:
 ${sourceBlock}
 ${updateBlock}
@@ -151,6 +159,7 @@ export async function POST(request) {
       apiKey,
       model,
       sourceBundle,
+      ownerNames = [],
     } = body;
 
     if (!emailThread?.trim()) {
@@ -179,6 +188,7 @@ export async function POST(request) {
           threadDate,
           context,
           sourceBundle,
+          ownerNames,
         }),
       }],
     });

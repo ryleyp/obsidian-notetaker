@@ -189,6 +189,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
         suggestedAgreements,
         sourceBundle: promptSourceBundle,
         accounts: settings.accounts || [],
+        ownerNames: settings.ownerNames || [],
         followUp: meeting.followUp || { enabled: false },
       },
       replacements,
