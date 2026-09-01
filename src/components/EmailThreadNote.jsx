@@ -20,7 +20,7 @@ import { latestEmailResponseDate } from "@/lib/emailDates";
 import { apiFetch } from "@/lib/apiClient";
 import { FAST_MODEL, calcCost, formatCost } from "@/lib/models";
 import { detectAccount } from "@/lib/accounts";
-import { pushTodoistTasks, todoistConfigured, todoistLabelForFolder } from "@/lib/todoist";
+import { pushTodoistTasks, todoistConfigured, todoistLabelForNote } from "@/lib/todoist";
 
 function todayIso() {
   const now = new Date();
@@ -310,7 +310,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           const result = await pushTodoistTasks(apiFetch, settings, [{
             content: `Respond to "${correctedTitle.trim() || "email thread"}" (if needed)`,
             dueString: "in 2 days",
-            labels: todoistLabelForFolder(selectedFolder) ? [todoistLabelForFolder(selectedFolder)] : [],
+            labels: todoistLabelForNote(selectedFolder, settings.accounts) ? [todoistLabelForNote(selectedFolder, settings.accounts)] : [],
             description: `From email note: ${saveTitle}`,
           }]);
           setTodoistResult(result?.count ? { ok: true } : { ok: false, error: result?.failed?.[0]?.error || "Task not created" });

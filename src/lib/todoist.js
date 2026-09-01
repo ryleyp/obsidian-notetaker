@@ -1,5 +1,7 @@
 // Helpers for pushing the CSM's own follow-ups into Todoist.
 
+import { detectAccount } from "./accounts";
+
 // Accepts a bare Todoist project id or a full project URL like
 // https://app.todoist.com/app/project/work-tasks-6fwxxx999Mwh88Gj
 // and returns the id Todoist's API expects.
@@ -19,6 +21,15 @@ export function parseTodoistProjectId(input) {
 export function todoistLabelForFolder(folderPath) {
   const name = String(folderPath || "").split("/").filter(Boolean).pop() || "";
   return name.trim().replace(/\s+/g, "-");
+}
+
+// Label for a note in a folder: the matched account's configured Todoist tag
+// when one is set in Settings, otherwise the folder name.
+export function todoistLabelForNote(folderPath, accounts) {
+  const account = detectAccount(folderPath, accounts || []);
+  const custom = (account.todoistLabel || "").trim();
+  if (custom) return custom.replace(/\s+/g, "-");
+  return todoistLabelForFolder(folderPath);
 }
 
 // Turns one "- [ ] Do the thing — **Owner:** X | **Due:** date" action-item

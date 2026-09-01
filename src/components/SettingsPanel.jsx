@@ -14,6 +14,7 @@ function accountToFormRow(a) {
   return {
     name: a.name || "",
     archiveFolder: a.archiveFolder || "",
+    todoistLabel: a.todoistLabel || "",
     aliasesText: (a.aliases || []).join(", "),
     keywordsText: (a.keywords || []).join(", "),
     agreements: (a.agreements || []).map((g) => ({
@@ -68,6 +69,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           apiToken: form.todoistApiToken.trim(),
           projectId: parseTodoistProjectId(form.todoistProject),
           ownerNames: form.ownerNamesText.split(",").map((n) => n.trim()).filter(Boolean),
+          accounts: formAccounts(),
         }),
       });
       const data = await res.json();
@@ -92,6 +94,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       .map((a) => ({
         name: a.name.trim(),
         archiveFolder: a.archiveFolder.trim(),
+        todoistLabel: (a.todoistLabel || "").trim(),
         aliases: a.aliasesText.split(",").map((s) => s.trim()).filter(Boolean),
         keywords: a.keywordsText.split(",").map((s) => s.trim()).filter(Boolean),
       }));
@@ -210,7 +213,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
   }
 
   function addAccount() {
-    setForm((f) => ({ ...f, accounts: [...f.accounts, { name: "", archiveFolder: "", aliasesText: "", keywordsText: "", agreements: [] }] }));
+    setForm((f) => ({ ...f, accounts: [...f.accounts, { name: "", archiveFolder: "", todoistLabel: "", aliasesText: "", keywordsText: "", agreements: [] }] }));
   }
 
   function removeAccount(i) {
@@ -254,6 +257,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       .map((a) => ({
         name: a.name.trim(),
         archiveFolder: a.archiveFolder.trim(),
+        todoistLabel: (a.todoistLabel || "").trim(),
         aliases: a.aliasesText.split(",").map((s) => s.trim()).filter(Boolean),
         keywords: a.keywordsText.split(",").map((s) => s.trim()).filter(Boolean),
         agreements: (a.agreements || [])
@@ -693,6 +697,13 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
                   placeholder="Keywords to exclude from other accounts (e.g. F-35, skunk works)"
                   value={a.keywordsText}
                   onChange={(e) => updateAccount(i, "keywordsText", e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Todoist tag for this account's tasks (defaults to the note's folder name)"
+                  value={a.todoistLabel}
+                  onChange={(e) => updateAccount(i, "todoistLabel", e.target.value)}
                 />
 
                 {/* EA / EP agreement numbers, each tied to identifying keywords */}

@@ -70,7 +70,7 @@ export function detectAccount(folderName, accounts) {
       .filter(Boolean)
       .map((value) => value.toLowerCase());
     if (folderHints.some((hint) => f.includes(hint))) {
-      return { name: acct.name, archiveFolder: acct.archiveFolder, aliases: acct.aliases || [] };
+      return { name: acct.name, archiveFolder: acct.archiveFolder, aliases: acct.aliases || [], todoistLabel: acct.todoistLabel || "" };
     }
   }
   return { ...INTERNAL };

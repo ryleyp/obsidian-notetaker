@@ -4,6 +4,7 @@ import {
   parseTodoistProjectId,
   todoistConfigured,
   todoistLabelForFolder,
+  todoistLabelForNote,
   todoistTaskFromItemLine,
 } from "./todoist";
 
@@ -28,6 +29,25 @@ describe("todoistLabelForFolder", () => {
     expect(todoistLabelForFolder("Accounts/Acme Corp")).toBe("Acme-Corp");
     expect(todoistLabelForFolder("Acme")).toBe("Acme");
     expect(todoistLabelForFolder("")).toBe("");
+  });
+});
+
+describe("todoistLabelForNote", () => {
+  const accounts = [
+    { name: "Acme Aerospace", aliases: ["acme"], todoistLabel: "acme aero" },
+    { name: "Globex", aliases: ["globex"] },
+  ];
+
+  it("uses the account's configured tag when set, made label-safe", () => {
+    expect(todoistLabelForNote("Acme Corp", accounts)).toBe("acme-aero");
+  });
+
+  it("falls back to the folder name when the account has no tag", () => {
+    expect(todoistLabelForNote("Globex Notes", accounts)).toBe("Globex-Notes");
+  });
+
+  it("falls back to the folder name for unmatched folders", () => {
+    expect(todoistLabelForNote("Random Folder", accounts)).toBe("Random-Folder");
   });
 });
 

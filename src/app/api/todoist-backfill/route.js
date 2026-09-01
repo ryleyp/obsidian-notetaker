@@ -4,7 +4,7 @@ import path from "path";
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { extractItems } from "@/lib/todoItems";
-import { normalizeTaskContent, todoistLabelForFolder, todoistTaskFromItemLine } from "@/lib/todoist";
+import { normalizeTaskContent, todoistLabelForNote, todoistTaskFromItemLine } from "@/lib/todoist";
 import { createTodoistTask, listProjectTaskContents } from "@/lib/todoistApi";
 
 // One-shot backfill: scan every account folder in the vault for notes from
@@ -69,7 +69,7 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { vaultPath, apiToken, projectId, ownerNames = [], days = 31 } = body;
+    const { vaultPath, apiToken, projectId, ownerNames = [], accounts = [], days = 31 } = body;
 
     if (!vaultPath) return NextResponse.json({ error: "Vault path is required" }, { status: 400 });
     if (!apiToken?.trim()) {
@@ -104,7 +104,7 @@ export async function POST(request) {
       scannedNotes += 1;
 
       const { actionItems } = extractItems(content, ownerNames);
-      const label = todoistLabelForFolder(file.folder);
+      const label = todoistLabelForNote(file.folder, accounts);
       const noteTitle = path.basename(file.filename, ".md");
       const noteTasks = actionItems
         .map((line) => todoistTaskFromItemLine(line, { noteTitle, label }))
