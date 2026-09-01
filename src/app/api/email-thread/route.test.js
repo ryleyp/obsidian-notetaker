@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildEmailThreadPrompt, createEmailThreadMessage } from "./route";
+import { buildSourceBundle } from "@/lib/sourceBundle";
 
 describe("buildEmailThreadPrompt", () => {
   it("builds a dated Obsidian email-thread note prompt with decisions and source citations", () => {
@@ -22,6 +23,28 @@ describe("buildEmailThreadPrompt", () => {
     expect(prompt).toContain("120 words or fewer and 800 characters or fewer");
     expect(prompt).toContain("Strategic Relationship Management → EA Admin Sync");
     expect(prompt).toContain("Cite every factual bullet or factual paragraph");
+    expect(prompt).not.toContain("EXISTING NOTE UPDATE");
+    expect(prompt).toContain("Create an Obsidian note from this email thread.");
+  });
+
+  it("adds update guidance when the existing note rides along as a source", () => {
+    const sourceBundle = buildSourceBundle({
+      emailThread: "Subject: License cleanup\n\nDana replied: portal access is now confirmed.",
+      existingNote: "# 2026-07-20 - License cleanup\n\n- [ ] Confirm portal access — **Owner:** Dana | **Due:** TBD",
+    });
+    const prompt = buildEmailThreadPrompt({
+      emailThread: "Subject: License cleanup\n\nDana replied: portal access is now confirmed.",
+      threadTitle: "License cleanup",
+      threadDate: "2026-07-27",
+      sourceBundle,
+    });
+
+    expect(prompt).toContain("Update the existing Obsidian note for this email thread");
+    expect(prompt).toContain("EXISTING NOTE UPDATE");
+    expect(prompt).toContain("[O1] Existing meeting note");
+    expect(prompt).toContain("When [O#] conflicts with [E#], use [E#]");
+    expect(prompt).toContain("Carry forward action items from [O#]");
+    expect(prompt).toContain("or [O#] for details preserved from the existing note");
   });
 });
 

@@ -120,6 +120,7 @@ export async function POST(request) {
     let finalPath;
     let backupPath = null;
     let updated = false;
+    let previousTitle = null;
 
     const matchedEmailPath = !existingRelativePath && upsertEmailThreadTitle
       ? findExistingEmailThread(targetDir, upsertEmailThreadTitle, meetingTitle)
@@ -139,6 +140,18 @@ export async function POST(request) {
 
       backupPath = replaceExistingNote(finalPath, targetDir, resolvedVault, notes);
       updated = true;
+      previousTitle = path.basename(finalPath, path.extname(finalPath));
+
+      // An email-thread update may carry a newer note date. Rename the file so
+      // the dated filename tracks the latest response instead of the first one.
+      if (matchedEmailPath && meetingTitle) {
+        const desiredFilename = `${sanitizeFilename(meetingTitle)}.md`;
+        if (desiredFilename !== path.basename(finalPath)) {
+          const renamedPath = uniqueFilePath(path.join(targetDir, desiredFilename));
+          fs.renameSync(finalPath, renamedPath);
+          finalPath = renamedPath;
+        }
+      }
     } else {
       const title = sanitizeFilename(meetingTitle || "Meeting Notes");
       const filename = `${title}.md`;
@@ -153,7 +166,7 @@ export async function POST(request) {
       filename: path.basename(finalPath),
       updated,
       matchedByTitle: !!matchedEmailPath,
-      previousMeetingTitle: updated ? path.basename(finalPath, path.extname(finalPath)) : null,
+      previousMeetingTitle: previousTitle,
       backupPath: backupPath ? path.relative(resolvedVault, backupPath) : null,
     });
   } catch (error) {

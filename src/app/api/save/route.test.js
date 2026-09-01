@@ -163,10 +163,11 @@ describe("/api/save", () => {
     expect(response.status).toBe(200);
     expect(data.updated).toBe(true);
     expect(data.matchedByTitle).toBe(true);
-    expect(data.savedPath).toBe(path.join("Acme", existingName));
+    // The file is renamed so its date tracks the latest response.
+    expect(data.savedPath).toBe(path.join("Acme", "2026-05-08 - Email - License cleanup.md"));
     expect(data.previousMeetingTitle).toBe("2026-05-01 - Email - License cleanup");
-    expect(fs.readFileSync(path.join(notesDir, existingName), "utf-8")).toBe("# updated email note");
-    expect(fs.existsSync(path.join(notesDir, "2026-05-08 - Email - License cleanup.md"))).toBe(false);
+    expect(fs.readFileSync(path.join(notesDir, "2026-05-08 - Email - License cleanup.md"), "utf-8")).toBe("# updated email note");
+    expect(fs.existsSync(path.join(notesDir, existingName))).toBe(false);
     expect(fs.readFileSync(path.join(vault, data.backupPath), "utf-8")).toBe("old email note");
   });
 

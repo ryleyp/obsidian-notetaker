@@ -19,17 +19,30 @@ export function buildEmailThreadPrompt({
   const sources = sourceBundle || buildSourceBundle({ emailThread, rawNotes: context });
   const sourceBlock = formatSourceBundleForPrompt(sources) || `[E1] Email thread\n${emailThread}`;
 
-  return `Create an Obsidian note from this email thread.
+  const isUpdate = (sources.existingNoteSources || []).length > 0;
+  const updateBlock = isUpdate
+    ? `
+EXISTING NOTE UPDATE
+This thread already has an Obsidian note from an earlier version of the thread. Source blocks labeled [O#] contain that note. New responses have arrived since it was written.
+- Regenerate the full note in the required structure, covering the ENTIRE thread — the earlier messages and the new responses — as one consolidated note. Lead each section with what is newest.
+- Preserve manual details, CSM context, decisions, and callouts from [O#] that the emails do not contradict, citing [O#].
+- The email thread is authoritative for what was written. When [O#] conflicts with [E#], use [E#] and drop the stale claim.
+- Never state a fact twice because it appears in both the old note and the thread — state it once with both citations.
+- Carry forward action items from [O#] that are still open. If a newer response completes one, mark it done (- [x]) instead of dropping it; if a newer response supersedes one, replace it.
+`
+    : "";
+
+  return `${isUpdate ? "Update the existing Obsidian note for this email thread with the newest responses." : "Create an Obsidian note from this email thread."}
 
 Thread Title: ${title}
 Thread Date: ${threadDate || "Not specified"}
 
 SOURCE BLOCKS:
 ${sourceBlock}
-
+${updateBlock}
 Rules:
 - Use only source block IDs above as citations.
-- Cite every factual bullet or factual paragraph with [E#] or [N#].
+- Cite every factual bullet or factual paragraph with [E#] or [N#]${isUpdate ? ", or [O#] for details preserved from the existing note" : ""}.
 - Do not include citation markers in the raw Source Email section.
 - Capture what the thread contains, what changed, what was decided, and what follow-up is needed.
 - If no decision was made, write "No explicit decisions in this thread."
