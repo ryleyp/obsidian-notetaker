@@ -206,10 +206,28 @@ export function useReportWorkflow({
 
   const activeNotes = loadedNotes ? loadedNotes.filter((n) => !excludedFiles.has(n.filename)) : null;
 
+  // Pre-populate the output with rows produced without Claude (e.g. SFDC
+  // entries harvested straight from notes) so a following append-mode
+  // synthesis builds on top of them.
+  function seedOutput(text) {
+    setOutput(text);
+    rawRef.current = text;
+    setPartial(false);
+    setSaved(false);
+    setSavedPath("");
+    setSynthError(null);
+    setSynthCost(null);
+    setRedactedCount(0);
+    setVerifyFindings(null);
+    setShowConfirm(false);
+  }
+
   // opts.append   — continue on top of existing raw output (resume)
   // opts.extraBody — merged into the request body (e.g. resumeRows)
+  // opts.notes    — send this subset instead of every active note
   async function handleSynthesize(opts = {}) {
-    if (!activeNotes?.length) return;
+    const notesToSend = opts.notes || activeNotes;
+    if (!notesToSend?.length) return;
     const controller = new AbortController();
     synthControllerRef.current = controller;
     setLastSynthesisRequest(opts);
@@ -246,7 +264,7 @@ export function useReportWorkflow({
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          notes: activeNotes,
+          notes: notesToSend,
           apiKey: settings.apiKey || undefined,
           model,
           today: TODAY,
@@ -446,6 +464,6 @@ export function useReportWorkflow({
     scrubReport, restoredIds, setRestoredIds, scrubOpen, setScrubOpen,
     model, setModel,
     history, openHistoryItem, restoredFromStorage,
-    invalidateNotes, handleLoadNotes, handleSynthesize, handleCancelSynthesis, handleRetrySynthesis, handleOutputChange, handleSave, handleReset,
+    invalidateNotes, handleLoadNotes, seedOutput, handleSynthesize, handleCancelSynthesis, handleRetrySynthesis, handleOutputChange, handleSave, handleReset,
   };
 }

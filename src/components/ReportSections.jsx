@@ -118,7 +118,7 @@ export function GeneratePanel({ scrub, model, setModel, synthError, onGenerate, 
 }
 
 // Pre-flight confirm: token/cost estimate, compact model picker, scrub, confirm.
-export function PreflightPanel({ intro, notes, loadCounts, model, setModel, scrub, onCancel, onConfirm, synthesizing }) {
+export function PreflightPanel({ intro, notes, loadCounts, model, setModel, scrub, onCancel, onConfirm, synthesizing, confirmLabel = "Confirm — Send to Claude" }) {
   const est = estimateUsage(notes, model);
   const limit = contextLimit(model);
   const warnAt = limit - 20_000;
@@ -154,7 +154,7 @@ export function PreflightPanel({ intro, notes, loadCounts, model, setModel, scru
       <div className="flex gap-3 mt-3">
         <button onClick={onCancel} className="btn-secondary flex-1">Cancel</button>
         <button onClick={onConfirm} disabled={synthesizing} className="btn-primary flex-1 py-3">
-          {synthesizing ? (<><Spinner className="w-5 h-5" /> Synthesizing…</>) : "Confirm — Send to Claude"}
+          {synthesizing ? (<><Spinner className="w-5 h-5" /> Synthesizing…</>) : confirmLabel}
         </button>
       </div>
     </div>

@@ -71,9 +71,17 @@ STEP-BY-STEP
    demo or a user group) is marked with a review flag.
 
 7. Review and edit.
-   You can edit any cell directly, especially the Comments column. To
-   redo a single row without rerunning everything, click "Regenerate"
-   on that row.
+   Rows badged "from note" were taken straight from the reviewed SFDC
+   Activity Entry already in that note — no model touched them. Rows
+   badged "generated" were classified by Claude from notes that had no
+   entry (handwritten or older notes). You can edit any cell directly,
+   especially the Comments column. To redo a single row without
+   rerunning everything, click the ↻ button on that row.
+
+   Tick "Filed" once you've logged a row in Salesforce. Filed rows are
+   remembered and greyed out the next time the same period is generated,
+   and the most recent ones are shown to Claude as examples so its
+   classification matches yours.
 
 8. When finished, click "Copy" to copy the Markdown table, or
    "Save to Obsidian" to write it as a file in your vault.
@@ -90,7 +98,9 @@ A table with one row per reportable activity:
   - Engagement Title short name for the activity (SFDC-style)
   - Type             one of the 6 SFDC EA Engagement Types
   - Subtype          specific subtype within that Type
-  - Comments         up to 1,000 characters, written for an executive reader
+  - EA/EP            the agreement number(s) the activity relates to
+  - Comments         up to 800 characters (the Salesforce field limit), in
+                     the same plain voice as the SFDC entries in your notes
 
 Example rows:
 

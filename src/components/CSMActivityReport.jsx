@@ -1,14 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import FolderSelector from "@/components/FolderSelector";
 import ActivityPreview from "@/components/ActivityPreview";
-import { detectAccount } from "@/lib/accounts";
+import { detectAccount, suggestAgreements } from "@/lib/accounts";
 import { reverseReplacements } from "@/lib/sanitize";
+import { redactForbiddenTerms } from "@/lib/scrub";
 import { apiFetch } from "@/lib/apiClient";
 import { useReportWorkflow, TODAY } from "@/hooks/useReportWorkflow";
 import { ScanButton, CountsBadges, NoteList, GeneratePanel, PreflightPanel, OutputHeader, HistoryMenu, BleedWarning, StrictToggle } from "@/components/ReportSections";
-import { parseActivityRows, rowsToNDJSON, rowsToMarkdown } from "@/lib/activityRows";
+import { parseActivityRows, rowsToNDJSON, rowsToMarkdown, sortRowsByDate } from "@/lib/activityRows";
+import { harvestNotes } from "@/lib/sfdcHarvest";
+import { isFiled, loadFiledRows, markFiled, recentFiledRows } from "@/lib/filedRows";
 
 function toISO(d) {
   return d.toISOString().split("T")[0];
@@ -72,6 +75,12 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   const [bleedRow, setBleedRow] = useState(null); // row index being flagged
   const [bleedAccount, setBleedAccount] = useState("");
   const [bleedTerms, setBleedTerms] = useState("");
+  const [filedMap, setFiledMap] = useState({});
+  const [regeneratingRow, setRegeneratingRow] = useState(null);
+
+  useEffect(() => {
+    setFiledMap(loadFiledRows());
+  }, []);
 
   const wf = useReportWorkflow({
     settings,
@@ -81,11 +90,37 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
       params.set("startDate", rangeStart);
       params.set("endDate", rangeEnd);
     },
-    synthesizeExtras: () => ({ promptType: "csm-activity", rangeStart, rangeEnd }),
+    synthesizeExtras: () => ({ promptType: "csm-activity", rangeStart, rangeEnd, exampleRows: recentFiledRows(filedMap) }),
   });
 
-  const rows = useMemo(() => parseActivityRows(wf.output), [wf.output]);
   const accountName = detectAccount(wf.selectedFolder, settings.accounts).name;
+  const account = (settings.accounts || []).find((a) => a.name === accountName) || null;
+
+  // Notes whose saved SFDC entry can be used as-is vs. notes Claude must read.
+  const harvestPlan = useMemo(() => harvestNotes(wf.activeNotes || []), [wf.activeNotes]);
+
+  const findSourceNote = (row) => {
+    const wanted = (row?.sourceTitle || "").toLowerCase();
+    if (!wanted) return null;
+    return (wf.loadedNotes || []).find((n) => {
+      const t = (n.title || "").toLowerCase();
+      return t === wanted || t.includes(wanted) || wanted.includes(t);
+    }) || null;
+  };
+
+  // Rows are newest-first and decorated with filed state and, for generated
+  // rows, the EA/EP number(s) matched from the source note's keywords.
+  const rows = useMemo(() => {
+    return sortRowsByDate(parseActivityRows(wf.output)).map((row) => {
+      let agreement = row.agreement;
+      if (!agreement && row.origin !== "note" && account) {
+        const note = findSourceNote(row);
+        if (note) agreement = suggestAgreements(note.content || "", account).map((g) => `${g.type} ${g.number}`).join(", ");
+      }
+      return { ...row, agreement, filed: isFiled(filedMap, row) };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wf.output, filedMap, account, wf.loadedNotes]);
 
   // note title (lowercased) -> origin, so the table can badge cross-folder sources
   const sourceInfo = useMemo(() => {
@@ -108,23 +143,104 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
     wf.invalidateNotes();
   }
 
+  // Harvest first, generate second: notes that already carry a reviewed SFDC
+  // entry become rows instantly; only the rest go to Claude.
+  function handleGenerate() {
+    const { rows: harvested, remaining } = harvestPlan;
+    wf.seedOutput(rowsToNDJSON(harvested));
+    if (remaining.length) wf.handleSynthesize({ append: harvested.length > 0, notes: remaining });
+  }
+
   function handleResume() {
     wf.handleSynthesize({
       append: true,
+      notes: harvestPlan.remaining.length ? harvestPlan.remaining : undefined,
       extraBody: { resumeRows: rows.map(({ eventDate, title }) => ({ eventDate, title })) },
     });
   }
 
-  // Second-pass audit: check each row against its cited source.
+  function toggleFiled(i) {
+    const row = rows[i];
+    if (!row) return;
+    setFiledMap((prev) => markFiled(prev, row, !row.filed));
+  }
+
+  // Redo one row: send just its source note back through the classifier and
+  // swap the result in place of the old row.
+  async function regenerateRow(i) {
+    const row = rows[i];
+    const note = row && findSourceNote(row);
+    if (!note) {
+      alert("The source note for this row isn't loaded — re-scan the folder first.");
+      return;
+    }
+    setRegeneratingRow(i);
+    const reps = settings.replacements || [];
+    try {
+      const res = await apiFetch("/api/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: [note],
+          apiKey: settings.apiKey || undefined,
+          model: wf.model,
+          today: TODAY,
+          replacements: reps,
+          corrections: settings.corrections || [],
+          accountName,
+          allAccounts: settings.accounts || [],
+          restoredIds: [...wf.restoredIds],
+          promptType: "csm-activity",
+          rangeStart,
+          rangeEnd,
+          exampleRows: recentFiledRows(filedMap),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Regeneration failed");
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let text = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop();
+        for (const part of parts) {
+          if (!part.startsWith("data: ")) continue;
+          const evt = JSON.parse(part.slice(6));
+          if (evt.type === "delta") text += evt.text;
+          else if (evt.type === "error") throw new Error(evt.message);
+        }
+      }
+      const restored = reps.length ? reverseReplacements(text, reps) : text;
+      const fresh = parseActivityRows(redactForbiddenTerms(restored, accountName, settings.accounts || []).text)
+        .map((r) => ({ ...r, origin: "generated" }));
+      if (!fresh.length) throw new Error("Claude returned no rows for this note.");
+      wf.setOutput(rowsToNDJSON([...rows.slice(0, i), ...fresh, ...rows.slice(i + 1)]));
+    } catch (e) {
+      alert(`Regenerate failed: ${e.message}`);
+    } finally {
+      setRegeneratingRow(null);
+    }
+  }
+
+  // Second-pass audit of generated rows against their cited sources. Rows
+  // harvested from notes were reviewed at save time and are skipped.
   async function handleVerify() {
-    if (!rows.length || !wf.activeNotes?.length) return;
+    const toVerify = rows.map((row, i) => ({ row, i })).filter(({ row }) => row.origin !== "note");
+    if (!toVerify.length || !wf.activeNotes?.length) return;
     setVerifying(true);
     try {
       const res = await apiFetch("/api/verify-rows", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          rows,
+          rows: toVerify.map(({ row }) => row),
           notes: wf.activeNotes,
           accountName,
           allAccounts: settings.accounts || [],
@@ -137,8 +253,13 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Verification failed");
       const reps = settings.replacements || [];
+      const verdictByRowIndex = new Map();
+      for (const v of data.verdicts || []) {
+        const target = toVerify[v.index];
+        if (target) verdictByRowIndex.set(target.i, v);
+      }
       const next = rows.map((r, i) => {
-        const v = (data.verdicts || []).find((x) => x.index === i);
+        const v = verdictByRowIndex.get(i);
         if (!v) return r;
         const reason = reps.length ? reverseReplacements(v.reason || "", reps) : v.reason || "";
         return { ...r, verify: v.supported ? "passed" : "failed", verifyReason: reason };
@@ -293,15 +414,25 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
 
           {wf.activeNotes?.length > 0 && wf.showConfirm && (
             <PreflightPanel
-              intro={<>Sending <strong>{wf.activeNotes.length}</strong> notes to Claude to generate an EA Engagement Activity Report table.</>}
-              notes={wf.activeNotes}
+              intro={
+                harvestPlan.remaining.length === 0 ? (
+                  <>All <strong>{harvestPlan.rows.length}</strong> notes already carry a reviewed SFDC Activity Entry — the table is built straight from those. Nothing is sent to Claude.</>
+                ) : (
+                  <>
+                    <strong>{harvestPlan.rows.length}</strong> note{harvestPlan.rows.length !== 1 ? "s" : ""} already carr{harvestPlan.rows.length !== 1 ? "y" : "ies"} a reviewed SFDC Activity Entry and will be used as-is.
+                    Sending the other <strong>{harvestPlan.remaining.length}</strong> note{harvestPlan.remaining.length !== 1 ? "s" : ""} (no entry) to Claude to classify.
+                  </>
+                )
+              }
+              notes={harvestPlan.remaining.length ? harvestPlan.remaining : wf.activeNotes}
               loadCounts={wf.loadCounts}
               model={wf.model}
               setModel={wf.setModel}
               scrub={scrub}
               onCancel={() => wf.setShowConfirm(false)}
-              onConfirm={() => wf.handleSynthesize()}
+              onConfirm={handleGenerate}
               synthesizing={wf.synthesizing}
+              confirmLabel={harvestPlan.remaining.length === 0 ? "Build table from notes" : "Confirm — Send to Claude"}
             />
           )}
         </div>
@@ -386,6 +517,9 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
               onVerify={handleVerify}
               verifying={verifying}
               onFlagBleed={openBleedPanel}
+              onToggleFiled={toggleFiled}
+              onRegenerateRow={regenerateRow}
+              regeneratingRow={regeneratingRow}
             />
           )}
           {wf.synthesizing && !wf.output && (

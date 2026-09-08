@@ -17,7 +17,11 @@ export function parseActivityRows(text) {
       type: obj.type || "",
       subtype: obj.subtype || "",
       comments: obj.comments || "",
+      agreement: obj.agreement || "",
       sourceTitle: obj.sourceTitle || "",
+      // "note" = harvested from the note's own reviewed SFDC entry;
+      // "generated" (default) = classified by Claude from the note body.
+      origin: obj.origin === "note" ? "note" : "generated",
       review: !!obj.review,
       reviewReason: obj.reviewReason || "",
       // Post-generation verification verdict (set by the verify pass).
@@ -34,12 +38,26 @@ export function rowsToNDJSON(rows) {
 
 const esc = (s) => (s || "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ").trim();
 
+// Newest first; rows without a date sink to the bottom. Stable for ties so
+// Claude's emission order survives within a day.
+export function sortRowsByDate(rows) {
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const ad = a.row.eventDate || "";
+      const bd = b.row.eventDate || "";
+      if (ad !== bd) return ad ? (bd ? bd.localeCompare(ad) : -1) : 1;
+      return a.index - b.index;
+    })
+    .map(({ row }) => row);
+}
+
 // Markdown table used for Save to Obsidian / Copy All.
 export function rowsToMarkdown(rows) {
   const lines = [
-    "| Event Date | Title | Type | Subtype | Comments |",
-    "|------------|-------|------|---------|----------|",
-    ...rows.map((r) => `| ${esc(r.eventDate)} | ${esc(r.title)} | ${esc(r.type)} | ${esc(r.subtype)} | ${esc(r.comments)} |`),
+    "| Event Date | Title | Type | Subtype | EA/EP | Comments |",
+    "|------------|-------|------|---------|-------|----------|",
+    ...rows.map((r) => `| ${esc(r.eventDate)} | ${esc(r.title)} | ${esc(r.type)} | ${esc(r.subtype)} | ${esc(r.agreement)} | ${esc(r.comments)} |`),
   ];
   return lines.join("\n");
 }

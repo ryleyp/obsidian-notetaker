@@ -38,7 +38,9 @@ A Markdown table with one row per reportable activity:
 - Engagement Title — short descriptive name matching SFDC style
 - Type            — one of 6 EA Engagement Types (see taxonomy below)
 - Subtype         — specific subtype within that Type
-- Comments        — up to 1,000 characters; executive-facing, CSM as subject
+- EA/EP           — agreement number(s) the activity relates to
+- Comments        — up to 800 characters (Salesforce limit); same plain voice
+                    as the SFDC Activity Entry in each note
 
 
 WHAT IT INCLUDES / EXCLUDES

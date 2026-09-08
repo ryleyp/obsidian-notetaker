@@ -11,10 +11,14 @@ const COLUMNS = [
   { key: "title", label: "Title" },
   { key: "type", label: "Type" },
   { key: "subtype", label: "Subtype" },
+  { key: "agreement", label: "EA/EP" },
   { key: "comments", label: "Comments" },
 ];
 
-export default function ActivityPreview({ rows, rawText, streaming, onUpdateRow, onSave, saving, saved, savedPath, cost, sourceInfo, onVerify, verifying, onFlagBleed }) {
+export default function ActivityPreview({
+  rows, rawText, streaming, onUpdateRow, onSave, saving, saved, savedPath, cost, sourceInfo,
+  onVerify, verifying, onFlagBleed, onToggleFiled, onRegenerateRow, regeneratingRow,
+}) {
   const [viewMode, setViewMode] = useState("table");
   const [copiedKey, setCopiedKey] = useState(null);
   const [editing, setEditing] = useState(null); // "row-col" key
@@ -29,6 +33,9 @@ export default function ActivityPreview({ rows, rawText, streaming, onUpdateRow,
   const markdown = rows.length ? rowsToMarkdown(rows) : rawText;
   const reviewCount = rows.filter((r) => r.review).length;
   const failedCount = rows.filter((r) => r.verify === "failed").length;
+  const harvestedCount = rows.filter((r) => r.origin === "note").length;
+  const filedCount = rows.filter((r) => r.filed).length;
+  const unfiled = rows.filter((r) => !r.filed);
 
   // Look up where a row's cited source note came from (cross-folder = risky).
   const sourceMeta = (row) => {
@@ -50,6 +57,16 @@ export default function ActivityPreview({ rows, rawText, streaming, onUpdateRow,
           )}
           {rows.length > 0 && (
             <span className="text-xs text-gray-400">{rows.length} activit{rows.length !== 1 ? "ies" : "y"}</span>
+          )}
+          {harvestedCount > 0 && (
+            <span className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5" title="Taken straight from the reviewed SFDC entry in the note — no model involved">
+              {harvestedCount} from notes
+            </span>
+          )}
+          {filedCount > 0 && (
+            <span className="text-xs text-gray-500 bg-gray-100 border border-gray-200 rounded-full px-2 py-0.5">
+              {filedCount} already filed
+            </span>
           )}
           {!streaming && reviewCount > 0 && (
             <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
@@ -90,14 +107,19 @@ export default function ActivityPreview({ rows, rawText, streaming, onUpdateRow,
               Markdown
             </button>
           </div>
-          {onVerify && rows.length > 0 && !streaming && (
+          {onVerify && rows.some((r) => r.origin !== "note") && !streaming && (
             <button
               onClick={onVerify}
               disabled={verifying}
               className="btn-secondary text-xs px-3 py-1.5"
-              title="Second-pass audit: a fast model checks each row against its cited source to confirm it's genuinely this account's activity"
+              title="Second-pass audit of the generated rows: a fast model checks each against its cited source. Rows taken from notes are skipped — you already reviewed those."
             >
               {verifying ? "Verifying…" : "Verify vs sources"}
+            </button>
+          )}
+          {filedCount > 0 && unfiled.length > 0 && (
+            <button onClick={() => copy(rowsToMarkdown(unfiled), "unfiled")} className="btn-secondary text-xs px-3 py-1.5" title="Copy only the rows you haven't filed yet">
+              {copiedKey === "unfiled" ? "Copied!" : `Copy ${unfiled.length} unfiled`}
             </button>
           )}
           <button onClick={() => copy(markdown, "all")} className="btn-secondary text-xs px-3 py-1.5">
@@ -118,13 +140,14 @@ export default function ActivityPreview({ rows, rawText, streaming, onUpdateRow,
         ) : (
           <>
             <p className="text-xs text-gray-400 mb-2">
-              Click a cell to copy it for Salesforce entry. Click a comment to edit it in place.
+              Click a cell to copy it for Salesforce entry. Click a comment to edit it in place. Tick Filed once a row is logged in SFDC — it stays greyed out on future runs.
               {reviewCount > 0 && " Rows marked ⚠ need a classification double-check."}
             </p>
             <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
               <table className="w-full text-xs border-collapse">
                 <thead>
                   <tr className="bg-gray-100">
+                    <th className="border border-gray-200 px-2 py-1.5 text-left font-semibold sticky top-0 bg-gray-100" title="Logged in Salesforce">Filed</th>
                     {COLUMNS.map((c) => (
                       <th key={c.key} className="border border-gray-200 px-2 py-1.5 text-left font-semibold sticky top-0 bg-gray-100">{c.label}</th>
                     ))}
@@ -133,7 +156,21 @@ export default function ActivityPreview({ rows, rawText, streaming, onUpdateRow,
                 </thead>
                 <tbody>
                   {rows.map((row, r) => (
-                    <tr key={r} className={row.verify === "failed" ? "bg-red-50" : row.review ? "bg-amber-50" : r % 2 === 1 ? "bg-gray-50" : ""}>
+                    <tr
+                      key={r}
+                      className={`${row.filed ? "opacity-50 " : ""}${
+                        row.verify === "failed" ? "bg-red-50" : row.review ? "bg-amber-50" : r % 2 === 1 ? "bg-gray-50" : ""
+                      }`}
+                    >
+                      <td className="border border-gray-200 px-2 py-1.5 align-top text-center">
+                        <input
+                          type="checkbox"
+                          checked={!!row.filed}
+                          onChange={() => onToggleFiled?.(r)}
+                          title={row.filed ? "Filed in Salesforce — untick to bring it back" : "Mark as filed in Salesforce"}
+                          className="cursor-pointer"
+                        />
+                      </td>
                       {COLUMNS.map((c) => {
                         const key = `${r}-${c.key}`;
                         const text = row[c.key] || "";
@@ -169,11 +206,16 @@ export default function ActivityPreview({ rows, rawText, streaming, onUpdateRow,
                           >
                             {copiedKey === key && <span className="text-green-600 font-medium mr-1">✓ Copied</span>}
                             {text}
-                            {isTitle && row.sourceTitle && (
-                              <div className="mt-0.5 text-[10px] text-gray-400">
-                                from: {row.sourceTitle}
+                            {isTitle && (
+                              <div className="mt-0.5 text-[10px] text-gray-400 flex flex-wrap items-center gap-1">
+                                {row.origin === "note" ? (
+                                  <span className="text-green-700 bg-green-50 border border-green-200 rounded-full px-1" title="Taken from the reviewed SFDC entry in this note">from note</span>
+                                ) : (
+                                  <span className="text-gray-500 bg-gray-100 border border-gray-200 rounded-full px-1" title="Classified by Claude from the note body">generated</span>
+                                )}
+                                {row.sourceTitle && <span>from: {row.sourceTitle}</span>}
                                 {meta?.source === "cross-vault" && (
-                                  <span className="ml-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1" title="Source note came from another folder — double-check attribution">
+                                  <span className="text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1" title="Source note came from another folder — double-check attribution">
                                     cross-folder
                                   </span>
                                 )}
@@ -212,6 +254,16 @@ export default function ActivityPreview({ rows, rawText, streaming, onUpdateRow,
                               </svg>
                             )}
                           </button>
+                          {onRegenerateRow && !streaming && (
+                            <button
+                              onClick={() => onRegenerateRow(r)}
+                              disabled={regeneratingRow !== null && regeneratingRow !== undefined}
+                              title={row.origin === "note" ? "Have Claude re-read this note and rewrite the row (replaces the note's own entry in this table)" : "Have Claude re-read the source note and redo just this row"}
+                              className={`text-xs p-0.5 ${regeneratingRow === r ? "text-obsidian-600 animate-spin" : "text-gray-400 hover:text-obsidian-600"}`}
+                            >
+                              ↻
+                            </button>
+                          )}
                           {row.review && (
                             <span title={row.reviewReason || "Classification uncertain"} className="text-amber-600 cursor-help">⚠</span>
                           )}

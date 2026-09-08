@@ -113,10 +113,10 @@ tailored and you may want to adjust them:
 - **Accounts** (Settings) — set up your own account names, aliases, and
   keywords. Aliases drive cross-folder search; keywords keep one account's
   terms out of another account's summary.
-- **EA Activity taxonomy** — the Type/Subtype categories in the EA Activity
-  tab are specific to NI's Salesforce setup. If your categories differ,
-  they're defined in `src/app/api/synthesize/route.js` (look for
-  `buildCSMActivityPrompt`).
+- **SFDC taxonomy** — the Type/Subtype categories used by the SFDC Activity
+  Entry in every note and by the EA Activity tab are specific to NI's
+  Salesforce setup. If your categories differ, they're defined once in
+  `src/lib/sfdcTaxonomy.js` and every prompt reads from there.
 - **Report structure** — the Account Status pillars and sections are also
   in `src/app/api/synthesize/route.js`.
 

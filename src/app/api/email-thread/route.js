@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { DEFAULT_MODEL, firstTextBlock, maxOutputTokens } from "@/lib/models";
 import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBundle";
+import { taxonomyForNotePrompt } from "@/lib/sfdcTaxonomy";
 
 const SYSTEM_PROMPT = `You turn customer-success email threads into concise Obsidian notes for an NI Customer Success Manager.
 
@@ -134,14 +135,8 @@ Summary: <what the email thread covered and what happened>
 Outcomes: <explicit outcomes, or "None stated">
 Next steps: <the CSM's own 1-3 actions, or "None">
 
-Approved Type → Subtype pairs:
-- Training or Support Webinar → Other
-- Internal Alignment and Collaboration → Account Planning; Account Team Kickoff; Product Feedback
-- Onboarding & Kick-off → EA Admin Onboarding; EA End-User Kick-off; Other
-- Strategic Relationship Management → EA Admin Sync; Escalation / Risk Management; QBR / EBR; Product Roadmap Review; SystemLink Enterprise Governance; Other
-- User Groups → Demo Day; User Group; Other
-- Value Realization and Success Stories → Case Study; Customer Testimonial; Outcome Review; SystemLink ROI Review; Other
-- Other → Other
+Approved Type → Subtype pairs (copy the exact text):
+${taxonomyForNotePrompt()}
 
 Choose the primary purpose of the thread and the most specific valid pair. The Summary/Notes block must be 120 words or fewer and 800 characters or fewer. Use past tense, no first person, no citations, and do not invent outcomes, owners, numbers, or next steps.`;
 }

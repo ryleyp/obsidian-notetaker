@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { parseActivityRows, rowsToMarkdown, rowsToNDJSON } from "@/lib/activityRows";
+import { parseActivityRows, rowsToMarkdown, rowsToNDJSON, sortRowsByDate } from "@/lib/activityRows";
 
-const ROW = { eventDate: "2026-04-12", title: "EA Admin Sync", type: "Strategic Relationship Management", subtype: "EA Admin Sync", comments: "CSM synced with Dana Voss.", sourceTitle: "Q2 Admin Sync", review: false, reviewReason: "", verify: "", verifyReason: "" };
+const ROW = { eventDate: "2026-04-12", title: "EA Admin Sync", type: "Strategic Relationship Management", subtype: "EA Admin Sync", comments: "CSM synced with Dana Voss.", agreement: "", sourceTitle: "Q2 Admin Sync", origin: "generated", review: false, reviewReason: "", verify: "", verifyReason: "" };
 
 describe("parseActivityRows", () => {
   it("parses one JSON object per line", () => {
@@ -63,5 +63,29 @@ describe("round trip", () => {
   it("NDJSON serialization reparses to the same rows", () => {
     const rows = [ROW, { ...ROW, title: "Two", review: true, reviewReason: "why" }];
     expect(parseActivityRows(rowsToNDJSON(rows))).toEqual(rows);
+  });
+});
+
+describe("origin and agreement passthrough", () => {
+  it("defaults origin to generated and keeps harvested markers", () => {
+    const rows = parseActivityRows(
+      '{"title":"A","comments":"x"}\n{"title":"B","comments":"y","origin":"note","agreement":"EA 1"}'
+    );
+    expect(rows[0].origin).toBe("generated");
+    expect(rows[0].agreement).toBe("");
+    expect(rows[1].origin).toBe("note");
+    expect(rows[1].agreement).toBe("EA 1");
+  });
+});
+
+describe("sortRowsByDate", () => {
+  it("orders newest first, keeps same-day order, sinks undated rows", () => {
+    const rows = [
+      { eventDate: "2026-08-01", title: "old" },
+      { eventDate: "", title: "undated" },
+      { eventDate: "2026-08-20", title: "new-a" },
+      { eventDate: "2026-08-20", title: "new-b" },
+    ];
+    expect(sortRowsByDate(rows).map((r) => r.title)).toEqual(["new-a", "new-b", "old", "undated"]);
   });
 });
