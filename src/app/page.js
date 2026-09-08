@@ -470,7 +470,7 @@ export default function Home() {
 
       <footer className="border-t border-gray-200 bg-white/80">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3 text-center text-xs text-gray-400">
-          Obsidian Meeting Notes · v{process.env.NEXT_PUBLIC_APP_VERSION || "development"}
+          Obsidian Meeting Notes · Version {process.env.NEXT_PUBLIC_BUILD_DATE || "development"}
         </div>
       </footer>
     </div>

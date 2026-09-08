@@ -9,6 +9,8 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.j
 const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: packageJson.version,
+    // Shown in the footer: the local date this build (or dev server) started.
+    NEXT_PUBLIC_BUILD_DATE: new Date().toLocaleDateString("en-CA"),
     // The app always runs on the same machine as the browser, so the server's
     // platform is the user's platform. Exposing it here keeps the value
     // identical on both sides of hydration.
