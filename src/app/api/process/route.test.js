@@ -157,5 +157,7 @@ describe("buildPrompt meeting-lead context", () => {
     expect(prompt).toContain("WHO LED / THE CSM'S ROLE");
     expect(prompt).toContain("AUTHORITATIVE");
     expect(prompt).toContain("Jordan (FAE) ran the demo; I only observed.");
+    expect(prompt).toContain("do NOT mention that");
+    expect(prompt).toContain("Never write that the CSM observed");
   });
 });
