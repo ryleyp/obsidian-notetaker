@@ -9,6 +9,7 @@ import {
 } from "@/lib/fileSafety";
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
+import { stripCitationMarkers } from "@/lib/sourceBundle";
 
 function normalizedEmailThreadTitle(value) {
   // Reply prefixes stack up ("RE: RE: FW: subject"); strip them before
@@ -92,7 +93,7 @@ export async function POST(request) {
 
     const body = await request.json();
     const {
-      notes,
+      notes: rawNotes,
       vaultPath,
       folderPath,
       meetingTitle,
@@ -100,6 +101,10 @@ export async function POST(request) {
       upsertEmailThreadTitle,
       dedupeContent,
     } = body;
+
+    // Source markers ([T1], [N2]...) only mean something inside the app's
+    // source panel; the vault copy must never carry them.
+    const notes = stripCitationMarkers(rawNotes);
 
     if (!notes) return NextResponse.json({ error: "Notes content is required" }, { status: 400 });
     if (!vaultPath) return NextResponse.json({ error: "Vault path is required" }, { status: 400 });

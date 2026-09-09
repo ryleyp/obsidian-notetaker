@@ -4,7 +4,7 @@ import { Children, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatCost } from "@/lib/models";
-import { extractReferencedSourceIds, sourceExcerpt } from "@/lib/sourceBundle";
+import { extractReferencedSourceIds, sourceExcerpt, stripCitationMarkers } from "@/lib/sourceBundle";
 
 // One-click revision instructions for the regenerate panel. Each fills the
 // instruction box so the CSM can tweak before submitting.
@@ -100,7 +100,7 @@ export default function NotesPreview({
   }, [referencedIds, sources]);
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(notes).catch(() => {});
+    navigator.clipboard.writeText(stripCitationMarkers(notes)).catch(() => {});
   };
 
   const copyFollowUp = () => {

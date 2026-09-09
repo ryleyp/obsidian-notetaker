@@ -11,6 +11,7 @@ import { normalizeTaskContent } from "@/lib/todoist";
 import { listCompletedTaskContents } from "@/lib/todoistApi";
 import { collectNoteFiles, noteDate } from "@/lib/vaultScan";
 import { cleanupActionItems, completeActionItemEdit, openActionItemLines } from "@/lib/actionItemCleanup";
+import { stripCitationMarkers } from "@/lib/sourceBundle";
 
 // Action-item cleanup over recent notes, in two calls:
 //   mode "preview" — compute proposed edits (mechanical normalization, Todoist
@@ -164,8 +165,21 @@ export async function POST(request) {
       if (!fileEdits.has(relativePath)) fileEdits.set(relativePath, { relativePath, folder, edits: [] });
       fileEdits.get(relativePath).edits.push(edit);
     };
-    const counts = { mechanical: 0, todoistCompleted: 0, aiCompleted: 0 };
+    const counts = { citations: 0, mechanical: 0, todoistCompleted: 0, aiCompleted: 0 };
     const warnings = [];
+
+    // 0. Source markers ([T1], [N2]...) left in notes by older versions of
+    //    the app. This edit replaces the whole note text and goes first, and
+    //    every later pass works from the stripped text so its edits still
+    //    match after this one is applied.
+    for (const note of notes) {
+      const stripped = stripCitationMarkers(note.content);
+      if (stripped === note.content) continue;
+      const removed = (note.content.match(/\[[TNEO]\d+\]/g) || []).length;
+      addEdit(note.relativePath, note.folder, { from: note.content, to: stripped, reason: `removed ${removed} source marker${removed !== 1 ? "s" : ""}` });
+      counts.citations += removed;
+      note.content = stripped;
+    }
 
     // 1. Mechanical normalization + in-note dedupe.
     for (const note of notes) {

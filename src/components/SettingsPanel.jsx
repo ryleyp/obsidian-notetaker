@@ -576,9 +576,9 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
         <div>
           <label className="label">Action Item Cleanup</label>
           <p className="text-xs text-gray-500 mb-2">
-            Scans notes from the past 2 months: normalizes action-item lines (owners like &quot;me&quot; become your name,
-            duplicates are removed), checks off items you completed in Todoist, and — with your API key — items that
-            later notes show were done. Nothing is written until you apply, and every changed note is backed up first.
+            Scans notes from the past 2 months: removes leftover source markers like [T1] [N2], normalizes action-item
+            lines (owners like &quot;me&quot; become your name, duplicates are removed), checks off items you completed in
+            Todoist, and — with your API key — items that later notes show were done. Nothing is written until you apply, and every changed note is backed up first.
           </p>
           <button
             type="button"
@@ -591,7 +591,8 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           {cleanupPreview && (
             <div className="mt-2 space-y-2">
               <p className="text-xs text-gray-600">
-                {cleanupPreview.scannedNotes} notes scanned — {cleanupPreview.counts.mechanical} formatting fix{cleanupPreview.counts.mechanical !== 1 ? "es" : ""},{" "}
+                {cleanupPreview.scannedNotes} notes scanned — {cleanupPreview.counts.citations || 0} source marker{cleanupPreview.counts.citations !== 1 ? "s" : ""} to remove,{" "}
+                {cleanupPreview.counts.mechanical} formatting fix{cleanupPreview.counts.mechanical !== 1 ? "es" : ""},{" "}
                 {cleanupPreview.counts.todoistCompleted} done in Todoist, {cleanupPreview.counts.aiCompleted} done per later notes.
               </p>
               {cleanupPreview.warnings?.map((w, i) => (

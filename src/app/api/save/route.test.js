@@ -171,6 +171,27 @@ describe("/api/save", () => {
     expect(fs.readFileSync(path.join(vault, data.backupPath), "utf-8")).toBe("old email note");
   });
 
+  it("strips source citation markers before writing to the vault", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const notesDir = path.join(vault, "Acme");
+    fs.mkdirSync(notesDir, { recursive: true });
+    allowDirectory(vault, "Vault path");
+
+    const response = await postSave({
+      notes: "# 2026-09-01 - Sync\n\n## Meeting Notes\n\n- Dana approved the rollout. [T1]\n- Budget is 40 seats [T2] [N1]\n\n## Action Items\n\n- [ ] Send runbook — **Owner:** Ryley | **Due:** TBD [T3]\n",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "2026-09-01 - Sync",
+    });
+    const data = await response.json();
+    const saved = fs.readFileSync(path.join(vault, data.savedPath), "utf-8");
+
+    expect(saved).not.toMatch(/\[[TNEO]\d+\]/);
+    expect(saved).toContain("- Dana approved the rollout.\n");
+    expect(saved).toContain("- [ ] Send runbook — **Owner:** Ryley | **Due:** TBD\n");
+  });
+
   it("matches an existing thread through stacked reply prefixes", async () => {
     const root = makeTmp();
     const vault = path.join(root, "vault");

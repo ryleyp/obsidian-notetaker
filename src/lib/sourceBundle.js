@@ -130,6 +130,15 @@ export function mapSourceBundle(sourceBundle, mapper) {
   };
 }
 
+// Removes [T1]/[N2]/[E1]/[O1] source markers. Citations exist for the
+// in-app source panel while a note is being reviewed; once it leaves the
+// app (saved to the vault, copied out) they are dead references and noise.
+export function stripCitationMarkers(markdown) {
+  return String(markdown || "")
+    .replace(/[ \t]*\[[TNEO]\d+\](?:[ \t]*\[[TNEO]\d+\])*/g, "")
+    .replace(/[ \t]+$/gm, "");
+}
+
 export function extractReferencedSourceIds(markdown) {
   const found = new Set();
   const regex = /\[([TNEO]\d+)\]/g;

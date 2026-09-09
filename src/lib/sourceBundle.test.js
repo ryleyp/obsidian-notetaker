@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  stripCitationMarkers,
   buildSourceBundle,
   extractReferencedSourceIds,
   formatSourceBundleForPrompt,
@@ -49,5 +50,20 @@ describe("sourceBundle", () => {
       "## Primary transcript\n\nTeams text\n\n---\n\n## Extended transcript\n\nVoice Memo text"
     );
     expect(formatTranscriptArchive("Only one", "")).toBe("Only one");
+  });
+});
+
+describe("stripCitationMarkers", () => {
+  it("removes single and chained markers and the space before them", () => {
+    expect(stripCitationMarkers("- Dana approved the rollout. [T1]")).toBe("- Dana approved the rollout.");
+    expect(stripCitationMarkers("- Budget is 40 seats [T2] [N1]\n- Next sync Friday [E1][O1]")).toBe(
+      "- Budget is 40 seats\n- Next sync Friday"
+    );
+  });
+
+  it("leaves non-citation brackets and checkboxes alone", () => {
+    const text = "- [ ] Send runbook — **Owner:** Ryley | **Due:** TBD\n- [x] Done [link](http://x)";
+    expect(stripCitationMarkers(text)).toBe(text);
+    expect(stripCitationMarkers("")).toBe("");
   });
 });

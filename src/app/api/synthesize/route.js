@@ -512,7 +512,7 @@ COMMENT REQUIREMENTS:
 - Name specific people by name and title when available (e.g., "Dana Whitfield, IT Admin Lead")
 - Every comment must answer: what happened, who was involved, and why it matters — do not just describe logistics
 - State outcomes explicitly: what did this drive? (adoption, expansion signal, renewal positioning, risk reduction, customer momentum)
-- Show CSM ownership and leadership — describe what CSM drove, defined, or decided, not just that a meeting occurred
+- Describe what the CSM actually did when the sources show it — drove, defined, coordinated, decided — not just that a meeting occurred. The CSM often attends as an observer (customer-run sessions, FAE-led demos, AM-led calls); in those cases say who led and describe the CSM's real role. Never manufacture CSM leadership the sources don't support
 - Connect to revenue where possible — note how the activity ties to expansion, adoption health, or renewal
 - Be specific — reference actual product names, site names, topics discussed, decisions made
 - For Demo Days and User Groups: always include Region, Attendees (or TBD), topics, and Outcome

@@ -158,11 +158,12 @@ CONFLICT FLAGGING: If the CSM's notes DIRECTLY conflict with the transcript on a
   const csmNames = (ownerNames || []).map((n) => String(n || "").trim()).filter(Boolean);
   const csmIdentityBlock = csmNames.length
     ? `
-THE CSM (NOTE OWNER): The person who recorded this meeting is the CSM, known as: ${csmNames.join(", ")}.
-- In Action Items and Next Steps, attribute every commitment this person makes to "${csmNames[0]}" as the owner — never "me", "we", "I", or a generic speaker label, even when the transcript phrases it in first person.
-- If a first-person commitment cannot be confidently attributed to the CSM (another speaker may have said it), keep the speaker label as owner and flag it as unattributed.
+THE CSM (NOTE OWNER): The CSM saving this note is known as: ${csmNames.join(", ")}. The CSM is NOT necessarily a speaker — in many meetings they attend silently and only record. Never assume a first-person statement ("I'll send that over", "let me check") came from the CSM.
+- Attribute a commitment to "${csmNames[0]}" ONLY when the transcript shows the CSM said it: the speaker label is the CSM's name (or one of the names above), the CSM is addressed by name right before replying, or the dialogue otherwise makes the speaker unambiguous. In that case write "${csmNames[0]}" as the owner — never "me", "we", or "I".
+- When a first-person commitment comes from an unidentified or generically labeled speaker, keep that speaker's label as the owner (e.g. "Speaker 2") — do not reassign it to the CSM.
 - For items owned by NI Customer Success as a team rather than the CSM personally, write "**Owner:** CS/CSM team".
-- Do not miss implicit commitments: "I'll send that over", "let me check on that", "I can set that up" are action items owned by the CSM even when nobody calls them action items.
+- Do not miss implicit commitments: "I'll send that over", "let me check on that", "I can set that up" are action items even when nobody calls them action items — owned by whoever actually said them.
+- If the CSM never speaks in the transcript, they own no action items from the dialogue; the Next Steps and SFDC "Next steps" reflect only what the CSM's own context/notes say they will do (or "None").
 `
     : "";
 
