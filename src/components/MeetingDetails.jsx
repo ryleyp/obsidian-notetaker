@@ -71,7 +71,7 @@ export default function MeetingDetails({ meetingTitle, setMeetingTitle, meetingC
           ref={rawNotesRef}
           className="input resize-y text-xs leading-relaxed"
           rows={7}
-          placeholder={"e.g. Quarterly sync with Dana (Acme EA admin) and Jordan. Follow-up to the June SystemLink migration briefing.\nMy notes: Dana wants SL Pro rollout confirmed before August; sounded frustrated about Data Bridge re-ingestion."}
+          placeholder={"e.g. Quarterly sync with Dana (Acme EA admin) and Jordan. Follow-up to the June SystemLink migration briefing.\nWho led: Jordan (FAE) ran the demo; I only observed. (Say who led and your role — it decides which action items are yours.)\nMy notes: Dana wants SL Pro rollout confirmed before August; sounded frustrated about Data Bridge re-ingestion."}
           value={meetingContext}
           onChange={(e) => setMeetingContext(e.target.value)}
         />

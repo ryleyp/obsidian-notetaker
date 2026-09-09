@@ -148,3 +148,14 @@ describe("buildPrompt CSM identity", () => {
     expect(prompt).not.toContain("THE CSM (NOTE OWNER)");
   });
 });
+
+describe("buildPrompt meeting-lead context", () => {
+  it("treats the CSM's context as authoritative for who led and the CSM's role", () => {
+    const prompt = buildPrompt("Speaker 1: I'll send the deck.", "Demo", [], "Jordan (FAE) ran the demo; I only observed.", {
+      ownerNames: ["Ryley"],
+    });
+    expect(prompt).toContain("WHO LED / THE CSM'S ROLE");
+    expect(prompt).toContain("AUTHORITATIVE");
+    expect(prompt).toContain("Jordan (FAE) ran the demo; I only observed.");
+  });
+});
