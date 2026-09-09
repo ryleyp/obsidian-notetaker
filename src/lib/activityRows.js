@@ -22,6 +22,10 @@ export function parseActivityRows(text) {
       // "note" = harvested from the note's own reviewed SFDC entry;
       // "generated" (default) = classified by Claude from the note body.
       origin: obj.origin === "note" ? "note" : "generated",
+      // A classification second opinion the CSM can apply or dismiss.
+      suggestedType: obj.suggestedType || "",
+      suggestedSubtype: obj.suggestedSubtype || "",
+      suggestReason: obj.suggestReason || "",
       review: !!obj.review,
       reviewReason: obj.reviewReason || "",
       // Post-generation verification verdict (set by the verify pass).

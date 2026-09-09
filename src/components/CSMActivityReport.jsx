@@ -77,6 +77,9 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   const [bleedTerms, setBleedTerms] = useState("");
   const [filedMap, setFiledMap] = useState({});
   const [regeneratingRow, setRegeneratingRow] = useState(null);
+  const [includeInternal, setIncludeInternal] = useState(false);
+  const [classifying, setClassifying] = useState(false);
+  const [pendingClassifyCheck, setPendingClassifyCheck] = useState(false);
 
   useEffect(() => {
     setFiledMap(loadFiledRows());
@@ -97,7 +100,10 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   const account = (settings.accounts || []).find((a) => a.name === accountName) || null;
 
   // Notes whose saved SFDC entry can be used as-is vs. notes Claude must read.
-  const harvestPlan = useMemo(() => harvestNotes(wf.activeNotes || []), [wf.activeNotes]);
+  const harvestPlan = useMemo(
+    () => harvestNotes(wf.activeNotes || [], { ownerNames: settings.ownerNames || [], skipInternalCheckIns: !includeInternal }),
+    [wf.activeNotes, settings.ownerNames, includeInternal]
+  );
 
   const findSourceNote = (row) => {
     const wanted = (row?.sourceTitle || "").toLowerCase();
@@ -145,10 +151,77 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
 
   // Harvest first, generate second: notes that already carry a reviewed SFDC
   // entry become rows instantly; only the rest go to Claude.
-  function handleGenerate() {
+  async function handleGenerate() {
     const { rows: harvested, remaining } = harvestPlan;
     wf.seedOutput(rowsToNDJSON(harvested));
-    if (remaining.length) wf.handleSynthesize({ append: harvested.length > 0, notes: remaining });
+    if (remaining.length) await wf.handleSynthesize({ append: harvested.length > 0, notes: remaining });
+    // The classification check needs the rows React derives from the new
+    // output, so it runs from an effect once the state has settled.
+    setPendingClassifyCheck(true);
+  }
+
+  useEffect(() => {
+    if (!pendingClassifyCheck || wf.synthesizing) return;
+    setPendingClassifyCheck(false);
+    if (rows.length) checkClassifications();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingClassifyCheck, wf.synthesizing, rows.length]);
+
+  // Second opinion on every row's Type/Subtype from the detailed taxonomy.
+  // Produces suggestions the CSM applies or dismisses — never silent edits.
+  async function checkClassifications() {
+    if (!rows.length) return;
+    setClassifying(true);
+    const reps = settings.replacements || [];
+    try {
+      const res = await apiFetch("/api/classify-rows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rows: rows.map(({ title, type, subtype, comments }) => ({ title, type, subtype, comments })),
+          replacements: reps,
+          corrections: settings.corrections || [],
+          apiKey: settings.apiKey || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Classification check failed");
+      const byIndex = new Map((data.suggestions || []).map((s) => [s.index, s]));
+      wf.setOutput(rowsToNDJSON(rows.map((row, i) => {
+        const s = byIndex.get(i);
+        if (!s) return { ...row, suggestedType: "", suggestedSubtype: "", suggestReason: "" };
+        return {
+          ...row,
+          suggestedType: s.type,
+          suggestedSubtype: s.subtype,
+          suggestReason: reps.length ? reverseReplacements(s.reason || "", reps) : s.reason || "",
+        };
+      })));
+    } catch (e) {
+      // No API key or a transient failure: the table is still complete
+      // without suggestions, so don't interrupt the CSM.
+      console.warn("Classification check skipped:", e.message);
+    } finally {
+      setClassifying(false);
+    }
+  }
+
+  function applySuggestion(i) {
+    const row = rows[i];
+    if (!row?.suggestedType) return;
+    updateRow(i, {
+      type: row.suggestedType,
+      subtype: row.suggestedSubtype,
+      suggestedType: "",
+      suggestedSubtype: "",
+      suggestReason: "",
+      review: false,
+      reviewReason: "",
+    });
+  }
+
+  function dismissSuggestion(i) {
+    updateRow(i, { suggestedType: "", suggestedSubtype: "", suggestReason: "" });
   }
 
   function handleResume() {
@@ -415,14 +488,27 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
           {wf.activeNotes?.length > 0 && wf.showConfirm && (
             <PreflightPanel
               intro={
-                harvestPlan.remaining.length === 0 ? (
-                  <>All <strong>{harvestPlan.rows.length}</strong> notes already carry a reviewed SFDC Activity Entry — the table is built straight from those. Nothing is sent to Claude.</>
-                ) : (
-                  <>
-                    <strong>{harvestPlan.rows.length}</strong> note{harvestPlan.rows.length !== 1 ? "s" : ""} already carr{harvestPlan.rows.length !== 1 ? "y" : "ies"} a reviewed SFDC Activity Entry and will be used as-is.
-                    Sending the other <strong>{harvestPlan.remaining.length}</strong> note{harvestPlan.remaining.length !== 1 ? "s" : ""} (no entry) to Claude to classify.
-                  </>
-                )
+                <>
+                  {harvestPlan.remaining.length === 0 ? (
+                    <>All <strong>{harvestPlan.rows.length}</strong> usable notes already carry a reviewed SFDC Activity Entry — the table is built straight from those. Nothing is sent to Claude.</>
+                  ) : (
+                    <>
+                      <strong>{harvestPlan.rows.length}</strong> note{harvestPlan.rows.length !== 1 ? "s" : ""} already carr{harvestPlan.rows.length !== 1 ? "y" : "ies"} a reviewed SFDC Activity Entry and will be used as-is.
+                      Sending the other <strong>{harvestPlan.remaining.length}</strong> note{harvestPlan.remaining.length !== 1 ? "s" : ""} (no entry) to Claude to classify.
+                    </>
+                  )}
+                  {harvestPlan.skipped.length > 0 && (
+                    <span className="block mt-2 text-xs text-gray-500">
+                      Skipping {harvestPlan.skipped.length}: {harvestPlan.skipped.map((s) => `${s.title} (${s.reason})`).join("; ")}.
+                    </span>
+                  )}
+                  {(harvestPlan.skipped.some((s) => s.reason === "internal check-in") || includeInternal) && (
+                    <label className="block mt-1 text-xs text-gray-500 cursor-pointer">
+                      <input type="checkbox" className="mr-1 align-middle" checked={includeInternal} onChange={(e) => setIncludeInternal(e.target.checked)} />
+                      Include internal check-ins (1:1s, team meetings) in this report
+                    </label>
+                  )}
+                </>
               }
               notes={harvestPlan.remaining.length ? harvestPlan.remaining : wf.activeNotes}
               loadCounts={wf.loadCounts}
@@ -520,6 +606,10 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
               onToggleFiled={toggleFiled}
               onRegenerateRow={regenerateRow}
               regeneratingRow={regeneratingRow}
+              onCheckClassifications={checkClassifications}
+              classifying={classifying}
+              onApplySuggestion={applySuggestion}
+              onDismissSuggestion={dismissSuggestion}
             />
           )}
           {wf.synthesizing && !wf.output && (

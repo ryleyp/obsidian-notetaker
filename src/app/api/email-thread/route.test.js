@@ -21,7 +21,7 @@ describe("buildEmailThreadPrompt", () => {
     expect(prompt).toContain("## Source Email Content");
     expect(prompt).toContain("## SFDC Activity Entry");
     expect(prompt).toContain("120 words or fewer and 800 characters or fewer");
-    expect(prompt).toContain("Strategic Relationship Management → EA Admin Sync");
+    expect(prompt).toContain("- Strategic Relationship Management — high-touch customer-facing relationship and governance activities. Subtypes: EA Admin Sync");
     expect(prompt).toContain("Cite every factual bullet or factual paragraph");
     expect(prompt).not.toContain("EXISTING NOTE UPDATE");
     expect(prompt).toContain("Create an Obsidian note from this email thread.");

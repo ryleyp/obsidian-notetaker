@@ -18,6 +18,7 @@ const COLUMNS = [
 export default function ActivityPreview({
   rows, rawText, streaming, onUpdateRow, onSave, saving, saved, savedPath, cost, sourceInfo,
   onVerify, verifying, onFlagBleed, onToggleFiled, onRegenerateRow, regeneratingRow,
+  onCheckClassifications, classifying, onApplySuggestion, onDismissSuggestion,
 }) {
   const [viewMode, setViewMode] = useState("table");
   const [copiedKey, setCopiedKey] = useState(null);
@@ -34,6 +35,7 @@ export default function ActivityPreview({
   const reviewCount = rows.filter((r) => r.review).length;
   const failedCount = rows.filter((r) => r.verify === "failed").length;
   const harvestedCount = rows.filter((r) => r.origin === "note").length;
+  const suggestionCount = rows.filter((r) => r.suggestedType).length;
   const filedCount = rows.filter((r) => r.filed).length;
   const unfiled = rows.filter((r) => !r.filed);
 
@@ -67,6 +69,14 @@ export default function ActivityPreview({
             <span className="text-xs text-gray-500 bg-gray-100 border border-gray-200 rounded-full px-2 py-0.5">
               {filedCount} already filed
             </span>
+          )}
+          {!streaming && suggestionCount > 0 && (
+            <span className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5" title="Classification suggestions to apply or dismiss">
+              {suggestionCount} reclassification suggestion{suggestionCount !== 1 ? "s" : ""}
+            </span>
+          )}
+          {classifying && (
+            <span className="text-xs text-gray-400">checking classifications…</span>
           )}
           {!streaming && reviewCount > 0 && (
             <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
@@ -115,6 +125,16 @@ export default function ActivityPreview({
               title="Second-pass audit of the generated rows: a fast model checks each against its cited source. Rows taken from notes are skipped — you already reviewed those."
             >
               {verifying ? "Verifying…" : "Verify vs sources"}
+            </button>
+          )}
+          {onCheckClassifications && rows.length > 0 && !streaming && (
+            <button
+              onClick={onCheckClassifications}
+              disabled={classifying}
+              className="btn-secondary text-xs px-3 py-1.5"
+              title="Ask a fast model to re-check every row's Type/Subtype against the full taxonomy. Suggestions only — nothing changes until you apply one."
+            >
+              {classifying ? "Checking…" : "Check classifications"}
             </button>
           )}
           {filedCount > 0 && unfiled.length > 0 && (
@@ -219,6 +239,16 @@ export default function ActivityPreview({
                                     cross-folder
                                   </span>
                                 )}
+                              </div>
+                            )}
+                            {c.key === "type" && row.suggestedType && (
+                              <div className="mt-1 rounded border border-blue-200 bg-blue-50 px-1.5 py-1 text-[10px] text-blue-800" onClick={(e) => e.stopPropagation()}>
+                                <div>Suggested: <span className="font-medium">{row.suggestedType} / {row.suggestedSubtype}</span></div>
+                                {row.suggestReason && <div className="text-blue-700">{row.suggestReason}</div>}
+                                <div className="mt-0.5 flex gap-2">
+                                  <button onClick={() => onApplySuggestion?.(r)} className="underline hover:text-blue-900">apply</button>
+                                  <button onClick={() => onDismissSuggestion?.(r)} className="underline text-gray-500 hover:text-gray-700">dismiss</button>
+                                </div>
                               </div>
                             )}
                             {isComment && (

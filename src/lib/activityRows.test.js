@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseActivityRows, rowsToMarkdown, rowsToNDJSON, sortRowsByDate } from "@/lib/activityRows";
 
-const ROW = { eventDate: "2026-04-12", title: "EA Admin Sync", type: "Strategic Relationship Management", subtype: "EA Admin Sync", comments: "CSM synced with Dana Voss.", agreement: "", sourceTitle: "Q2 Admin Sync", origin: "generated", review: false, reviewReason: "", verify: "", verifyReason: "" };
+const ROW = { eventDate: "2026-04-12", title: "EA Admin Sync", type: "Strategic Relationship Management", subtype: "EA Admin Sync", comments: "CSM synced with Dana Voss.", agreement: "", sourceTitle: "Q2 Admin Sync", origin: "generated", suggestedType: "", suggestedSubtype: "", suggestReason: "", review: false, reviewReason: "", verify: "", verifyReason: "" };
 
 describe("parseActivityRows", () => {
   it("parses one JSON object per line", () => {

@@ -128,10 +128,17 @@ export function isCanonicalPair(type, subtype) {
   return !!entry && entry.subtypes.some((s) => s.name === subtype);
 }
 
-// Compact "Type → Subtypes" list for the note-generation prompts.
+// "Type → Subtypes" list with one-line meanings for the note-generation
+// prompts — enough to classify correctly without the report prompt's
+// examples.
 export function taxonomyForNotePrompt() {
   return SFDC_TAXONOMY
-    .map((t) => `- ${t.type} → ${t.subtypes.map((s) => s.name).join("; ")}`)
+    .map((t) => {
+      const subs = t.subtypes
+        .map((s) => (s.description ? `${s.name} (${s.description.split(/[.(]/)[0].trim()})` : s.name))
+        .join("; ");
+      return `- ${t.type} — ${t.description}. Subtypes: ${subs}`;
+    })
     .join("\n");
 }
 

@@ -138,7 +138,7 @@ Next steps: <the CSM's own 1-3 actions, or "None">
 Approved Type → Subtype pairs (copy the exact text):
 ${taxonomyForNotePrompt()}
 
-Choose the primary purpose of the thread and the most specific valid pair. The Summary/Notes block must be 120 words or fewer and 800 characters or fewer. Use past tense, no first person, no citations, and do not invent outcomes, owners, numbers, or next steps.`;
+Choose the primary purpose of the thread and the most specific valid pair. The Summary/Notes block must be 120 words or fewer and 800 characters or fewer. Use past tense, no first person, no citations; refer to the CSM as "CSM", never by name; and do not invent outcomes, owners, numbers, or next steps.`;
 }
 
 export async function createEmailThreadMessage(client, request) {
