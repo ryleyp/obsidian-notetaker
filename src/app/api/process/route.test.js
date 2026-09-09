@@ -138,7 +138,7 @@ describe("buildPrompt CSM identity", () => {
     });
     expect(prompt).toContain("THE CSM (NOTE OWNER)");
     expect(prompt).toContain("known as: Ryley, Ry");
-    expect(prompt).toContain('Attribute a commitment to "Ryley" ONLY when the transcript shows the CSM said it');
+    expect(prompt).toContain('Attribute a commitment to "Ryley" ONLY when the evidence shows the CSM said it');
     expect(prompt).toContain("NOT necessarily a speaker");
     expect(prompt).toContain("**Owner:** CS/CSM team");
   });
