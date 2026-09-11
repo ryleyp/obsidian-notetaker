@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseActivityRows, rowsToMarkdown, rowsToNDJSON, sortRowsByDate } from "@/lib/activityRows";
+import { parseActivityRows, parseReportTable, rowsToMarkdown, rowsToNDJSON, sortRowsByDate } from "@/lib/activityRows";
 
 const ROW = { eventDate: "2026-04-12", title: "EA Admin Sync", type: "Strategic Relationship Management", subtype: "EA Admin Sync", comments: "CSM synced with Dana Voss.", agreement: "", sourceTitle: "Q2 Admin Sync", origin: "generated", suggestedType: "", suggestedSubtype: "", suggestReason: "", review: false, reviewReason: "", verify: "", verifyReason: "" };
 
@@ -87,5 +87,37 @@ describe("sortRowsByDate", () => {
       { eventDate: "2026-08-20", title: "new-b" },
     ];
     expect(sortRowsByDate(rows).map((r) => r.title)).toEqual(["new-a", "new-b", "old", "undated"]);
+  });
+});
+
+describe("Filed column round trip", () => {
+  it("writes filed state into the table and reads it back", () => {
+    const md = rowsToMarkdown([
+      { ...ROW, filed: true },
+      { ...ROW, title: "Second | pipe", eventDate: "2026-04-13", filed: false },
+    ]);
+    expect(md.split("\n")[0]).toBe("| Filed | Event Date | Title | Type | Subtype | EA/EP | Comments |");
+    expect(parseReportTable(md)).toEqual([
+      { eventDate: "2026-04-12", title: "EA Admin Sync", filed: true },
+      { eventDate: "2026-04-13", title: "Second | pipe", filed: false },
+    ]);
+  });
+
+  it("reads older reports without a Filed column as unfiled, and accepts hand edits", () => {
+    const old = [
+      "| Event Date | Title | Type | Subtype | EA/EP | Comments |",
+      "|------------|-------|------|---------|-------|----------|",
+      "| 2026-04-12 | Old Row | T | S |  | c |",
+    ].join("\n");
+    expect(parseReportTable(old)).toEqual([{ eventDate: "2026-04-12", title: "Old Row", filed: false }]);
+
+    const edited = [
+      "| Filed | Event Date | Title | Type | Subtype | EA/EP | Comments |",
+      "|---|---|---|---|---|---|---|",
+      "| x | 2026-04-12 | Hand Edited | T | S |  | c |",
+      "| [X] | 2026-04-13 | Caps | T | S |  | c |",
+      "| [ ] | 2026-04-14 | Open | T | S |  | c |",
+    ].join("\n");
+    expect(parseReportTable(edited).map((r) => r.filed)).toEqual([true, true, false]);
   });
 });

@@ -80,6 +80,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   const [includeInternal, setIncludeInternal] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [pendingClassifyCheck, setPendingClassifyCheck] = useState(false);
+  const [reportFiled, setReportFiled] = useState(null); // { filename, count } from the folder's latest saved report
 
   useEffect(() => {
     setFiledMap(loadFiledRows());
@@ -94,7 +95,37 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
       params.set("endDate", rangeEnd);
     },
     synthesizeExtras: () => ({ promptType: "csm-activity", rangeStart, rangeEnd, exampleRows: recentFiledRows(filedMap) }),
+    // Saved reports live in the same folder as the notes; they are output,
+    // not source material.
+    filterNotes: (n) => !/^EA Activity Report\b/i.test(n.title || ""),
   });
+
+  // The folder's most recent saved report is the durable record of what was
+  // filed — ticks made there (in the app or by editing the table in Obsidian)
+  // carry into this run, on any machine.
+  useEffect(() => {
+    if (!settings.vaultPath || wf.selectedFolder === undefined) return;
+    let canceled = false;
+    (async () => {
+      try {
+        const params = new URLSearchParams({ vaultPath: settings.vaultPath, folderPath: wf.selectedFolder || "" });
+        const res = await apiFetch(`/api/ea-report-filed?${params}`);
+        const data = await res.json();
+        if (canceled || !res.ok || !data.report) {
+          if (!canceled) setReportFiled(null);
+          return;
+        }
+        const filedRows = (data.rows || []).filter((r) => r.filed);
+        if (filedRows.length) {
+          setFiledMap((prev) => filedRows.reduce((map, row) => (isFiled(map, row) ? map : markFiled(map, row, true)), prev));
+        }
+        setReportFiled({ filename: data.report.filename, count: filedRows.length, total: (data.rows || []).length });
+      } catch {
+        if (!canceled) setReportFiled(null);
+      }
+    })();
+    return () => { canceled = true; };
+  }, [settings.vaultPath, wf.selectedFolder]);
 
   const accountName = detectAccount(wf.selectedFolder, settings.accounts).name;
   const account = (settings.accounts || []).find((a) => a.name === accountName) || null;
@@ -587,6 +618,14 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
                 <button onClick={() => setBleedRow(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
               </div>
             </div>
+          )}
+          {wf.output && reportFiled && (
+            <p className="text-xs text-gray-500 -mb-2">
+              Filed status loaded from <code className="font-mono">{reportFiled.filename}</code>
+              {reportFiled.count
+                ? <> — {reportFiled.count} of {reportFiled.total} row{reportFiled.total !== 1 ? "s" : ""} marked filed there.</>
+                : <> — no rows marked filed there yet. Tick the Filed box here, or edit <code className="font-mono">[ ]</code> to <code className="font-mono">[x]</code> in Obsidian.</>}
+            </p>
           )}
           {wf.output && (
             <ActivityPreview
