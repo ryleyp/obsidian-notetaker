@@ -18,7 +18,10 @@ import {
   stableSourceId,
 } from "@/lib/contactMapping";
 
-const EXTRACT_BATCH_CHAR_LIMIT = 60_000;
+// Sized so a dense batch's fact list fits comfortably inside the output
+// cap; a batch that still truncates is split and retried (see extractBatch).
+const EXTRACT_BATCH_CHAR_LIMIT = 30_000;
+const EXTRACT_MAX_OUTPUT_TOKENS = 16_000;
 
 function emptyIndex() {
   return { version: 1, updatedAt: null, accounts: {}, sources: {} };
@@ -91,10 +94,12 @@ function buildExtractionPrompt(notes, accountName, allAccounts, mappingContext =
 
   return `Extract structured customer contact and site mapping facts for ${acct}.
 
-Return ONLY valid JSON with this shape:
+Return ONLY valid JSON with this shape, as compact single-line JSON (no indentation, no line breaks between elements — every byte of whitespace costs output room):
 {"facts":[{"type":"person|site|org|relationship","name":"canonical visible name or alias","aliases":["optional"],"role":"optional","organization":"optional","site":"optional","relationship":"optional","evidence":"short source-grounded detail","confidence":"high|medium|low","sourceId":"S_ABC12345"}]}
 
 Rules:
+- Keep each fact's evidence to one short clause (under 20 words). Omit optional keys that would be empty.
+- One fact per distinct person/site/org; do not repeat the same person for every mention.
 - Extract only facts relevant to ${acct}.
 - Include customer people, customer teams/orgs, NI/internal contacts tied to the account, sites, labs, campuses, buildings, locations, and person-site relationships.
 - Do not include other customer accounts. Other accounts to exclude:
@@ -127,6 +132,10 @@ function chunkNotes(notes) {
   return batches;
 }
 
+// Extracts one batch. If the model runs out of output room before closing
+// the JSON, the batch is split in half and each half retried; a single note
+// that still truncates keeps whatever complete facts came through rather
+// than failing the whole extraction.
 async function extractBatch(client, batch, accountName, allAccounts, mappingContext) {
   const sourcesById = Object.fromEntries(batch.map((note) => [note.id, {
     sourceId: note.id,
@@ -137,11 +146,22 @@ async function extractBatch(client, batch, accountName, allAccounts, mappingCont
 
   const msg = await client.messages.create({
     model: FAST_MODEL,
-    max_tokens: 12_000,
+    max_tokens: EXTRACT_MAX_OUTPUT_TOKENS,
     messages: [{ role: "user", content: buildExtractionPrompt(batch, accountName, allAccounts, mappingContext) }],
   });
+  const text = firstTextBlock(msg);
+  const truncated = msg.stop_reason === "max_tokens";
 
-  return parseContactFacts(firstTextBlock(msg), sourcesById, { throwOnInvalid: true });
+  if (truncated && batch.length > 1) {
+    const mid = Math.ceil(batch.length / 2);
+    const [left, right] = await Promise.all([
+      extractBatch(client, batch.slice(0, mid), accountName, allAccounts, mappingContext),
+      extractBatch(client, batch.slice(mid), accountName, allAccounts, mappingContext),
+    ]);
+    return [...left, ...right];
+  }
+
+  return parseContactFacts(text, sourcesById, { throwOnInvalid: true, salvageTruncated: truncated });
 }
 
 function notesForExtraction(notes, index, accountKey, { changedOnly = false, force = false } = {}) {

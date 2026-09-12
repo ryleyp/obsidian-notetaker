@@ -5,6 +5,7 @@ import {
   mergeFacts,
   noteFingerprint,
   parseContactFacts,
+  salvageTruncatedObjects,
   stableSourceId,
   verifyStakeholderMapDocument,
 } from "./contactMapping";
@@ -76,5 +77,22 @@ describe("contactMapping helpers", () => {
 
     expect(findings.map((f) => f.message)).toContain("Unrestored anonymization placeholder is still visible.");
     expect(findings.some((f) => f.message.includes("Missing section"))).toBe(true);
+  });
+});
+
+describe("truncated fact output", () => {
+  const cut = `{"facts":[{"type":"person","name":"PERSON_1","evidence":"Ran the {demo} \\"live\\"","sourceId":"S1"},{"type":"site","name":"Dallas","evidence":"Lab tour","sourceId":"S1"},{"type":"person","name":"PERSON_2","evi`;
+
+  it("salvages the complete objects when asked to", () => {
+    const facts = parseContactFacts(cut, { S1: { sourceId: "S1", title: "Sync", date: "2026-08-01" } }, { throwOnInvalid: true, salvageTruncated: true });
+    expect(facts.map((f) => f.name)).toEqual(["PERSON_1", "Dallas"]);
+  });
+
+  it("still throws on truncated output when salvage is off", () => {
+    expect(() => parseContactFacts(cut, {}, { throwOnInvalid: true })).toThrow();
+  });
+
+  it("salvage handles braces and escaped quotes inside strings", () => {
+    expect(salvageTruncatedObjects(`[{"a":"x } y \\" z"},{"b":1},{"c":`).map((o) => Object.keys(o)[0])).toEqual(["a", "b"]);
   });
 });

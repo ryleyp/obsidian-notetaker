@@ -51,14 +51,62 @@ export function stableSourceId(note) {
   return `S_${hashText(sourceKey(note)).toUpperCase()}`;
 }
 
-function parseJsonPayload(rawText) {
+// Pulls every complete top-level object out of a JSON array that was cut
+// off mid-stream (model hit its output cap). Walks the text with a brace
+// counter that respects strings, so a fact whose evidence contains braces
+// or quotes doesn't confuse it. The trailing partial object is dropped.
+export function salvageTruncatedObjects(text) {
+  const start = text.indexOf("[");
+  if (start < 0) return [];
+  const objects = [];
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let objStart = -1;
+  for (let i = start + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === "{") {
+      if (depth === 0) objStart = i;
+      depth += 1;
+    } else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0 && objStart >= 0) {
+        try {
+          objects.push(JSON.parse(text.slice(objStart, i + 1)));
+        } catch {
+          // A malformed complete object is skipped rather than failing the batch.
+        }
+        objStart = -1;
+      }
+    } else if (ch === "]" && depth === 0) {
+      break;
+    }
+  }
+  return objects;
+}
+
+function parseJsonPayload(rawText, { salvage = false } = {}) {
   const text = cleanString(rawText);
   if (!text) return [];
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced ? fenced[1] : text;
   const match = candidate.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-  const parsed = JSON.parse(match ? match[0] : candidate);
-  return Array.isArray(parsed) ? parsed : parsed.facts || [];
+  try {
+    const parsed = JSON.parse(match ? match[0] : candidate);
+    return Array.isArray(parsed) ? parsed : parsed.facts || [];
+  } catch (error) {
+    if (!salvage) throw error;
+    const salvaged = salvageTruncatedObjects(candidate);
+    if (!salvaged.length) throw error;
+    return salvaged;
+  }
 }
 
 export function normalizeFact(fact, source = {}) {
@@ -88,7 +136,7 @@ export function normalizeFact(fact, source = {}) {
 export function parseContactFacts(rawText, sourcesById = {}, options = {}) {
   let parsed = [];
   try {
-    parsed = parseJsonPayload(rawText);
+    parsed = parseJsonPayload(rawText, { salvage: !!options.salvageTruncated });
   } catch (error) {
     if (options.throwOnInvalid) throw error;
     return [];
