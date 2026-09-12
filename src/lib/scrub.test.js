@@ -337,3 +337,19 @@ describe("scrubWithExceptions", () => {
     expect(scrubbed.content).toBe(content);
   });
 });
+
+describe("countTermHits deduplication", () => {
+  it("counts a mention once even when name, alias, and keyword are the same word", () => {
+    expect(countTermHits("Globex weekly sync", ["Globex", "globex", "GLOBEX"])).toBe(1);
+    expect(countTermHits("acme and Acme", ["acme"])).toBe(2);
+  });
+
+  it("does not let duplicated terms make a note look dominated by another account", () => {
+    const accounts = [
+      { name: "Acme Aerospace", aliases: ["acme"], keywords: [] },
+      { name: "Globex", aliases: ["globex"], keywords: ["globex"] },
+    ];
+    const note = { title: "Globex Weekly", content: "Priyan owns the rollout for the acme integration. Acme site review." };
+    expect(assessNoteDominance(note, "Acme Aerospace", accounts)).toBeNull();
+  });
+});

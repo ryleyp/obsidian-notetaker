@@ -14,6 +14,8 @@ import {
   reverseReplacements,
 } from "@/lib/sanitize";
 import { inferNextMappingSection } from "@/lib/contactMapping";
+import { savedReplacementsInSources, withProvenance } from "@/lib/mappingNames";
+import { assessNoteDominance } from "@/lib/scrub";
 import { apiFetch } from "@/lib/apiClient";
 
 const TODAY = new Date().toISOString().split("T")[0];
@@ -47,29 +49,6 @@ function dedupeEntities(entities) {
   return out;
 }
 
-function typeFromAlias(alias) {
-  return String(alias || "").toUpperCase().startsWith("PERSON_") ? "person" : "org";
-}
-
-function includesTerm(text, term) {
-  return term && text.toLowerCase().includes(term.toLowerCase());
-}
-
-function savedReplacementsInSources(notes, replacements) {
-  const sourceText = (notes || []).map((n) => `${n.title || ""}\n${n.content || ""}`).join("\n").toLowerCase();
-  return (replacements || [])
-    .filter((r) => includesTerm(sourceText, r.original || "") || includesTerm(sourceText, r.restored || ""))
-    .map((r) => ({
-      text: r.original,
-      type: typeFromAlias(r.alias),
-      alias: r.alias,
-      restored: r.restored || r.original,
-      context: "",
-      enabled: true,
-      saved: true,
-    }));
-}
-
 function buildMappingScanText(notes, corrections, replacements) {
   let total = 0;
   const chunks = [];
@@ -95,7 +74,10 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
   const [loadError, setLoadError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [strictFolderOnly, setStrictFolderOnly] = useState(false);
+  // A stakeholder map is one account's; cross-folder notes mostly bring in
+  // other accounts' people, so the wider search is opt-in here.
+  const [strictFolderOnly, setStrictFolderOnly] = useState(true);
+  const [showOtherFolderNames, setShowOtherFolderNames] = useState(false);
   const [sourceRange, setSourceRange] = useState("recent");
   const [privacyScanning, setPrivacyScanning] = useState(false);
   const [privacyScanError, setPrivacyScanError] = useState(null);
@@ -223,9 +205,18 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load sources");
 
-      setLoadedSources(data.notes || []);
-      setLoadCounts(data.counts);
-      setLoadWarning(data.warning || null);
+      // Cross-folder notes dominated by another account are that account's
+      // meeting, not this one's — drop them before any name scan sees them.
+      const acct = detectAccount(selectedFolder, settings.accounts);
+      const notes = data.notes || [];
+      const kept = notes.filter((n) => n.source === "obsidian" || !assessNoteDominance(n, acct.name, settings.accounts || []));
+      const droppedOtherAccount = notes.length - kept.length;
+      setLoadedSources(kept);
+      setLoadCounts(data.counts ? { ...data.counts, crossVault: Math.max(0, (data.counts.crossVault || 0) - droppedOtherAccount) } : data.counts);
+      setLoadWarning([
+        data.warning,
+        droppedOtherAccount ? `${droppedOtherAccount} cross-folder note${droppedOtherAccount !== 1 ? "s" : ""} skipped — mostly about another account.` : null,
+      ].filter(Boolean).join(" ") || null);
     } catch (e) {
       setLoadError(e.message);
     } finally {
@@ -269,17 +260,21 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
 
       const savedItems = savedReplacementsInSources(loadedSources, savedReplacements);
       const savedTexts = new Set(savedItems.map((item) => item.text.toLowerCase()));
-      const detectedItems = assignAliases(newEntities, savedReplacements)
-        .filter((item) => !savedTexts.has(item.text.toLowerCase()))
-        .map((item) => ({
-          ...item,
-          restored: item.text,
-          context: "",
-          enabled: true,
-          saved: false,
-        }));
+      const detectedItems = withProvenance(
+        assignAliases(newEntities, savedReplacements)
+          .filter((item) => !savedTexts.has(item.text.toLowerCase()))
+          .map((item) => ({
+            ...item,
+            restored: item.text,
+            context: "",
+            enabled: true,
+            saved: false,
+          })),
+        loadedSources
+      );
 
       setMappingReviewItems([...savedItems, ...detectedItems]);
+      setShowOtherFolderNames(false);
       if (scanSkipped && settings.aiPrivacyScan) {
         setPrivacyScanError("Name scan skipped - set your API key in Settings to enable AI detection.");
       } else if (!settings.aiPrivacyScan) {
@@ -607,6 +602,62 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     ? "all available source files"
     : `sources dated ${threeMonthsAgoLabel()} or later`;
 
+  // Names seen in this folder's notes lead; names seen only in other
+  // sources are set aside so another account's contacts don't crowd the list.
+  const folderNameEntries = (mappingReviewItems || []).map((item, i) => ({ item, i })).filter(({ item }) => item.foundIn !== "elsewhere");
+  const otherNameEntries = (mappingReviewItems || []).map((item, i) => ({ item, i })).filter(({ item }) => item.foundIn === "elsewhere");
+
+  const renderReviewItem = (item, i) => (
+    <div
+      key={`${item.alias}-${item.text}-${i}`}
+      className={`grid gap-2 rounded-lg border p-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.4fr)] ${
+        item.enabled ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50 opacity-60"
+      }`}
+    >
+      <input
+        type="checkbox"
+        checked={item.enabled}
+        onChange={() => updateReviewItem(i, "enabled", !item.enabled)}
+        disabled={item.saved}
+        className="mt-1 w-4 h-4 accent-obsidian-600"
+        title={item.saved ? "Saved glossary terms are always removed from the AI input" : "Remove this name from the AI input"}
+      />
+      <div className="space-y-2">
+        <div>
+          <div className="text-sm font-medium text-gray-900 truncate">{item.text}</div>
+          <div className="text-xs text-gray-400">
+            {item.type}{item.saved ? " - saved" : ""}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            type="text"
+            value={item.alias}
+            onChange={(e) => updateReviewItem(i, "alias", e.target.value)}
+            disabled={!item.enabled || item.saved}
+            className="font-mono text-xs px-2 py-1 rounded border border-gray-200 bg-gray-50 focus:outline-none focus:border-obsidian-400 disabled:opacity-50"
+            title="Alias sent to Claude"
+          />
+          <input
+            type="text"
+            value={item.restored || item.text}
+            onChange={(e) => updateReviewItem(i, "restored", e.target.value)}
+            disabled={!item.enabled}
+            className="text-xs px-2 py-1 rounded border border-gray-200 bg-gray-50 focus:outline-none focus:border-obsidian-400 disabled:opacity-50"
+            title="Name restored in the final map"
+          />
+        </div>
+      </div>
+      <textarea
+        value={item.context || ""}
+        onChange={(e) => updateReviewItem(i, "context", e.target.value)}
+        rows={3}
+        className="input text-xs resize-y min-h-20"
+        placeholder="Context for mapping: role, site, relationship, influence, do/don't include..."
+      />
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       <FolderSelector
@@ -837,56 +888,29 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
                     <p className="text-sm text-gray-500">No names found beyond your saved anonymization list.</p>
                   ) : (
                     <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                      {mappingReviewItems.map((item, i) => (
-                        <div
-                          key={`${item.alias}-${item.text}-${i}`}
-                          className={`grid gap-2 rounded-lg border p-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.4fr)] ${
-                            item.enabled ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50 opacity-60"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={item.enabled}
-                            onChange={() => updateReviewItem(i, "enabled", !item.enabled)}
-                            disabled={item.saved}
-                            className="mt-1 w-4 h-4 accent-obsidian-600"
-                            title={item.saved ? "Saved glossary terms are always removed from the AI input" : "Remove this name from the AI input"}
-                          />
-                          <div className="space-y-2">
-                            <div>
-                              <div className="text-sm font-medium text-gray-900 truncate">{item.text}</div>
-                              <div className="text-xs text-gray-400">
-                                {item.type}{item.saved ? " - saved" : ""}
-                              </div>
+                      {folderNameEntries.map(({ item, i }) => renderReviewItem(item, i))}
+                      {folderNameEntries.length === 0 && (
+                        <p className="text-sm text-gray-500">No names found in this folder&apos;s notes.</p>
+                      )}
+                      {otherNameEntries.length > 0 && (
+                        <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-3">
+                          <button
+                            type="button"
+                            onClick={() => setShowOtherFolderNames((v) => !v)}
+                            className="text-xs text-gray-600 hover:text-gray-900 underline"
+                          >
+                            {showOtherFolderNames ? "Hide" : "Show"} {otherNameEntries.length} name{otherNameEntries.length !== 1 ? "s" : ""}{" "}found only in other folders&apos; notes
+                          </button>
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            These appear in cross-folder or transcript sources, not in this folder — usually another account&apos;s contacts. Saved ones stay anonymized either way.
+                          </p>
+                          {showOtherFolderNames && (
+                            <div className="space-y-2 mt-2">
+                              {otherNameEntries.map(({ item, i }) => renderReviewItem(item, i))}
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <input
-                                type="text"
-                                value={item.alias}
-                                onChange={(e) => updateReviewItem(i, "alias", e.target.value)}
-                                disabled={!item.enabled || item.saved}
-                                className="font-mono text-xs px-2 py-1 rounded border border-gray-200 bg-gray-50 focus:outline-none focus:border-obsidian-400 disabled:opacity-50"
-                                title="Alias sent to Claude"
-                              />
-                              <input
-                                type="text"
-                                value={item.restored || item.text}
-                                onChange={(e) => updateReviewItem(i, "restored", e.target.value)}
-                                disabled={!item.enabled}
-                                className="text-xs px-2 py-1 rounded border border-gray-200 bg-gray-50 focus:outline-none focus:border-obsidian-400 disabled:opacity-50"
-                                title="Name restored in the final map"
-                              />
-                            </div>
-                          </div>
-                          <textarea
-                            value={item.context || ""}
-                            onChange={(e) => updateReviewItem(i, "context", e.target.value)}
-                            rows={3}
-                            className="input text-xs resize-y min-h-20"
-                            placeholder="Context for mapping: role, site, relationship, influence, do/don't include..."
-                          />
+                          )}
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
                 </div>

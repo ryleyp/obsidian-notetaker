@@ -87,12 +87,16 @@ function getOwnTerms(accountName, allAccounts) {
     .filter(Boolean);
 }
 
-// Total whole-word occurrences of any of `terms` in `text`.
+// Total whole-word occurrences of any of `terms` in `text`. Terms are
+// deduplicated case-insensitively first: an account whose name, alias, and
+// keyword are all "Globex" must count one mention once, not three times.
 export function countTermHits(text, terms) {
   let count = 0;
+  const seen = new Set();
   for (const t of terms || []) {
     const k = (t || "").trim();
-    if (!k) continue;
+    if (!k || seen.has(k.toLowerCase())) continue;
+    seen.add(k.toLowerCase());
     const esc = escapeRegex(k);
     const left = /^\w/.test(k) ? "\\b" : "";
     const right = /\w$/.test(k) ? "\\b" : "";
