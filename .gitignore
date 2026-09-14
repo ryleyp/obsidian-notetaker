@@ -16,6 +16,10 @@
 # production
 /build
 
+# mac launcher built by scripts/create-mac-app.sh — a compiled bundle that
+# hardcodes this machine's project path, so it is per-machine, not shared.
+/Notetaker.app/
+
 # misc
 .DS_Store
 *.pem
