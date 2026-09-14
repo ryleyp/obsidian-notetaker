@@ -20,7 +20,7 @@ import RunModePicker from "@/components/RunModePicker";
 import NoteComparisonPanel from "@/components/NoteComparisonPanel";
 import DraftRestoreList from "@/components/DraftRestoreList";
 import { looksSpeakerLabeled } from "@/lib/speakers";
-import { alternateModel, estimateUsage, FAST_MODEL, MODEL_OPTIONS, resolveAutoModel } from "@/lib/models";
+import { alternateModel, estimateUsage, FAST_MODEL, modelDisplayName, resolveAutoModel } from "@/lib/models";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { useSpeakerDetection } from "@/hooks/useSpeakerDetection";
 import { useSanitizeReview } from "@/hooks/useSanitizeReview";
@@ -159,7 +159,9 @@ export default function Home() {
     setShowSettings(false);
   }
 
-  const modelLabel = MODEL_OPTIONS.find((m) => m.id === model)?.label || "Claude";
+  // Reads from the model spec, so a model that is no longer offered in the
+  // picker still shows its own name rather than defaulting to "Claude".
+  const modelLabel = modelDisplayName(model);
   const noteEstimateSources = [{ title: meetingTitle, content: [transcript, extendedTranscript, meetingContext, existingNote?.content].filter(Boolean).join("\n\n") }];
   const resolvedNoteModel = resolveAutoModel(model, { apiKey: settings.apiKey, openaiApiKey: settings.openaiApiKey });
   const estimatedNoteCost = estimateUsage(noteEstimateSources, resolvedNoteModel).cost;

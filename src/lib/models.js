@@ -21,7 +21,9 @@ const MODELS = {
   "gpt-5.6-terra": { context: 1_050_000, maxOutput: 32_000, input: 2.0, output: 12.0, label: "GPT-5.6 Terra" },
   "gpt-5.6-luna": { context: 1_050_000, maxOutput: 32_000, input: 0.2, output: 1.2, label: "GPT-5.6 Luna" },
 
-  // Previous OpenAI option, retained for saved settings.
+  // Retired from OpenAI's current model list but kept here, and out of
+  // MODEL_OPTIONS, so saved settings still resolve a label and price
+  // without offering it as a new choice.
   "gpt-5.4": { context: 1_050_000, maxOutput: 32_000, input: 2.5, output: 15.0, label: "GPT-5.4" },
   "claude-opus-5": { context: 1_000_000, maxOutput: 64_000, input: 5.0, output: 25.0, label: "Opus" },
   "claude-sonnet-5": { context: 1_000_000, maxOutput: 64_000, input: 3.0, output: 15.0, label: "Sonnet" },
@@ -66,7 +68,6 @@ export const MODEL_OPTIONS = [
   { id: "gpt-5.6-sol", label: "GPT-5.6 Sol", provider: "ChatGPT", sub: "Flagship · 1.05M" },
   { id: OPENAI_MODEL, label: "GPT-5.6 Terra", provider: "ChatGPT", sub: "Balanced · 1.05M" },
   { id: "gpt-5.6-luna", label: "GPT-5.6 Luna", provider: "ChatGPT", sub: "Lowest cost · 1.05M" },
-  { id: "gpt-5.4", label: "GPT-5.4", provider: "ChatGPT", sub: "Previous · 1.05M" },
   { id: "claude-haiku-4-5", label: "Haiku", provider: "Claude", sub: "Faster · 200k" },
   { id: "claude-sonnet-5", label: "Sonnet", provider: "Claude", sub: "Best value · 1M" },
   { id: "claude-opus-5", label: "Opus", provider: "Claude", sub: "Smartest · 1M" },

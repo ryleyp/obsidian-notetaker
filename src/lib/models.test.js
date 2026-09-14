@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MODEL,
   MODEL_OPTIONS,
+  modelDisplayName,
   budgetChars,
   calcCost,
   contextLimit,
@@ -77,11 +78,16 @@ describe("model capability lookups", () => {
       "gpt-5.6-sol",
       "gpt-5.6-terra",
       "gpt-5.6-luna",
-      "gpt-5.4",
       "claude-haiku-4-5",
       "claude-sonnet-5",
       "claude-opus-5",
     ]);
+  });
+
+  it("still resolves a retired model saved in settings without offering it", () => {
+    expect(MODEL_OPTIONS.some((o) => o.id === "gpt-5.4")).toBe(false);
+    expect(modelDisplayName("gpt-5.4")).toBe("GPT-5.4");
+    expect(contextLimit("gpt-5.4")).toBe(1_050_000);
   });
 
   it("shows the same input/output rate breakdown for OpenAI and Claude models", () => {
