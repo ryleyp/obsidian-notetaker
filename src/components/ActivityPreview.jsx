@@ -17,7 +17,7 @@ const COLUMNS = [
 
 export default function ActivityPreview({
   rows, rawText, streaming, onUpdateRow, onSave, saving, saved, savedPath, cost, sourceInfo,
-  onVerify, verifying, onFlagBleed, onToggleFiled, onRegenerateRow, regeneratingRow,
+  onVerify, onVerifyRow, verifying, verifyingRow, onFlagBleed, onToggleFiled, onRegenerateRow, regeneratingRow,
   onCheckClassifications, classifying, onApplySuggestion, onDismissSuggestion,
 }) {
   const [viewMode, setViewMode] = useState("table");
@@ -119,7 +119,7 @@ export default function ActivityPreview({
           </div>
           {onVerify && rows.some((r) => r.origin !== "note") && !streaming && (
             <button
-              onClick={onVerify}
+              onClick={() => onVerify()}
               disabled={verifying}
               className="btn-secondary text-xs px-3 py-1.5"
               title="Second-pass audit of the generated rows: a fast model checks each against its cited source. Rows taken from notes are skipped — you already reviewed those."
@@ -303,6 +303,9 @@ export default function ActivityPreview({
                           {row.verify === "failed" && (
                             <span title={row.verifyReason || "Not supported by cited source"} className="text-red-600 cursor-help">✗</span>
                           )}
+                          {onVerifyRow && !streaming && (
+                            <button type="button" onClick={() => onVerifyRow(r)} disabled={verifying || verifyingRow !== null && verifyingRow !== r} title="Ask the alternative provider to check this activity against its source" className={`text-xs ${verifyingRow === r ? "animate-pulse text-blue-600" : "text-gray-300 hover:text-blue-600"}`}>⌕</button>
+                          )}
                           {onFlagBleed && (
                             <button
                               onClick={() => onFlagBleed(r)}
@@ -332,6 +335,14 @@ export default function ActivityPreview({
                 <p className="text-xs font-semibold text-red-800">Rows that failed source verification — likely misattributed, review before filing:</p>
                 {rows.map((row, r) => row.verify === "failed" ? (
                   <p key={r} className="text-xs text-red-700">• <span className="font-medium">{row.title}</span>: {row.verifyReason || "not supported by cited source"}</p>
+                ) : null)}
+              </div>
+            )}
+            {rows.some((r) => r.verifyEvidence || r.verifySource) && !streaming && (
+              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
+                <p className="text-xs font-semibold text-blue-900">Source evidence from the second opinion:</p>
+                {rows.map((row, r) => row.verifyEvidence || row.verifySource ? (
+                  <div key={r} className="text-xs text-blue-800"><strong>{row.title}</strong>{row.verifySource ? ` — ${row.verifySource}` : ""}{row.verifyEvidence && <blockquote className="mt-0.5 border-l-2 border-blue-300 pl-2">“{row.verifyEvidence}”</blockquote>}</div>
                 ) : null)}
               </div>
             )}

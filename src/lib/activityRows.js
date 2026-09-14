@@ -1,37 +1,63 @@
+import { isCanonicalPair } from "./sfdcTaxonomy";
+
+// Bounds runaway model output without colliding with the 800-character
+// Salesforce limit the table warns about: truncating at 800 here would
+// silently cut a comment the CSM already reviewed and make that warning
+// unreachable, so trimming stays the CSM's call.
+const MAX_COMMENT_CHARS = 4000;
+
 // EA Activity structured rows: the synthesize API streams newline-delimited
 // JSON (one activity per line). Parsing is tolerant of partial trailing
 // lines (mid-stream), code fences, and stray commentary.
 
+export function normalizeActivityRow(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  const title = String(obj.title || "").trim().slice(0, 200);
+  const comments = String(obj.comments || "").trim().slice(0, MAX_COMMENT_CHARS);
+  if (!title && !comments) return null;
+  const eventDate = String(obj.eventDate || "").trim();
+  const type = String(obj.type || "").trim();
+  const subtype = String(obj.subtype || "").trim();
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(eventDate);
+  const validClassification = isCanonicalPair(type, subtype);
+  const validationReason = [!validDate && "Event date must be YYYY-MM-DD.", !validClassification && "Type and subtype must match the Salesforce taxonomy."].filter(Boolean).join(" ");
+  const row = {
+    eventDate,
+    title,
+    type,
+    subtype,
+    comments,
+    agreement: String(obj.agreement || "").trim(),
+    sourceTitle: String(obj.sourceTitle || "").trim(),
+    origin: obj.origin === "note" ? "note" : "generated",
+    suggestedType: String(obj.suggestedType || ""),
+    suggestedSubtype: String(obj.suggestedSubtype || ""),
+    suggestReason: String(obj.suggestReason || ""),
+    review: !!obj.review || !!validationReason,
+    reviewReason: String(obj.reviewReason || validationReason),
+    verify: ["passed", "failed"].includes(obj.verify) ? obj.verify : "",
+    verifyReason: String(obj.verifyReason || ""),
+  };
+  if (obj.verifySource !== undefined) row.verifySource = String(obj.verifySource || "");
+  if (obj.verifyEvidence !== undefined) row.verifyEvidence = String(obj.verifyEvidence || "").slice(0, 240);
+  return row;
+}
+
 export function parseActivityRows(text) {
   const rows = [];
-  for (const rawLine of (text || "").split("\n")) {
+  const input = String(text || "").trim().replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+  try {
+    const parsed = JSON.parse(input);
+    const collection = Array.isArray(parsed) ? parsed : parsed?.rows;
+    if (Array.isArray(collection)) return collection.map(normalizeActivityRow).filter(Boolean);
+  } catch {}
+  for (const rawLine of input.split("\n")) {
     const line = rawLine.trim().replace(/^```(?:json)?/, "").replace(/```$/, "").trim();
     if (!line.startsWith("{")) continue;
     let obj;
     try { obj = JSON.parse(line); } catch { continue; }
-    if (!obj || typeof obj !== "object") continue;
-    if (!obj.title && !obj.comments) continue;
-    rows.push({
-      eventDate: obj.eventDate || "",
-      title: obj.title || "",
-      type: obj.type || "",
-      subtype: obj.subtype || "",
-      comments: obj.comments || "",
-      agreement: obj.agreement || "",
-      sourceTitle: obj.sourceTitle || "",
-      // "note" = harvested from the note's own reviewed SFDC entry;
-      // "generated" (default) = classified by Claude from the note body.
-      origin: obj.origin === "note" ? "note" : "generated",
-      // A classification second opinion the CSM can apply or dismiss.
-      suggestedType: obj.suggestedType || "",
-      suggestedSubtype: obj.suggestedSubtype || "",
-      suggestReason: obj.suggestReason || "",
-      review: !!obj.review,
-      reviewReason: obj.reviewReason || "",
-      // Post-generation verification verdict (set by the verify pass).
-      verify: obj.verify || "",
-      verifyReason: obj.verifyReason || "",
-    });
+    const row = normalizeActivityRow(obj);
+    if (row) rows.push(row);
   }
   return rows;
 }

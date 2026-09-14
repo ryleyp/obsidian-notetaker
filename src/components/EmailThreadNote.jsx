@@ -50,7 +50,9 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   const [threadContext, setThreadContext] = useState("");
   const [emailThread, setEmailThread] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
-  const [model, setModel] = useState(FAST_MODEL);
+  // Mounted only when the Email tab opens, so saved settings have hydrated:
+  // the default model applies here the same as on every other tab.
+  const [model, setModel] = useState(settings.model || FAST_MODEL);
   const [pendingReview, setPendingReview] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -185,6 +187,8 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
             body: JSON.stringify({
               transcript: scanText,
               apiKey: settings.apiKey || undefined,
+              openaiApiKey: settings.openaiApiKey || undefined,
+              model,
               knownAliases: aliasesFromReplacements(savedReplacements),
             }),
           });
@@ -305,6 +309,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           threadDate,
           context: sanitizedContext,
           apiKey: settings.apiKey || undefined,
+              openaiApiKey: settings.openaiApiKey || undefined,
           model,
           sourceBundle,
           ownerNames: settings.ownerNames || [],
@@ -315,7 +320,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
 
       const restoredNote = replacements.length ? reverseReplacements(data.note, replacements) : data.note;
       setNote(restoredNote);
-      if (data.usage) setCost(calcCost(data.usage, model));
+      if (data.usage) setCost(calcCost(data.usage, data.model || model));
 
       setSaving(true);
       // Updates go to the folder the thread already lives in, even when a

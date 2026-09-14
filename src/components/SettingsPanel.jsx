@@ -31,6 +31,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
     vaultPath: settings.vaultPath || "",
     transcriptsPath: settings.transcriptsPath || "",
     apiKey: settings.apiKey || "",
+    openaiApiKey: settings.openaiApiKey || "",
     todoistApiToken: settings.todoistApiToken || "",
     todoistProject: settings.todoistProject || "",
     aiPrivacyScan: settings.aiPrivacyScan !== false,
@@ -111,6 +112,8 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           mode: "preview",
           ownerNames: form.ownerNamesText.split(",").map((n) => n.trim()).filter(Boolean),
           apiKey: form.apiKey.trim() || undefined,
+          openaiApiKey: form.openaiApiKey.trim() || undefined,
+          model: form.model,
           todoistToken: form.todoistApiToken.trim() || undefined,
           todoistProjectId: parseTodoistProjectId(form.todoistProject) || undefined,
         }),
@@ -342,6 +345,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       vaultPath: form.vaultPath.trim(),
       transcriptsPath: form.transcriptsPath.trim(),
       apiKey: form.apiKey.trim(),
+      openaiApiKey: form.openaiApiKey.trim(),
       todoistApiToken: form.todoistApiToken.trim(),
       todoistProject: form.todoistProject.trim(),
       aiPrivacyScan: form.aiPrivacyScan,
@@ -368,6 +372,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       corrections: form.corrections,
       accounts: serializeAccounts(),
       todoistProject: form.todoistProject.trim(),
+      ...(includeKeyInExport && form.openaiApiKey.trim() ? { openaiApiKey: form.openaiApiKey.trim() } : {}),
       ...(includeKeyInExport && form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
       ...(includeKeyInExport && form.todoistApiToken.trim() ? { todoistApiToken: form.todoistApiToken.trim() } : {}),
     };
@@ -398,6 +403,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           vaultPath: typeof cfg.vaultPath === "string" ? cfg.vaultPath : f.vaultPath,
           transcriptsPath: typeof cfg.transcriptsPath === "string" ? cfg.transcriptsPath : f.transcriptsPath,
           model: cfg.model || f.model,
+          openaiApiKey: typeof cfg.openaiApiKey === "string" && cfg.openaiApiKey ? cfg.openaiApiKey : f.openaiApiKey,
           apiKey: typeof cfg.apiKey === "string" && cfg.apiKey ? cfg.apiKey : f.apiKey,
           todoistApiToken: typeof cfg.todoistApiToken === "string" && cfg.todoistApiToken ? cfg.todoistApiToken : f.todoistApiToken,
           todoistProject: typeof cfg.todoistProject === "string" && cfg.todoistProject ? cfg.todoistProject : f.todoistProject,
@@ -519,7 +525,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           <label className="label">Anthropic API Key</label>
           <p className="text-xs text-gray-500 mb-2">
             Your API key from{" "}
-            <span className="font-medium">console.anthropic.com</span>. Stored only for this browser session.
+            <span className="font-medium">console.anthropic.com</span>. Stored locally in this browser.
             Alternatively, set <code className="bg-gray-100 px-1 rounded">ANTHROPIC_API_KEY</code> in{" "}
             <code className="bg-gray-100 px-1 rounded">.env.local</code>.
           </p>
@@ -530,6 +536,12 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
             value={form.apiKey}
             onChange={(e) => handleChange("apiKey", e.target.value)}
           />
+        </div>
+
+        <div>
+          <label htmlFor="openai-api-key" className="label">OpenAI API Key (ChatGPT)</label>
+          <p className="text-xs text-gray-500 mb-2">For ChatGPT note generation and EA activity reports. Add an OpenAI API key, or set <code>OPENAI_API_KEY</code> in <code>.env.local</code>. Uses separately billed OpenAI API access. Stored locally in this browser.</p>
+          <input id="openai-api-key" type="password" className="input" placeholder="sk-..." autoComplete="off" value={form.openaiApiKey} onChange={(e) => handleChange("openaiApiKey", e.target.value)} />
         </div>
 
         <div>
@@ -663,7 +675,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
         <div>
           <label className="label">Default Model</label>
           <p className="text-xs text-gray-500 mb-2">
-            Opus is the most capable; Sonnet balances quality and cost; Haiku is the cheapest and fastest.
+            Choose a current ChatGPT API model or a Claude model. Each option shows its input and output price per million tokens, and you can change models for every note or report.
           </p>
           <ModelPicker model={form.model} setModel={(id) => handleChange("model", id)} />
         </div>

@@ -246,6 +246,8 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
             body: JSON.stringify({
               transcript: scanText,
               apiKey: settings.apiKey || undefined,
+              openaiApiKey: settings.openaiApiKey || undefined,
+              model,
               knownAliases: aliasesFromReplacements(savedReplacements),
             }),
           });
@@ -346,6 +348,8 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
           vaultPath: settings.vaultPath,
           folderPath: selectedFolder,
           apiKey: settings.apiKey || undefined,
+          openaiApiKey: settings.openaiApiKey || undefined,
+          model,
           accountName: account.name,
           allAccounts: settings.accounts || [],
           replacements,
@@ -501,6 +505,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       notes: loadedSources,
       facts: factsForRequest,
       apiKey: settings.apiKey || undefined,
+      openaiApiKey: settings.openaiApiKey || undefined,
       model,
       today: TODAY,
       replacements,

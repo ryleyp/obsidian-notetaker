@@ -12,6 +12,7 @@ export const EMPTY_SETTINGS = {
   vaultPath: "",
   transcriptsPath: "",
   apiKey: "",
+  openaiApiKey: "",
   todoistApiToken: "",
   todoistProject: "",
   aiPrivacyScan: true,

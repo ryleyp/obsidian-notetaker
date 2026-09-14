@@ -90,6 +90,19 @@ describe("sortRowsByDate", () => {
   });
 });
 
+describe("comment length", () => {
+  it("keeps an over-limit reviewed comment so the table can warn instead of silently cutting it", () => {
+    const long = "x".repeat(900);
+    const [row] = parseActivityRows(JSON.stringify({ ...ROW, comments: long }));
+    expect(row.comments).toHaveLength(900);
+  });
+
+  it("still bounds runaway model output", () => {
+    const [row] = parseActivityRows(JSON.stringify({ ...ROW, comments: "y".repeat(9000) }));
+    expect(row.comments).toHaveLength(4000);
+  });
+});
+
 describe("Filed column round trip", () => {
   it("writes filed state into the table and reads it back", () => {
     const md = rowsToMarkdown([

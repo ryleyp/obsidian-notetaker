@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import { assertTrustedRequest } from "@/lib/requestSafety";
-import { DEFAULT_MODEL } from "@/lib/models";
 import { formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 
 const SYSTEM_PROMPT = `You draft concise, customer-ready follow-up emails for an NI Customer Success Manager.
@@ -47,6 +46,7 @@ export async function POST(request) {
       notes,
       meetingTitle,
       apiKey,
+      openaiApiKey,
       model,
       audience = "customer",
       tone = "warm-professional",
@@ -58,16 +58,9 @@ export async function POST(request) {
       return NextResponse.json({ error: "Notes are required" }, { status: 400 });
     }
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return NextResponse.json(
-        { error: "Anthropic API key is required. Add it in Settings or set ANTHROPIC_API_KEY in .env.local" },
-        { status: 400 }
-      );
-    }
 
-    const client = new Anthropic({ apiKey: key });
-    const selectedModel = model || DEFAULT_MODEL;
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const selectedModel = client.resolvedModel;
     const msg = await client.messages.create({
       model: selectedModel,
       max_tokens: 8_000,

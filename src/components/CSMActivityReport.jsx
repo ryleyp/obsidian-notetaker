@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import FolderSelector from "@/components/FolderSelector";
 import ActivityPreview from "@/components/ActivityPreview";
+import ActivityImprovementPanel from "@/components/ActivityImprovementPanel";
+import ActivityComparisonPanel from "@/components/ActivityComparisonPanel";
+import RunModePicker from "@/components/RunModePicker";
+import DraftRestoreList from "@/components/DraftRestoreList";
+import { alternateModel, calcCost, estimateUsage, providerLabel, resolveAutoModel } from "@/lib/models";
+import { applyImprovement } from "@/lib/activityImprovement";
+import { acceptActivityAlternative } from "@/lib/activityComparison";
 import { detectAccount, suggestAgreements } from "@/lib/accounts";
 import { reverseReplacements } from "@/lib/sanitize";
 import { redactForbiddenTerms } from "@/lib/scrub";
@@ -12,6 +19,7 @@ import { ScanButton, CountsBadges, NoteList, GeneratePanel, PreflightPanel, Outp
 import { parseActivityRows, rowsToNDJSON, rowsToMarkdown, sortRowsByDate } from "@/lib/activityRows";
 import { harvestNotes } from "@/lib/sfdcHarvest";
 import { isFiled, loadFiledRows, markFiled, recentFiledRows } from "@/lib/filedRows";
+import { consumeSseText } from "@/lib/sseClient";
 
 function toISO(d) {
   return d.toISOString().split("T")[0];
@@ -69,9 +77,23 @@ function extractCandidateTerms(row, ownTerms) {
 }
 
 export default function CSMActivityReport({ settings, onSettingsClick, onAccountsUpdate }) {
+  const [improvementSession, setImprovementSession] = useState(0);
+  const [runMode, setRunMode] = useState("quick");
+  const [pendingImprovement, setPendingImprovement] = useState(false);
+  const [pendingAlternative, setPendingAlternative] = useState(false);
+  const [pendingFlaggedReview, setPendingFlaggedReview] = useState(false);
+  const [pendingPrimaryRecord, setPendingPrimaryRecord] = useState(false);
+  const [alternativeRows, setAlternativeRows] = useState(null);
+  const [alternativeLoading, setAlternativeLoading] = useState(false);
+  const [alternativeError, setAlternativeError] = useState("");
+  const [alternativeMeta, setAlternativeMeta] = useState(null);
+  const [undoStack, setUndoStack] = useState([]);
+  const [draftHistory, setDraftHistory] = useState([]);
+  const [historyReady, setHistoryReady] = useState(false);
   const [rangeStart, setRangeStart] = useState(defaultRangeStart());
   const [rangeEnd, setRangeEnd] = useState(TODAY);
   const [verifying, setVerifying] = useState(false);
+  const [verifyingRow, setVerifyingRow] = useState(null);
   const [bleedRow, setBleedRow] = useState(null); // row index being flagged
   const [bleedAccount, setBleedAccount] = useState("");
   const [bleedTerms, setBleedTerms] = useState("");
@@ -81,6 +103,9 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   const [classifying, setClassifying] = useState(false);
   const [pendingClassifyCheck, setPendingClassifyCheck] = useState(false);
   const [reportFiled, setReportFiled] = useState(null); // { filename, count } from the folder's latest saved report
+  const manualEditRef = useRef({ timer: null, active: false });
+
+  useEffect(() => () => clearTimeout(manualEditRef.current.timer), []);
 
   useEffect(() => {
     setFiledMap(loadFiledRows());
@@ -129,6 +154,21 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
 
   const accountName = detectAccount(wf.selectedFolder, settings.accounts).name;
   const account = (settings.accounts || []).find((a) => a.name === accountName) || null;
+  const reportHistoryKey = `report:ea-activity:drafts:${settings.vaultPath || "default"}:${wf.selectedFolder || "root"}`;
+  const resolvedReportModel = resolveAutoModel(wf.model, { apiKey: settings.apiKey, openaiApiKey: settings.openaiApiKey });
+  const reportAlternativeModel = alternateModel(resolvedReportModel);
+  const estimatedReportCost = estimateUsage(wf.activeNotes || [], resolvedReportModel, 3500).cost;
+  const estimatedAlternateReportCost = estimateUsage(wf.activeNotes || [], reportAlternativeModel, 3500).cost;
+
+  useEffect(() => {
+    setHistoryReady(false);
+    try { setDraftHistory(JSON.parse(localStorage.getItem(reportHistoryKey) || "[]")); } catch { setDraftHistory([]); }
+    setHistoryReady(true);
+  }, [reportHistoryKey]);
+  useEffect(() => {
+    if (!historyReady) return;
+    try { localStorage.setItem(reportHistoryKey, JSON.stringify(draftHistory.slice(0, 15))); } catch {}
+  }, [draftHistory, historyReady, reportHistoryKey]);
 
   // Notes whose saved SFDC entry can be used as-is vs. notes Claude must read.
   const harvestPlan = useMemo(
@@ -168,9 +208,79 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
     return map;
   }, [wf.loadedNotes]);
 
+  function recordReportDraft(output, label, draftModel = wf.model, cost = null) {
+    if (!output?.trim()) return;
+    const entry = { id: `${Date.now()}-${Math.random()}`, output, label, model: draftModel, cost, sourceCount: wf.activeNotes?.length || 0, ts: Date.now() };
+    setDraftHistory((history) => [entry, ...history.filter((item) => item.output !== output)].slice(0, 15));
+  }
+
+  function commitRows(next, label, draftModel = wf.model, cost = null) {
+    clearTimeout(manualEditRef.current.timer);
+    manualEditRef.current.active = false;
+    const output = rowsToNDJSON(next);
+    if (wf.output?.trim() && output !== wf.output) setUndoStack((stack) => [...stack, wf.output].slice(-15));
+    wf.handleOutputChange(output);
+    recordReportDraft(output, label, draftModel, cost);
+  }
+
+  function undoReport() {
+    if (!undoStack.length) return;
+    clearTimeout(manualEditRef.current.timer);
+    manualEditRef.current.active = false;
+    const previous = undoStack[undoStack.length - 1];
+    setUndoStack((stack) => stack.slice(0, -1));
+    wf.handleOutputChange(previous);
+    recordReportDraft(previous, "Undo");
+  }
+
+  function restoreReport(entry) {
+    if (!entry?.output || entry.output === wf.output) return;
+    setUndoStack((stack) => [...stack, wf.output].filter(Boolean).slice(-15));
+    wf.handleOutputChange(entry.output);
+    recordReportDraft(entry.output, `Restored: ${entry.label}`, entry.model, entry.cost);
+  }
+
+  function applyImprovementChanges(changes) {
+    const next = applyImprovement(rows, changes);
+    // Titles participate in filed-row identity. Carry that state to renamed
+    // activities so editing never makes an already-filed activity look new.
+    setFiledMap((prev) => changes.reduce((map, { index }) => rows[index].filed ? markFiled(map, next[index], true) : map, prev));
+    commitRows(next, `${providerLabel(reportAlternativeModel)} improvement`, reportAlternativeModel);
+  }
+
+  function openReportHistory(item) {
+    setImprovementSession((session) => session + 1);
+    setPendingImprovement(false);
+    setAlternativeRows(null);
+    setUndoStack([]);
+    wf.invalidateNotes();
+    wf.openHistoryItem(item);
+  }
+
+  function resetReport() {
+    clearTimeout(manualEditRef.current.timer);
+    manualEditRef.current.active = false;
+    setAlternativeRows(null);
+    setAlternativeError("");
+    setAlternativeMeta(null);
+    setUndoStack([]);
+    setPendingPrimaryRecord(true);
+    wf.handleReset();
+  }
+
   function updateRow(i, patch) {
     const next = rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r));
-    wf.setOutput(rowsToNDJSON(next));
+    if (!manualEditRef.current.active) {
+      setUndoStack((stack) => [...stack, wf.output].filter(Boolean).slice(-15));
+      manualEditRef.current.active = true;
+    }
+    clearTimeout(manualEditRef.current.timer);
+    const output = rowsToNDJSON(next);
+    wf.handleOutputChange(output);
+    manualEditRef.current.timer = setTimeout(() => {
+      manualEditRef.current.active = false;
+      recordReportDraft(output, "Manual row edit");
+    }, 800);
   }
 
   function handleRangeChange(start, end) {
@@ -183,12 +293,84 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   // Harvest first, generate second: notes that already carry a reviewed SFDC
   // entry become rows instantly; only the rest go to Claude.
   async function handleGenerate() {
+    setPendingImprovement(false);
+    setPendingAlternative(false);
+    setPendingFlaggedReview(false);
+    setAlternativeRows(null);
+    setAlternativeError("");
+    setUndoStack([]);
     const { rows: harvested, remaining } = harvestPlan;
     wf.seedOutput(rowsToNDJSON(harvested));
     if (remaining.length) await wf.handleSynthesize({ append: harvested.length > 0, notes: remaining });
     // The classification check needs the rows React derives from the new
     // output, so it runs from an effect once the state has settled.
-    setPendingClassifyCheck(true);
+    if (runMode === "second-opinion") setPendingImprovement(true);
+    else if (runMode === "compare") setPendingAlternative(true);
+    else if (runMode === "flagged") { setPendingClassifyCheck(true); setPendingFlaggedReview(true); }
+  }
+
+  async function runAlternativeReport() {
+    if (!wf.activeNotes?.length || alternativeLoading) return;
+    const comparisonModel = reportAlternativeModel;
+    setAlternativeLoading(true);
+    setAlternativeError("");
+    try {
+      const response = await apiFetch("/api/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          notes: wf.activeNotes,
+          model: comparisonModel,
+          apiKey: settings.apiKey || undefined,
+          openaiApiKey: settings.openaiApiKey || undefined,
+          today: TODAY,
+          replacements: settings.replacements || [],
+          corrections: settings.corrections || [],
+          accountName,
+          allAccounts: settings.accounts || [],
+          restoredIds: [...wf.restoredIds],
+          promptType: "csm-activity",
+          rangeStart,
+          rangeEnd,
+          exampleRows: recentFiledRows(filedMap),
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Alternative report failed");
+      }
+      const result = await consumeSseText(response);
+      const restored = (settings.replacements || []).length ? reverseReplacements(result.text, settings.replacements || []) : result.text;
+      const clean = redactForbiddenTerms(restored, accountName, settings.accounts || []).text;
+      const parsed = parseActivityRows(clean);
+      if (!parsed.length) throw new Error("The alternative provider returned no valid activities.");
+      const cost = result.usage ? calcCost(result.usage, comparisonModel) : null;
+      setAlternativeRows(parsed);
+      setAlternativeMeta({ model: comparisonModel, cost });
+      recordReportDraft(rowsToNDJSON(parsed), `${providerLabel(comparisonModel)} independent draft`, comparisonModel, cost);
+    } catch (error) {
+      setAlternativeError(error.message);
+    } finally {
+      setAlternativeLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!pendingPrimaryRecord || wf.synthesizing || !rows.length) return;
+    setPendingPrimaryRecord(false);
+    recordReportDraft(wf.output, `${providerLabel(resolvedReportModel)} primary report`, resolvedReportModel, wf.synthCost);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPrimaryRecord, wf.synthesizing, rows.length]);
+
+  useEffect(() => {
+    if (!pendingAlternative || wf.synthesizing || !rows.length) return;
+    setPendingAlternative(false);
+    runAlternativeReport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAlternative, wf.synthesizing, rows.length]);
+
+  function applyAlternativeItem(item, field) {
+    commitRows(acceptActivityAlternative(rows, alternativeRows || [], item, field), field ? `Accepted alternative ${field}` : "Accepted alternative activity", alternativeMeta?.model, alternativeMeta?.cost);
   }
 
   useEffect(() => {
@@ -200,7 +382,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
 
   // Second opinion on every row's Type/Subtype from the detailed taxonomy.
   // Produces suggestions the CSM applies or dismisses — never silent edits.
-  async function checkClassifications() {
+  async function checkClassifications(reviewModel = reportAlternativeModel) {
     if (!rows.length) return;
     setClassifying(true);
     const reps = settings.replacements || [];
@@ -212,13 +394,15 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
           rows: rows.map(({ title, type, subtype, comments }) => ({ title, type, subtype, comments })),
           replacements: reps,
           corrections: settings.corrections || [],
+          model: reviewModel,
           apiKey: settings.apiKey || undefined,
+          openaiApiKey: settings.openaiApiKey || undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Classification check failed");
       const byIndex = new Map((data.suggestions || []).map((s) => [s.index, s]));
-      wf.setOutput(rowsToNDJSON(rows.map((row, i) => {
+      const checked = rows.map((row, i) => {
         const s = byIndex.get(i);
         if (!s) return { ...row, suggestedType: "", suggestedSubtype: "", suggestReason: "" };
         return {
@@ -227,7 +411,8 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
           suggestedSubtype: s.subtype,
           suggestReason: reps.length ? reverseReplacements(s.reason || "", reps) : s.reason || "",
         };
-      })));
+      });
+      commitRows(checked, `${providerLabel(reviewModel)} classification review`, reviewModel);
     } catch (e) {
       // No API key or a transient failure: the table is still complete
       // without suggestions, so don't interrupt the CSM.
@@ -286,8 +471,9 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           notes: [note],
-          apiKey: settings.apiKey || undefined,
           model: wf.model,
+          apiKey: settings.apiKey || undefined,
+          openaiApiKey: settings.openaiApiKey || undefined,
           today: TODAY,
           replacements: reps,
           corrections: settings.corrections || [],
@@ -324,8 +510,8 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
       const restored = reps.length ? reverseReplacements(text, reps) : text;
       const fresh = parseActivityRows(redactForbiddenTerms(restored, accountName, settings.accounts || []).text)
         .map((r) => ({ ...r, origin: "generated" }));
-      if (!fresh.length) throw new Error("Claude returned no rows for this note.");
-      wf.setOutput(rowsToNDJSON([...rows.slice(0, i), ...fresh, ...rows.slice(i + 1)]));
+      if (!fresh.length) throw new Error("The model returned no rows for this note.");
+      commitRows([...rows.slice(0, i), ...fresh, ...rows.slice(i + 1)], `Regenerated activity with ${providerLabel(resolvedReportModel)}`, resolvedReportModel);
     } catch (e) {
       alert(`Regenerate failed: ${e.message}`);
     } finally {
@@ -335,10 +521,12 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
 
   // Second-pass audit of generated rows against their cited sources. Rows
   // harvested from notes were reviewed at save time and are skipped.
-  async function handleVerify() {
-    const toVerify = rows.map((row, i) => ({ row, i })).filter(({ row }) => row.origin !== "note");
+  async function handleVerify(indices = null, reviewModel = reportAlternativeModel) {
+    const selected = indices ? new Set(indices) : null;
+    const toVerify = rows.map((row, i) => ({ row, i })).filter(({ row, i }) => selected ? selected.has(i) : row.origin !== "note");
     if (!toVerify.length || !wf.activeNotes?.length) return;
     setVerifying(true);
+    setVerifyingRow(indices?.length === 1 ? indices[0] : null);
     try {
       const res = await apiFetch("/api/verify-rows", {
         method: "POST",
@@ -351,7 +539,9 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
           replacements: settings.replacements || [],
           corrections: settings.corrections || [],
           restoredIds: [...wf.restoredIds],
+          model: reviewModel,
           apiKey: settings.apiKey || undefined,
+          openaiApiKey: settings.openaiApiKey || undefined,
         }),
       });
       const data = await res.json();
@@ -365,16 +555,25 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
       const next = rows.map((r, i) => {
         const v = verdictByRowIndex.get(i);
         if (!v) return r;
-        const reason = reps.length ? reverseReplacements(v.reason || "", reps) : v.reason || "";
-        return { ...r, verify: v.supported ? "passed" : "failed", verifyReason: reason };
+        const restore = (value) => reps.length ? reverseReplacements(value || "", reps) : value || "";
+        return { ...r, verify: v.supported ? "passed" : "failed", verifyReason: restore(v.reason), verifySource: restore(v.sourceTitle), verifyEvidence: restore(v.evidenceQuote) };
       });
-      wf.setOutput(rowsToNDJSON(next));
+      commitRows(next, `${providerLabel(reviewModel)} source check`, reviewModel);
     } catch (e) {
       alert(`Verification failed: ${e.message}`);
     } finally {
       setVerifying(false);
+      setVerifyingRow(null);
     }
   }
+
+  useEffect(() => {
+    if (!pendingFlaggedReview || pendingClassifyCheck || classifying || wf.synthesizing) return;
+    setPendingFlaggedReview(false);
+    const flagged = rows.map((row, index) => row.review || row.suggestedType ? index : -1).filter((index) => index >= 0);
+    if (flagged.length) handleVerify(flagged, reportAlternativeModel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFlaggedReview, pendingClassifyCheck, classifying, wf.synthesizing]);
 
   // Bleed feedback: user marks a row as another account's content.
   function openBleedPanel(i) {
@@ -398,7 +597,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
       onAccountsUpdate(nextAccounts);
     }
     // Remove the misattributed row regardless.
-    wf.setOutput(rowsToNDJSON(rows.filter((_, idx) => idx !== bleedRow)));
+    commitRows(rows.filter((_, idx) => idx !== bleedRow), "Removed misattributed activity");
     setBleedRow(null);
   }
 
@@ -421,7 +620,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
             <div>
               <div className="flex items-center gap-3 mb-1">
                 <h3 className="text-base font-semibold text-gray-900">EA Activity Report</h3>
-                <HistoryMenu history={wf.history} onOpen={wf.openHistoryItem} />
+                <HistoryMenu history={wf.history} onOpen={openReportHistory} />
               </div>
               <p className="text-sm text-gray-500">
                 Scanning <span className="font-medium text-gray-700">{folderLabel}</span> for notes dated{" "}
@@ -504,6 +703,8 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
             </div>
           </div>
 
+          <div className="mt-4"><DraftRestoreList entries={draftHistory} onRestore={restoreReport} title="Recent EA report drafts" /></div>
+          {wf.activeNotes?.length > 0 && <div className="mt-4"><RunModePicker value={runMode} onChange={setRunMode} estimatedCost={estimatedReportCost} alternateEstimatedCost={estimatedAlternateReportCost} model={resolvedReportModel} allowFlagged disabled={wf.synthesizing} /></div>}
           {wf.activeNotes?.length > 0 && !wf.showConfirm && (
             <GeneratePanel
               scrub={scrub}
@@ -521,11 +722,11 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
               intro={
                 <>
                   {harvestPlan.remaining.length === 0 ? (
-                    <>All <strong>{harvestPlan.rows.length}</strong> usable notes already carry a reviewed SFDC Activity Entry — the table is built straight from those. Nothing is sent to Claude.</>
+                    <>All <strong>{harvestPlan.rows.length}</strong> usable notes already carry a reviewed SFDC Activity Entry — the table is built straight from those. {runMode === "second-opinion" ? `Then ${providerLabel(reportAlternativeModel)} reviews all activities against the source notes.` : runMode === "compare" ? `Then ${providerLabel(reportAlternativeModel)} independently builds a second report for comparison.` : runMode === "flagged" ? `Then ${providerLabel(reportAlternativeModel)} reviews uncertain classifications and checks flagged rows against the source notes.` : "No second model pass will run."}</>
                   ) : (
                     <>
                       <strong>{harvestPlan.rows.length}</strong> note{harvestPlan.rows.length !== 1 ? "s" : ""} already carr{harvestPlan.rows.length !== 1 ? "y" : "ies"} a reviewed SFDC Activity Entry and will be used as-is.
-                      Sending the other <strong>{harvestPlan.remaining.length}</strong> note{harvestPlan.remaining.length !== 1 ? "s" : ""} (no entry) to Claude to classify.
+                      Sending the other <strong>{harvestPlan.remaining.length}</strong> note{harvestPlan.remaining.length !== 1 ? "s" : ""} (no entry) to {providerLabel(resolvedReportModel)} to classify. {runMode === "second-opinion" && `Then ${providerLabel(reportAlternativeModel)} reviews the full table and source notes.`}{runMode === "compare" && ` Then ${providerLabel(reportAlternativeModel)} independently generates a comparison report.`}
                     </>
                   )}
                   {harvestPlan.skipped.length > 0 && (
@@ -549,7 +750,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
               onCancel={() => wf.setShowConfirm(false)}
               onConfirm={handleGenerate}
               synthesizing={wf.synthesizing}
-              confirmLabel={harvestPlan.remaining.length === 0 ? "Build table from notes" : "Confirm — Send to Claude"}
+              confirmLabel={runMode === "second-opinion" ? "Build table & get second opinion" : runMode === "compare" ? "Build & compare both providers" : runMode === "flagged" ? "Build & review flagged items" : harvestPlan.remaining.length === 0 ? "Build table from notes" : `Confirm — Send to ${providerLabel(resolvedReportModel)}`}
             />
           )}
         </div>
@@ -560,11 +761,11 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
           <OutputHeader
             synthesizing={wf.synthesizing}
             readyTitle="EA Activity Report Ready"
-            onReset={wf.handleReset}
+            onReset={resetReport}
             droppedCount={wf.droppedCount}
             restoredFromStorage={wf.restoredFromStorage}
             history={wf.history}
-            onOpenHistory={wf.openHistoryItem}
+            onOpenHistory={openReportHistory}
           />
           {wf.partial && !wf.synthesizing && (
             <div className="flex items-center justify-between gap-3 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
@@ -627,6 +828,38 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
                 : <> — no rows marked filed there yet. Tick the Filed box here, or edit <code className="font-mono">[ ]</code> to <code className="font-mono">[x]</code> in Obsidian.</>}
             </p>
           )}
+          {rows.length > 0 && !wf.synthesizing && (
+            <ActivityComparisonPanel
+              current={rows}
+              alternative={alternativeRows}
+              loading={alternativeLoading}
+              error={alternativeError}
+              model={alternativeMeta?.model}
+              cost={alternativeMeta?.cost}
+              onRun={runAlternativeReport}
+              onApply={applyAlternativeItem}
+              onUndo={undoReport}
+              canUndo={undoStack.length > 0}
+              history={draftHistory}
+              onRestore={restoreReport}
+              sources={wf.activeNotes || []}
+            />
+          )}
+          {rows.length > 0 && !wf.synthesizing && (
+            <ActivityImprovementPanel
+              key={`${settings.vaultPath}:${wf.selectedFolder}:${improvementSession}`}
+              rows={rows}
+              autoRun={pendingImprovement}
+              onAutoRun={() => setPendingImprovement(false)}
+              notes={wf.activeNotes}
+              settings={settings}
+              accountName={accountName}
+              restoredIds={wf.restoredIds}
+              model={reportAlternativeModel}
+              disabled={classifying || verifying || regeneratingRow !== null || wf.saving}
+              onApply={applyImprovementChanges}
+            />
+          )}
           {wf.output && (
             <ActivityPreview
               rows={rows}
@@ -640,7 +873,9 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
               cost={wf.synthCost}
               sourceInfo={sourceInfo}
               onVerify={handleVerify}
+              onVerifyRow={(index) => handleVerify([index], reportAlternativeModel)}
               verifying={verifying}
+              verifyingRow={verifyingRow}
               onFlagBleed={openBleedPanel}
               onToggleFiled={toggleFiled}
               onRegenerateRow={regenerateRow}
@@ -652,7 +887,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
             />
           )}
           {wf.synthesizing && !wf.output && (
-            <div className="card p-6 text-sm text-gray-500 animate-pulse">Waiting for Claude…</div>
+            <div className="card p-6 text-sm text-gray-500 animate-pulse">Waiting for {providerLabel(resolvedReportModel)}…</div>
           )}
         </div>
       )}

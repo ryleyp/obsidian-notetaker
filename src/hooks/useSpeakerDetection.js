@@ -26,7 +26,7 @@ export function useSpeakerDetection({ settings, onConfirm }) {
       const res = await apiFetch("/api/detect-speakers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript: sanitized, apiKey: settings.apiKey || undefined }),
+        body: JSON.stringify({ transcript: sanitized, apiKey: settings.apiKey || undefined, openaiApiKey: settings.openaiApiKey || undefined, model: settings.model || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Speaker detection failed");

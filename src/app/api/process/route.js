@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import { looksSpeakerLabeled } from "@/lib/speakers";
 import { assertTrustedRequest } from "@/lib/requestSafety";
-import { DEFAULT_MODEL, maxOutputTokens } from "@/lib/models";
+import { maxOutputTokens } from "@/lib/models";
 import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 import { taxonomyForNotePrompt } from "@/lib/sfdcTaxonomy";
 
@@ -313,6 +313,7 @@ export async function POST(request) {
       transcript,
       meetingTitle,
       apiKey,
+      openaiApiKey,
       model,
       suggestedAgreements = [],
       meetingContext = "",
@@ -326,19 +327,13 @@ export async function POST(request) {
       return NextResponse.json({ error: "Transcript is required" }, { status: 400 });
     }
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return NextResponse.json(
-        { error: "Anthropic API key is required. Add it in Settings or set ANTHROPIC_API_KEY in .env.local" },
-        { status: 400 }
-      );
-    }
 
-    const client = new Anthropic({ apiKey: key });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const selectedModel = client.resolvedModel;
 
     const stream = client.messages.stream({
-      model: model || DEFAULT_MODEL,
-      max_tokens: maxOutputTokens(model || DEFAULT_MODEL),
+      model: selectedModel,
+      max_tokens: maxOutputTokens(selectedModel),
       system: SYSTEM_PROMPT,
       messages: [{
         role: "user",
@@ -362,7 +357,7 @@ export async function POST(request) {
             }
           }
           const finalMsg = await stream.finalMessage();
-          send({ type: "done", usage: finalMsg.usage, model: model || DEFAULT_MODEL });
+          send({ type: "done", usage: finalMsg.usage, model: selectedModel });
         } catch (err) {
           send({ type: "error", message: err?.message || "Processing failed" });
         } finally {

@@ -83,6 +83,20 @@ STEP-BY-STEP
    and the most recent ones are shown to Claude as examples so its
    classification matches yours.
 
+   Choose Quick, Second opinion, Compare both, or Review flagged before generating.
+   The second provider can review both existing SFDC entries and newly generated
+   activities for clearer wording, supported outcomes, and correct classification.
+   Review the before/after proposals and apply a complete proposal, one activity,
+   or one field. You can also run an independent alternative on a finished report.
+   Dates, agreements, source references, and Filed status are preserved.
+   The improvement pass uses the selected alternative OpenAI or Claude model and your privacy filters.
+   Add your OpenAI API key in Settings first. The model picker includes GPT-6 Astra,
+   GPT-5.6 Sol, GPT-5.6 Terra, and GPT-5.6 Luna, with input/output rates shown.
+   Without loaded source notes it can improve wording and classification
+   using the current rows, but cannot verify facts against the sources.
+   Applying edits enables Save to Obsidian again.
+
+
 8. When finished, click "Copy" to copy the Markdown table, or
    "Save to Obsidian" to write it as a file in your vault.
 

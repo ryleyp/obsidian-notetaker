@@ -16,8 +16,11 @@ import StakeholderMap from "@/components/StakeholderMap";
 import SanitizeReview from "@/components/SanitizeReview";
 import SpeakerReview from "@/components/SpeakerReview";
 import ModelPicker from "@/components/ModelPicker";
+import RunModePicker from "@/components/RunModePicker";
+import NoteComparisonPanel from "@/components/NoteComparisonPanel";
+import DraftRestoreList from "@/components/DraftRestoreList";
 import { looksSpeakerLabeled } from "@/lib/speakers";
-import { FAST_MODEL, MODEL_OPTIONS } from "@/lib/models";
+import { alternateModel, estimateUsage, FAST_MODEL, MODEL_OPTIONS, resolveAutoModel } from "@/lib/models";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { useSpeakerDetection } from "@/hooks/useSpeakerDetection";
 import { useSanitizeReview } from "@/hooks/useSanitizeReview";
@@ -45,6 +48,7 @@ export default function Home() {
   const [updateExisting, setUpdateExisting] = useState(false);
   const [existingNote, setExistingNote] = useState(null);
   const [model, setModel] = useState(FAST_MODEL);
+  const [runMode, setRunMode] = useState("quick");
   const [includeFollowUp, setIncludeFollowUp] = useState(false);
   const [followUpAudience, setFollowUpAudience] = useState("customer");
   const [followUpTone, setFollowUpTone] = useState("warm-professional");
@@ -72,7 +76,8 @@ export default function Home() {
     updateAccounts,
     applySettingsPatch,
   } = useAppSettings({
-    onSettingsSaved: () => {
+    onSettingsSaved: (nextSettings) => {
+      setModel(nextSettings.model || FAST_MODEL);
       setSelectedFolder("");
       setExistingNote(null);
     },
@@ -84,10 +89,11 @@ export default function Home() {
 
   const sanitize = useSanitizeReview({
     settings,
+    model,
     applySettingsPatch,
     onScanSkipped: generation.setProcessError,
     actions: {
-      generate: (replacements) => generation.generate(replacements, { onSaved: saving.clearSaved }),
+      generate: (replacements) => generation.generate(replacements, { onSaved: saving.clearSaved, runMode }),
       saveTranscript: (replacements) => saving.saveTranscript(replacements),
     },
   });
@@ -129,9 +135,7 @@ export default function Home() {
   }
 
   function handleNotesChange(nextNotes) {
-    generation.setNotes(nextNotes);
-    saving.clearSaved();
-    generation.clearFollowUp();
+    generation.editNotes(nextNotes, { onSaved: saving.clearSaved });
   }
 
   function handleNewNote() {
@@ -156,6 +160,10 @@ export default function Home() {
   }
 
   const modelLabel = MODEL_OPTIONS.find((m) => m.id === model)?.label || "Claude";
+  const noteEstimateSources = [{ title: meetingTitle, content: [transcript, extendedTranscript, meetingContext, existingNote?.content].filter(Boolean).join("\n\n") }];
+  const resolvedNoteModel = resolveAutoModel(model, { apiKey: settings.apiKey, openaiApiKey: settings.openaiApiKey });
+  const estimatedNoteCost = estimateUsage(noteEstimateSources, resolvedNoteModel).cost;
+  const estimatedAlternateNoteCost = estimateUsage(noteEstimateSources, alternateModel(resolvedNoteModel)).cost;
   const canProcess = transcript.trim().length > 0
     && (!updateExisting || !!existingNote)
     && !generation.processing
@@ -224,6 +232,22 @@ export default function Home() {
                 <h2 className="text-lg font-semibold text-gray-900">Meeting Notes Ready</h2>
                 <button onClick={handleNewNote} className="btn-secondary">New Note</button>
               </div>
+              {!generation.processing && (
+                <NoteComparisonPanel
+                  current={generation.notes}
+                  alternative={generation.alternative}
+                  loading={generation.alternativeLoading}
+                  error={generation.alternativeError}
+                  selectedModel={resolvedNoteModel}
+                  onRunAlternative={(kind, otherModel) => generation.generateAlternative(kind, otherModel)}
+                  onApply={(section) => generation.applyAlternative(section, { onSaved: saving.clearSaved })}
+                  onUndo={() => generation.undo({ onSaved: saving.clearSaved })}
+                  canUndo={generation.revisionHistory.length > 0}
+                  draftHistory={generation.draftHistory}
+                  onRestore={(draft) => generation.restoreDraft(draft, { onSaved: saving.clearSaved })}
+                  sources={generation.sourceBundle?.allSources || []}
+                />
+              )}
               <NotesPreview
                 notes={generation.notes}
                 onSave={() => saving.saveNote(generation.notes)}
@@ -266,6 +290,8 @@ export default function Home() {
                 meetingContext={meetingContext}
                 setMeetingContext={setMeetingContext}
               />
+
+              <DraftRestoreList entries={generation.draftHistory} onRestore={(draft) => generation.restoreDraft(draft, { onSaved: saving.clearSaved })} title="Recent meeting-note drafts" />
 
               <TranscriptInput
                 transcript={transcript}
@@ -425,7 +451,7 @@ export default function Home() {
                       ) : generation.processing ? (
                         <>
                           <Spinner />
-                          Analyzing with Claude {modelLabel}...
+                          Analyzing with {modelLabel}...
                         </>
                       ) : (
                         <>
@@ -436,6 +462,9 @@ export default function Home() {
                         </>
                       )}
                     </button>
+                  </div>
+                  <div className="card p-4">
+                    <RunModePicker value={runMode} onChange={setRunMode} estimatedCost={estimatedNoteCost} alternateEstimatedCost={estimatedAlternateNoteCost} model={resolvedNoteModel} disabled={generation.processing || sanitize.sanitizing} />
                   </div>
 
                   {/* Save transcript only */}

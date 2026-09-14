@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import fs from "fs";
 import path from "path";
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
@@ -48,8 +48,8 @@ function noteExcerpt(content) {
   return sections.join("\n\n");
 }
 
-async function detectCompletedWithAI({ apiKey, model, folderNotes, openItems }) {
-  const client = new Anthropic({ apiKey });
+async function detectCompletedWithAI({ apiKey, openaiApiKey, model, folderNotes, openItems }) {
+  const client = createModelClient({ model: model || FAST_MODEL, apiKey, openaiApiKey, task: "fast" });
   const itemsJson = openItems.map((item, index) => ({
     id: index,
     note: item.filename,
@@ -61,7 +61,7 @@ async function detectCompletedWithAI({ apiKey, model, folderNotes, openItems }) 
     .join("\n\n---\n\n");
 
   const msg = await client.messages.create({
-    model: model || FAST_MODEL,
+    model: client.resolvedModel,
     max_tokens: 4000,
     system: "You audit a CSM's meeting-note action items and decide which open items later notes show were completed or explicitly cancelled/superseded. Be conservative: only report items where the evidence is clear. Respond with ONLY a JSON array, no prose.",
     messages: [{
@@ -95,6 +95,7 @@ export async function POST(request) {
       mode = "preview",
       ownerNames = [],
       apiKey,
+      openaiApiKey,
       model,
       todoistToken,
       todoistProjectId,
@@ -213,7 +214,7 @@ export async function POST(request) {
     }
 
     // 3. AI completion detection, per account folder, over the CSM's items.
-    if (apiKey?.trim() || process.env.ANTHROPIC_API_KEY) {
+    if (apiKey?.trim() || openaiApiKey?.trim() || process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY) {
       const folders = [...new Set(notes.map((n) => n.folder))];
       const alreadyCompleted = new Set(
         [...fileEdits.values()].flatMap((f) => f.edits.filter((e) => e.reason.startsWith("completed")).map((e) => e.from))
@@ -230,6 +231,7 @@ export async function POST(request) {
         try {
           const { completions, parseFailed } = await detectCompletedWithAI({
             apiKey: apiKey?.trim() || process.env.ANTHROPIC_API_KEY,
+            openaiApiKey: openaiApiKey?.trim() || process.env.OPENAI_API_KEY,
             model,
             folderNotes: folderNotes.map((n) => ({ filename: n.filename, date: n.date, excerpt: noteExcerpt(n.content) })),
             openItems,

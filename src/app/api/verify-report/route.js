@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
 import { assertTrustedRequest } from "@/lib/requestSafety";
@@ -15,16 +15,12 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { report, notes = [], accountName, allAccounts = [], replacements = [], corrections = [], restoredIds = [], apiKey } = body;
+    const { report, notes = [], accountName, allAccounts = [], replacements = [], corrections = [], restoredIds = [], apiKey, openaiApiKey, model } = body;
 
     if (!report || !notes.length || !accountName) {
       return new Response(JSON.stringify({ error: "report, notes, and accountName are required" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return new Response(JSON.stringify({ error: "Anthropic API key is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
-    }
 
     const clean = (t) => applyReplacements(applyCorrections(t || "", corrections), replacements);
 
@@ -58,9 +54,9 @@ If the report is fully supported, output exactly one line:
 {"quote":"","problem":"none","reason":"clean"}
 Report at most 10 problems, most serious first.`;
 
-    const client = new Anthropic({ apiKey: key });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
     const msg = await client.messages.create({
-      model: "claude-haiku-4-5",
+      model: client.resolvedModel,
       max_tokens: 3000,
       system: "You are a meticulous auditor. Respond with only newline-delimited JSON objects — no preamble.",
       messages: [{ role: "user", content: prompt }],

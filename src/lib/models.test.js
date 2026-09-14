@@ -8,6 +8,8 @@ import {
   estimateUsage,
   firstTextBlock,
   maxOutputTokens,
+  modelRateLabel,
+  resolveAutoModel,
 } from "@/lib/models";
 
 describe("firstTextBlock", () => {
@@ -71,10 +73,27 @@ describe("model capability lookups", () => {
 
   it("offers only current models in the picker", () => {
     expect(MODEL_OPTIONS.map((o) => o.id)).toEqual([
+      "gpt-6-astra",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+      "gpt-5.4",
       "claude-haiku-4-5",
       "claude-sonnet-5",
       "claude-opus-5",
     ]);
+  });
+
+  it("shows the same input/output rate breakdown for OpenAI and Claude models", () => {
+    expect(modelRateLabel("gpt-5.6-terra")).toBe("$2 in / $12 out per 1M");
+    expect(modelRateLabel("claude-sonnet-5")).toBe("$3 in / $15 out per 1M");
+  });
+
+  it("routes Auto to fast or full models using an available provider", () => {
+    expect(resolveAutoModel("auto", { openaiApiKey: "key", task: "fast" })).toBe("gpt-5.6-luna");
+    expect(resolveAutoModel("auto", { openaiApiKey: "key" })).toBe("gpt-5.6-terra");
+    expect(resolveAutoModel("auto", { apiKey: "key", task: "fast" })).toBe("claude-haiku-4-5");
+    expect(resolveAutoModel("auto", { apiKey: "key" })).toBe("claude-sonnet-5");
   });
 });
 

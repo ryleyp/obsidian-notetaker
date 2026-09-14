@@ -1,7 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { assertTrustedRequest } from "@/lib/requestSafety";
-import { FAST_MODEL, firstTextBlock } from "@/lib/models";
+import { firstTextBlock } from "@/lib/models";
 import { SFDC_TAXONOMY, isCanonicalPair, taxonomyForReportPrompt } from "@/lib/sfdcTaxonomy";
 
 const MAX_ROWS = 80;
@@ -15,15 +15,11 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { rows = [], replacements = [], corrections = [], apiKey, model } = body;
+    const { rows = [], replacements = [], corrections = [], apiKey, openaiApiKey, model } = body;
     if (!rows.length) {
       return new Response(JSON.stringify({ error: "rows are required" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return new Response(JSON.stringify({ error: "Anthropic API key is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
-    }
 
     const clean = (t) => applyReplacements(applyCorrections(String(t || ""), corrections), replacements);
     const listed = rows.slice(0, MAX_ROWS).map((r, i) => ({
@@ -52,9 +48,9 @@ OUTPUT — one JSON object per line (NDJSON), no other text, ONLY for rows where
 {"index":0,"type":"<exact Type>","subtype":"<exact Subtype>","reason":"one short sentence"}
 Copy Type and Subtype text exactly from the taxonomy. If every row is already right, output exactly: {"index":-1}`;
 
-    const client = new Anthropic({ apiKey: key });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
     const msg = await client.messages.create({
-      model: model || FAST_MODEL,
+      model: client.resolvedModel,
       max_tokens: 3000,
       system: "You classify customer-success activities precisely against a fixed taxonomy. Respond with only NDJSON.",
       messages: [{ role: "user", content: prompt }],
@@ -80,7 +76,7 @@ Copy Type and Subtype text exactly from the taxonomy. If every row is already ri
       });
     }
 
-    return new Response(JSON.stringify({ suggestions, usage: msg.usage, model: model || FAST_MODEL }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ suggestions, usage: msg.usage, model: client.resolvedModel }), { headers: { "Content-Type": "application/json" } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error?.message || "Classification check failed" }), { status: error?.status || 500, headers: { "Content-Type": "application/json" } });
   }

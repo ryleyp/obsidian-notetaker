@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import { assertTrustedRequest } from "@/lib/requestSafety";
-import { DEFAULT_MODEL, firstTextBlock, maxOutputTokens } from "@/lib/models";
+import { firstTextBlock, maxOutputTokens } from "@/lib/models";
 import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 import { taxonomyForNotePrompt } from "@/lib/sfdcTaxonomy";
 
@@ -157,6 +157,7 @@ export async function POST(request) {
       threadDate,
       context = "",
       apiKey,
+      openaiApiKey,
       model,
       sourceBundle,
       ownerNames = [],
@@ -166,16 +167,9 @@ export async function POST(request) {
       return NextResponse.json({ error: "Email thread is required" }, { status: 400 });
     }
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return NextResponse.json(
-        { error: "Anthropic API key is required. Add it in Settings or set ANTHROPIC_API_KEY in .env.local" },
-        { status: 400 }
-      );
-    }
 
-    const client = new Anthropic({ apiKey: key });
-    const selectedModel = model || DEFAULT_MODEL;
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const selectedModel = client.resolvedModel;
     const msg = await createEmailThreadMessage(client, {
       model: selectedModel,
       max_tokens: maxOutputTokens(selectedModel),

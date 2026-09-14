@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { dateSortValue } from "@/lib/synthesisPolicy";
@@ -8,7 +8,6 @@ import {
   sourceSummariesFromFacts,
 } from "@/lib/contactMapping";
 import {
-  DEFAULT_MODEL,
   budgetChars as modelBudgetChars,
   contextLimit as contextTokens,
   maxOutputTokens,
@@ -323,16 +322,13 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { notes = [], facts = [], apiKey, model, today, replacements = [], corrections = [], accountName, allAccounts = [], sourceRange = "recent", mappingContext = [], previousOutput = "", continuationSection = "", incremental = false } = body;
+    const { notes = [], facts = [], apiKey, openaiApiKey, model, today, replacements = [], corrections = [], accountName, allAccounts = [], sourceRange = "recent", mappingContext = [], previousOutput = "", continuationSection = "", incremental = false } = body;
 
     if ((!notes || notes.length === 0) && (!facts || facts.length === 0)) {
       return new Response(JSON.stringify({ error: "No notes or facts provided" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return new Response(JSON.stringify({ error: "Anthropic API key is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
-    }
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
 
     const sanitizedNotes = (notes || []).map((n) => ({
       ...n,
@@ -347,7 +343,7 @@ export async function POST(request) {
       .filter((item) => item.label.trim() && item.context.trim());
     const sanitizedPreviousOutput = applyReplacements(applyCorrections(previousOutput || "", corrections), replacements);
 
-    const selectedModel = model || DEFAULT_MODEL;
+    const selectedModel = client.resolvedModel;
     const extraPromptChars = sanitizedPreviousOutput.length + sanitizedMappingContext.reduce((sum, item) => sum + item.label.length + item.context.length + 20, 0);
     const sanitizedFacts = mergeFacts((facts || []).map((fact) => ({
       ...fact,
@@ -381,7 +377,6 @@ export async function POST(request) {
       prompt = buildStakeholderMapPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], accountName, allAccounts, sourceRange, sanitizedMappingContext, sanitizedPreviousOutput, continuationSection);
     }
 
-    const client = new Anthropic({ apiKey: key });
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({

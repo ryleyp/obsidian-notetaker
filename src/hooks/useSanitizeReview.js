@@ -17,7 +17,7 @@ import { apiFetch } from "@/lib/apiClient";
 // already-pseudonymized text, ask Claude for entities it still recognizes,
 // then either show the review card or (when nothing new was found) run the
 // pending action straight away.
-export function useSanitizeReview({ settings, applySettingsPatch, actions, onScanSkipped }) {
+export function useSanitizeReview({ settings, model, applySettingsPatch, actions, onScanSkipped }) {
   const [sanitizing, setSanitizing] = useState(false);
   const [pendingReview, setPendingReview] = useState(null); // null | detected[]
   const [pendingAction, setPendingAction] = useState("generate");
@@ -54,6 +54,8 @@ export function useSanitizeReview({ settings, applySettingsPatch, actions, onSca
           body: JSON.stringify({
             transcript: scanText,
             apiKey: settings.apiKey || undefined,
+            openaiApiKey: settings.openaiApiKey || undefined,
+            model,
             knownAliases: aliasesFromReplacements(savedReplacements),
           }),
         });

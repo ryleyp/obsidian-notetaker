@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import ScrubPanel from "@/components/ScrubPanel";
 import ModelPicker from "@/components/ModelPicker";
-import { contextLimit, estimateUsage } from "@/lib/models";
+import { contextLimit, estimateUsage, modelRateLabel, providerLabel } from "@/lib/models";
 import { findAccountBleed } from "@/lib/scrub";
 
 export function Spinner({ className = "w-4 h-4" }) {
@@ -118,7 +118,7 @@ export function GeneratePanel({ scrub, model, setModel, synthError, onGenerate, 
 }
 
 // Pre-flight confirm: token/cost estimate, compact model picker, scrub, confirm.
-export function PreflightPanel({ intro, notes, loadCounts, model, setModel, scrub, onCancel, onConfirm, synthesizing, confirmLabel = "Confirm — Send to Claude" }) {
+export function PreflightPanel({ intro, notes, loadCounts, model, setModel, scrub, onCancel, onConfirm, synthesizing, confirmLabel }) {
   const est = estimateUsage(notes, model);
   const limit = contextLimit(model);
   const warnAt = limit - 20_000;
@@ -140,6 +140,8 @@ export function PreflightPanel({ intro, notes, loadCounts, model, setModel, scru
           <span className="font-mono text-gray-700">{(limit / 1000).toLocaleString()}k tokens ({est.label})</span>
           <span className="text-gray-500">Est. cost</span>
           <span className="font-mono text-gray-700">~${est.cost.toFixed(4)}</span>
+          <span className="text-gray-500">API rates</span>
+          <span className="font-mono text-gray-700">{modelRateLabel(model)}</span>
         </div>
         {est.inputTokens > warnAt && (
           <p className="text-xs text-red-700 font-medium">
@@ -147,7 +149,7 @@ export function PreflightPanel({ intro, notes, loadCounts, model, setModel, scru
           </p>
         )}
         <p className="text-xs text-amber-700">
-          Sanitized note content will be sent to Claude. Names in your glossary are replaced before sending.
+          Sanitized note content will be sent to {providerLabel(model)}. Names in your glossary are replaced before sending.
         </p>
       </div>
       <ScrubPanel {...scrub} idPrefix="" className="mt-3" />

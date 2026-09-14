@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import {
   buildSanitizePrompt,
   extractEmailEntities,
@@ -7,7 +7,7 @@ import {
   parseEntityList,
 } from "@/lib/privacy";
 import { assertTrustedRequest } from "@/lib/requestSafety";
-import { firstTextBlock } from "@/lib/models";
+import { firstTextBlock, isOpenAIModel, resolveAutoModel } from "@/lib/models";
 import { applyReplacements, assignAliases } from "@/lib/sanitize";
 
 export function prepareSanitizeScan(transcript, knownAliases = []) {
@@ -38,18 +38,19 @@ export async function POST(request) {
   }
 
   const body = await request.json();
-  const { transcript, apiKey, knownAliases = [] } = body;
+  const { transcript, apiKey, openaiApiKey, model, knownAliases = [] } = body;
   const { emailEntities, scanText, scanAliases } = prepareSanitizeScan(transcript, knownAliases);
 
-  const key = apiKey || process.env.ANTHROPIC_API_KEY;
+  const resolvedModel = resolveAutoModel(model, { apiKey, openaiApiKey, task: "fast" });
+  const key = isOpenAIModel(resolvedModel) ? openaiApiKey || process.env.OPENAI_API_KEY : apiKey || process.env.ANTHROPIC_API_KEY;
   if (!key) return NextResponse.json({ entities: emailEntities, skipped: true });
 
-  const client = new Anthropic({ apiKey: key });
+  const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
   const prompt = buildSanitizePrompt(scanText, scanAliases);
 
   try {
     const msg = await client.messages.create({
-      model: "claude-haiku-4-5",
+      model: client.resolvedModel,
       max_tokens: 512,
       messages: [{ role: "user", content: prompt }],
     });

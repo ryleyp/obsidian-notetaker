@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { FAST_MODEL, firstTextBlock, maxOutputTokens } from "@/lib/models";
 import { buildLabeledTranscript } from "@/lib/speakers";
@@ -47,20 +47,15 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { transcript, apiKey, model } = body;
+    const { transcript, apiKey, openaiApiKey, model } = body;
 
     if (!transcript || !transcript.trim()) {
       return new Response(JSON.stringify({ error: "Transcript is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return new Response(JSON.stringify({ error: "Anthropic API key is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
-    }
-
     const segments = splitIntoSegments(transcript);
-    const selectedModel = model || FAST_MODEL;
-    const client = new Anthropic({ apiKey: key });
+    const client = createModelClient({ model: model || FAST_MODEL, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
+    const selectedModel = client.resolvedModel;
     const msg = await client.messages.create({
       model: selectedModel,
       // One short line per turn; a turn per segment is the worst case.
@@ -72,7 +67,7 @@ export async function POST(request) {
     const boundaries = parseBoundaries(firstTextBlock(msg), segments.length);
     const segmented = buildLabeledTranscript(assembleTurns(segments, boundaries));
 
-    return new Response(JSON.stringify({ segmented, usage: msg.usage }), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ segmented, usage: msg.usage, model: selectedModel }), { headers: { "Content-Type": "application/json" } });
   } catch (error) {
     return new Response(JSON.stringify({ error: error?.message || "Speaker detection failed" }), { status: error?.status || 500, headers: { "Content-Type": "application/json" } });
   }

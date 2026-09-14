@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
 import { assertTrustedRequest } from "@/lib/requestSafety";
@@ -15,16 +15,12 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { rows = [], notes = [], accountName, allAccounts = [], replacements = [], corrections = [], restoredIds = [], apiKey } = body;
+    const { rows = [], notes = [], accountName, allAccounts = [], replacements = [], corrections = [], restoredIds = [], apiKey, openaiApiKey, model } = body;
 
     if (!rows.length || !notes.length || !accountName) {
       return new Response(JSON.stringify({ error: "rows, notes, and accountName are required" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return new Response(JSON.stringify({ error: "Anthropic API key is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
-    }
 
     const clean = (t) => applyReplacements(applyCorrections(t || "", corrections), replacements);
 
@@ -68,11 +64,13 @@ CLAIMS TO VERIFY:
 ${claims}
 
 OUTPUT — one JSON object per line (NDJSON), no other text, one line per claim:
-{"index":0,"supported":true,"reason":"short explanation citing the source date"}`;
+{"index":0,"supported":true,"reason":"short explanation of the verdict","sourceTitle":"exact source note title","evidenceQuote":"short exact excerpt from the source, maximum 240 characters"}
 
-    const client = new Anthropic({ apiKey: key });
+For supported=false, include the closest source and excerpt when one exists; otherwise leave sourceTitle and evidenceQuote empty. Never create or paraphrase an evidenceQuote.`;
+
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
     const msg = await client.messages.create({
-      model: "claude-haiku-4-5",
+      model: client.resolvedModel,
       max_tokens: 4000,
       system: "You are a meticulous auditor. Respond with only newline-delimited JSON objects — no preamble.",
       messages: [{ role: "user", content: prompt }],
@@ -85,7 +83,13 @@ OUTPUT — one JSON object per line (NDJSON), no other text, one line per claim:
       if (!t.startsWith("{")) continue;
       try {
         const v = JSON.parse(t);
-        if (Number.isInteger(v.index)) verdicts.push({ index: v.index, supported: !!v.supported, reason: v.reason || "" });
+        if (Number.isInteger(v.index)) verdicts.push({
+          index: v.index,
+          supported: !!v.supported,
+          reason: String(v.reason || "").slice(0, 500),
+          sourceTitle: String(v.sourceTitle || "").slice(0, 300),
+          evidenceQuote: String(v.evidenceQuote || "").slice(0, 240),
+        });
       } catch {}
     }
 

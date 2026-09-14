@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import fs from "fs";
 import path from "path";
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
@@ -200,6 +200,8 @@ export async function POST(request) {
       vaultPath,
       folderPath = "",
       apiKey,
+      openaiApiKey,
+      model,
       accountName,
       allAccounts = [],
       replacements = [],
@@ -230,14 +232,11 @@ export async function POST(request) {
       return NextResponse.json({ facts: [], stats: { totalSources: 0, reusedSources: 0, extractedSources: 0, skippedSources: 0, batches: 0 } });
     }
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!key) return NextResponse.json({ error: "Anthropic API key is required for fact extraction" }, { status: 400 });
-
     const normalized = notes.map(normalizeNote).map((note) => sanitizeNote(note, corrections, replacements));
     const { reusable, changed, skipped, lastMappedAt } = notesForExtraction(normalized, index, acctKey, { changedOnly, force });
     const facts = reusable.flatMap(({ cached }) => cached.facts || []);
 
-    const client = new Anthropic({ apiKey: key });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
     const batches = chunkNotes(changed);
     for (const batch of batches) {
       const extracted = await extractBatch(client, batch, accountName, allAccounts, mappingContext);

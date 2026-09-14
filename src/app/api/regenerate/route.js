@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import { assertTrustedRequest } from "@/lib/requestSafety";
-import { DEFAULT_MODEL, maxOutputTokens } from "@/lib/models";
+import { maxOutputTokens } from "@/lib/models";
 import { formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 
 const SYSTEM_PROMPT = `You revise generated meeting notes for an NI Customer Success Manager.
@@ -46,6 +46,7 @@ export async function POST(request) {
       instruction,
       meetingTitle,
       apiKey,
+      openaiApiKey,
       model,
       sourceBundle,
     } = body;
@@ -57,16 +58,9 @@ export async function POST(request) {
       return NextResponse.json({ error: "Instruction is required" }, { status: 400 });
     }
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return NextResponse.json(
-        { error: "Anthropic API key is required. Add it in Settings or set ANTHROPIC_API_KEY in .env.local" },
-        { status: 400 }
-      );
-    }
 
-    const client = new Anthropic({ apiKey: key });
-    const selectedModel = model || DEFAULT_MODEL;
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const selectedModel = client.resolvedModel;
     const stream = client.messages.stream({
       model: selectedModel,
       max_tokens: maxOutputTokens(selectedModel),

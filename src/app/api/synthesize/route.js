@@ -1,11 +1,10 @@
 import { taxonomyForReportPrompt } from "@/lib/sfdcTaxonomy";
-import Anthropic from "@anthropic-ai/sdk";
+import { createModelClient } from "@/lib/modelClient";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { BATCH_TEMPORAL_RULE, TEMPORAL_ACCURACY_RULE, dateSortValue } from "@/lib/synthesisPolicy";
 import {
-  DEFAULT_MODEL,
   budgetChars,
   contextLimit as contextTokens,
   firstTextBlock,
@@ -678,7 +677,7 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { notes, apiKey, model, today, replacements = [], corrections = [], productFocus, promptType, accountName, allAccounts = [], restoredIds = [], rangeStart, rangeEnd, resumeRows = [], exampleRows = [] } = body;
+    const { notes, apiKey, openaiApiKey, model, today, replacements = [], corrections = [], productFocus, promptType, accountName, allAccounts = [], restoredIds = [], rangeStart, rangeEnd, resumeRows = [], exampleRows = [] } = body;
 
     if (!notes || notes.length === 0) {
       return new Response(JSON.stringify({ error: "No notes provided" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -705,13 +704,9 @@ export async function POST(request) {
       comments: sanitizeField(r?.comments).slice(0, 800),
     }));
 
-    const key = apiKey || process.env.ANTHROPIC_API_KEY;
-    if (!key) {
-      return new Response(JSON.stringify({ error: "Anthropic API key is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
-    }
 
-    const selectedModel = model || DEFAULT_MODEL;
-    const client = new Anthropic({ apiKey: key });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const selectedModel = client.resolvedModel;
     const scrubbedNotes = scrubWithExceptions(sanitizedNotes, accountName, allAccounts, restoredIds);
     let { kept, dropped } = fitNotes(scrubbedNotes, selectedModel);
     let summarizedCount = 0;

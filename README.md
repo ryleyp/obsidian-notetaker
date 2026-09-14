@@ -139,3 +139,31 @@ facts and callouts note from the latest content.
 - An Anthropic API key
 - Your Obsidian vault accessible on the local file system
 - macOS, Windows, or Linux
+
+### ChatGPT for notes and EA activity
+
+Add an **OpenAI API Key (ChatGPT)** in Settings (or set `OPENAI_API_KEY`
+in `.env.local`). Select **GPT-6 Astra**, **GPT-5.6 Sol**, **GPT-5.6 Terra**, or **GPT-5.6 Luna** in the model picker to use
+OpenAI for new meeting notes, email notes, or reports. Claude remains available.
+The same prompts, Markdown note layout, SFDC taxonomy, and activity table
+format are used with either provider. OpenAI API access is billed separately.
+
+Every model option displays its input and output price per million tokens.
+Pre-flight panels show estimated input, output, and total cost, while completed
+runs show actual token usage and cost. Run modes can generate once, request a
+source-backed second opinion, compare independent Claude and ChatGPT drafts, or
+review flagged activities. Notes support section-level acceptance; EA reports
+support field- and activity-level acceptance. Dates, agreement numbers, source
+links, and Filed status remain intact. The improvement pass supports up to 80 rows.
+
+The simplified picker offers **Auto**, **Fast**, **Recommended**, and **Highest
+quality** presets; the complete Claude and ChatGPT model lists remain under
+Advanced. Auto routes generation to a balanced model and classification,
+privacy, verification, speaker detection, and cleanup work to a lower-cost
+model using whichever provider key is configured. The AI review workspace keeps
+alternatives, source evidence, undo, and persistent draft history together.
+
+Provider requests retain the existing corrections and privacy filters. OpenAI
+uses the [Responses API](https://developers.openai.com/api/docs/guides/streaming-responses)
+with `store: false`; model limits and cost estimates follow the
+[OpenAI model documentation](https://developers.openai.com/api/docs/models).

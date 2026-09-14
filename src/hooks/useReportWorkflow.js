@@ -266,6 +266,7 @@ export function useReportWorkflow({
         body: JSON.stringify({
           notes: notesToSend,
           apiKey: settings.apiKey || undefined,
+          openaiApiKey: settings.openaiApiKey || undefined,
           model,
           today: TODAY,
           replacements: reps,
@@ -366,7 +367,9 @@ export function useReportWorkflow({
           replacements: reps,
           corrections: settings.corrections || [],
           restoredIds: [...restoredIds],
+          model,
           apiKey: settings.apiKey || undefined,
+          openaiApiKey: settings.openaiApiKey || undefined,
         }),
       });
       const data = await res.json();
