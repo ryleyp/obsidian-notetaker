@@ -7,7 +7,7 @@ import ActivityImprovementPanel from "@/components/ActivityImprovementPanel";
 import ActivityComparisonPanel from "@/components/ActivityComparisonPanel";
 import RunModePicker from "@/components/RunModePicker";
 import DraftRestoreList from "@/components/DraftRestoreList";
-import { alternateModel, calcCost, estimateUsage, providerLabel, resolveAutoModel } from "@/lib/models";
+import { calcCost, defaultReviewModel, estimateUsage, providerLabel, resolveAutoModel } from "@/lib/models";
 import { applyImprovement } from "@/lib/activityImprovement";
 import { acceptActivityAlternative } from "@/lib/activityComparison";
 import { detectAccount, suggestAgreements } from "@/lib/accounts";
@@ -163,7 +163,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   // The reviewer for every cross-check on this tab (classification check,
   // verify vs sources, improve activities, compare report) — user-chosen via
   // RunModePicker, defaulting to the usual alternate provider.
-  const reviewModel = reviewModelOverride || alternateModel(resolvedReportModel);
+  const reviewModel = reviewModelOverride || defaultReviewModel(resolvedReportModel, settings);
   const estimatedReportCost = estimateUsage(wf.activeNotes || [], resolvedReportModel, 3500).cost;
   const estimatedAlternateReportCost = estimateUsage(wf.activeNotes || [], reviewModel, 3500).cost;
 
@@ -711,7 +711,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
           </div>
 
           <div className="mt-4"><DraftRestoreList entries={draftHistory} onRestore={restoreReport} title="Recent EA report drafts" /></div>
-          {wf.activeNotes?.length > 0 && <div className="mt-4"><RunModePicker value={runMode} onChange={setRunMode} estimatedCost={estimatedReportCost} alternateEstimatedCost={estimatedAlternateReportCost} model={resolvedReportModel} reviewModel={reviewModel} onReviewModelChange={setReviewModelOverride} allowFlagged disabled={wf.synthesizing} /></div>}
+          {wf.activeNotes?.length > 0 && <div className="mt-4"><RunModePicker value={runMode} onChange={setRunMode} estimatedCost={estimatedReportCost} alternateEstimatedCost={estimatedAlternateReportCost} model={resolvedReportModel} reviewModel={reviewModel} onReviewModelChange={setReviewModelOverride} settings={settings} allowFlagged disabled={wf.synthesizing} /></div>}
           {wf.activeNotes?.length > 0 && !wf.showConfirm && (
             <GeneratePanel
               scrub={scrub}

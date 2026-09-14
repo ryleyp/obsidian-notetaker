@@ -53,6 +53,37 @@ export function resolveAutoModel(model, { apiKey, openaiApiKey, task = "generati
   return OPENAI_MODEL;
 }
 
+// A capable second model from the same provider, for when the other
+// provider has no key — a different model still catches real mistakes.
+const SAME_PROVIDER_ALTERNATE = {
+  "claude-opus-5": "claude-sonnet-5",
+  "claude-sonnet-5": "claude-opus-5",
+  "claude-haiku-4-5": "claude-sonnet-5",
+  "gpt-6-astra": "gpt-5.6-sol",
+  "gpt-5.6-sol": "gpt-6-astra",
+  "gpt-5.6-terra": "gpt-5.6-sol",
+  "gpt-5.6-luna": "gpt-5.6-terra",
+};
+
+// Which reviewer to default to. Cross-provider disagreement is the strongest
+// signal, so prefer the other provider — but only when its key is actually
+// configured, otherwise the review is guaranteed to fail after the CSM has
+// already paid for the primary pass. With no keys visible client-side the
+// keys may still live in .env.local, so keep the cross-provider default.
+export function defaultReviewModel(model, { apiKey, openaiApiKey } = {}) {
+  const resolved = resolveAutoModel(model, { apiKey, openaiApiKey });
+  const otherProviderKey = isOpenAIModel(resolved) ? apiKey : openaiApiKey;
+  if (otherProviderKey || (!apiKey && !openaiApiKey)) return alternateModel(resolved);
+  return SAME_PROVIDER_ALTERNATE[resolved] || alternateModel(resolved);
+}
+
+// True when the model's provider has no key in Settings. The key may still be
+// set server-side in .env.local, so this warns rather than blocks.
+export function missingProviderKey(model, { apiKey, openaiApiKey } = {}) {
+  if (!model || model === AUTO_MODEL) return false;
+  return isOpenAIModel(model) ? !openaiApiKey : !apiKey;
+}
+
 // Unknown models fall back to the most conservative real model so we never
 // over-fill a prompt or under-report a cost for something we don't recognize.
 const FALLBACK = MODELS["claude-haiku-4-5"];

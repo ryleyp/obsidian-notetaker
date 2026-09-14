@@ -1,18 +1,22 @@
 "use client";
 
 import ModelPicker from "@/components/ModelPicker";
-import { modelDisplayName } from "@/lib/models";
+import { isOpenAIModel, missingProviderKey, modelDisplayName, providerLabel } from "@/lib/models";
 import { runMode, RUN_MODES } from "@/lib/runModes";
 
 export default function RunModePicker({
   value, onChange, estimatedCost, alternateEstimatedCost, model,
-  reviewModel, onReviewModelChange, allowFlagged = false, disabled = false,
+  reviewModel, onReviewModelChange, settings, allowFlagged = false, disabled = false,
 }) {
   const modes = allowFlagged ? RUN_MODES : RUN_MODES.filter((mode) => mode.id !== "flagged");
   const selected = runMode(value);
   const otherCost = alternateEstimatedCost ?? estimatedCost;
   const reviewCost = selected.id === "flagged" ? otherCost * 0.25 : otherCost;
   const total = estimatedCost == null ? null : selected.id === "quick" ? estimatedCost : estimatedCost + reviewCost;
+  // Only warn when at least one key is in Settings; with none, the keys are
+  // presumably server-side in .env.local and every model would look broken.
+  const anyKeyInSettings = Boolean(settings?.apiKey || settings?.openaiApiKey);
+  const reviewerKeyMissing = anyKeyInSettings && missingProviderKey(reviewModel, settings);
   return (
     <fieldset className="space-y-2">
       <legend className="text-xs font-medium text-gray-600">Run mode</legend>
@@ -27,9 +31,18 @@ export default function RunModePicker({
         ))}
       </div>
       {selected.id !== "quick" && onReviewModelChange && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-gray-600 whitespace-nowrap">Review with:</span>
-          <ModelPicker model={reviewModel} setModel={onReviewModelChange} compact ariaLabel="Review model" />
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-gray-600 whitespace-nowrap">Review with:</span>
+            <ModelPicker model={reviewModel} setModel={onReviewModelChange} compact ariaLabel="Review model" />
+          </div>
+          {reviewerKeyMissing && (
+            <p className="text-xs text-amber-700">
+              No {providerLabel(reviewModel)} key in Settings. The review pass runs after the note is
+              generated, so it will fail then unless <code className="bg-amber-50 px-1 rounded">{isOpenAIModel(reviewModel) ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY"}</code> is
+              set in <code className="bg-amber-50 px-1 rounded">.env.local</code>. Pick a reviewer you have a key for to be sure.
+            </p>
+          )}
         </div>
       )}
       {total != null && <p className="text-xs text-gray-500">

@@ -1,7 +1,46 @@
+
+describe("defaultReviewModel", () => {
+  const both = { apiKey: "a", openaiApiKey: "o" };
+
+  it("prefers the other provider when its key is configured", () => {
+    expect(defaultReviewModel("claude-opus-5", both)).toBe("gpt-5.6-terra");
+    expect(defaultReviewModel("gpt-6-astra", both)).toBe("claude-sonnet-5");
+  });
+
+  it("stays in-provider when the other provider has no key, so the review can actually run", () => {
+    expect(defaultReviewModel("claude-opus-5", { apiKey: "a" })).toBe("claude-sonnet-5");
+    expect(defaultReviewModel("claude-sonnet-5", { apiKey: "a" })).toBe("claude-opus-5");
+    expect(defaultReviewModel("gpt-6-astra", { openaiApiKey: "o" })).toBe("gpt-5.6-sol");
+    expect(defaultReviewModel("gpt-5.6-terra", { openaiApiKey: "o" })).toBe("gpt-5.6-sol");
+  });
+
+  it("keeps the cross-provider default when no key is visible client-side", () => {
+    // Keys may still be set server-side in .env.local.
+    expect(defaultReviewModel("claude-opus-5", {})).toBe("gpt-5.6-terra");
+    expect(defaultReviewModel("gpt-6-astra", {})).toBe("claude-sonnet-5");
+  });
+});
+
+describe("missingProviderKey", () => {
+  it("reports only the selected model's own provider", () => {
+    expect(missingProviderKey("gpt-6-astra", { apiKey: "a" })).toBe(true);
+    expect(missingProviderKey("gpt-6-astra", { openaiApiKey: "o" })).toBe(false);
+    expect(missingProviderKey("claude-opus-5", { openaiApiKey: "o" })).toBe(true);
+    expect(missingProviderKey("claude-opus-5", { apiKey: "a" })).toBe(false);
+  });
+
+  it("never flags auto routing, which picks a model from whatever is configured", () => {
+    expect(missingProviderKey("auto", { apiKey: "a" })).toBe(false);
+    expect(missingProviderKey("", {})).toBe(false);
+  });
+});
+
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MODEL,
   MODEL_OPTIONS,
+  defaultReviewModel,
+  missingProviderKey,
   modelDisplayName,
   budgetChars,
   calcCost,

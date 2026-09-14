@@ -20,7 +20,7 @@ import RunModePicker from "@/components/RunModePicker";
 import NoteComparisonPanel from "@/components/NoteComparisonPanel";
 import DraftRestoreList from "@/components/DraftRestoreList";
 import { looksSpeakerLabeled } from "@/lib/speakers";
-import { alternateModel, estimateUsage, FAST_MODEL, modelDisplayName, resolveAutoModel } from "@/lib/models";
+import { defaultReviewModel, estimateUsage, FAST_MODEL, modelDisplayName, resolveAutoModel } from "@/lib/models";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { useSpeakerDetection } from "@/hooks/useSpeakerDetection";
 import { useSanitizeReview } from "@/hooks/useSanitizeReview";
@@ -96,7 +96,7 @@ export default function Home() {
   // model changes later. Computed here (not just where it's displayed) so
   // the actual generate() call uses the same reviewer the picker shows.
   const resolvedNoteModel = resolveAutoModel(model, { apiKey: settings.apiKey, openaiApiKey: settings.openaiApiKey });
-  const reviewModel = reviewModelOverride || alternateModel(resolvedNoteModel);
+  const reviewModel = reviewModelOverride || defaultReviewModel(resolvedNoteModel, settings);
 
   const sanitize = useSanitizeReview({
     settings,
@@ -477,7 +477,7 @@ export default function Home() {
                     </button>
                   </div>
                   <div className="card p-4">
-                    <RunModePicker value={runMode} onChange={setRunMode} estimatedCost={estimatedNoteCost} alternateEstimatedCost={estimatedAlternateNoteCost} model={resolvedNoteModel} reviewModel={reviewModel} onReviewModelChange={setReviewModelOverride} disabled={generation.processing || sanitize.sanitizing} />
+                    <RunModePicker value={runMode} onChange={setRunMode} estimatedCost={estimatedNoteCost} alternateEstimatedCost={estimatedAlternateNoteCost} model={resolvedNoteModel} reviewModel={reviewModel} onReviewModelChange={setReviewModelOverride} settings={settings} disabled={generation.processing || sanitize.sanitizing} />
                   </div>
 
                   {/* Save transcript only */}
