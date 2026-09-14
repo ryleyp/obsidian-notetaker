@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { consolidateFacts, isJunkName, nameKey } from "./factConsolidation";
+import { aliasPlausible, consolidateFacts, isJunkName, nameKey } from "./factConsolidation";
 
 const fact = (overrides) => ({
   type: "person", name: "Dana Whitfield", aliases: [], role: "", organization: "", site: "",
@@ -33,6 +33,31 @@ describe("isJunkName", () => {
   it("keeps real names", () => {
     expect(isJunkName("Dana Whitfield")).toBe(false);
     expect(isJunkName("Dallas")).toBe(false);
+  });
+});
+
+describe("aliasPlausible", () => {
+  it("accepts aliases that could really be the same name", () => {
+    expect(aliasPlausible("Daniela Whitfield", "DW")).toBe(true);
+    expect(aliasPlausible("Acme Aerospace Space", "AA Space")).toBe(true);
+    expect(aliasPlausible("Priyann Raghavan", "Priyan")).toBe(true);
+  });
+
+  it("refuses a lone word lifted out of the name, which would match anything sharing it", () => {
+    // "Space" as an alias of "Acme Aerospace Space" made every other site
+    // called Space merge into it. The ambiguity-checked fold handles this
+    // shape instead, so the entity is still merged when it is unambiguous.
+    expect(aliasPlausible("Acme Aerospace Space", "Space")).toBe(false);
+    expect(aliasPlausible("Dana Whitfield", "Dana")).toBe(false);
+  });
+
+  // Extraction really produced each of these on a live vault, and trusting
+  // them merged two different people into one entry.
+  it("rejects an asserted alias that is plainly a different name", () => {
+    expect(aliasPlausible("Avery Stone", "Jordan Blake")).toBe(false);
+    expect(aliasPlausible("Sam Porter", "Riley Chen")).toBe(false);
+    expect(aliasPlausible("Rhea", "Rory")).toBe(false);
+    expect(aliasPlausible("Acme Aerospace Space", "Orion")).toBe(false);
   });
 });
 
@@ -119,6 +144,23 @@ describe("consolidateFacts", () => {
     expect(facts).toHaveLength(2);
     expect(merges).toEqual([]);
     expect(dropped).toEqual([]);
+  });
+
+
+  it("ignores an alias the extractor invented for a different person", () => {
+    const { facts } = consolidateFacts([
+      fact({ name: "Avery Stone", aliases: ["Jordan Blake"] }),
+      fact({ name: "Jordan Blake", evidence: "Runs the other program." }),
+    ]);
+    expect(facts.map((f) => f.name).sort()).toEqual(["Avery Stone", "Jordan Blake"]);
+  });
+
+  it("still merges an abbreviation the extractor supplies", () => {
+    const { facts } = consolidateFacts([
+      fact({ type: "org", name: "Acme Aerospace Space", aliases: ["AA Space"] }),
+      fact({ type: "org", name: "AA Space", evidence: "Same division." }),
+    ]);
+    expect(facts).toHaveLength(1);
   });
 
   it("handles an empty list", () => {

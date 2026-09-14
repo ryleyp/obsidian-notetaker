@@ -42,6 +42,37 @@ export function nameKey(name, type = "person") {
   return (kept.length ? kept : tokens(name)).slice().sort().join(" ");
 }
 
+// Extraction sometimes asserts an alias that is simply a different person
+// ("Jordan Blake" listed under "Avery Stone"). Trusting those blindly merges two
+// real people into one, so an alias only links names it could plausibly be:
+// a shared word, an initialism, or one spelling contained in the other.
+export function aliasPlausible(name, alias, type = "person") {
+  const a = tokens(name);
+  const b = tokens(alias);
+  if (!a.length || !b.length) return false;
+
+  // A lone word lifted straight out of the name ("Space" from "Acme
+  // Aerospace Space") identifies nothing on its own and would pull in every
+  // other entity sharing that word. Short forms like this are merged by the
+  // ambiguity-checked fold instead, which refuses when more than one
+  // candidate matches.
+  if (b.length === 1 && a.length > 1 && a.includes(b[0])) return false;
+
+  const shared = b.some((token) => token.length > 2 && a.includes(token));
+  if (shared) return true;
+
+  const flat = (list) => list.join("");
+  const nameFlat = flat(a);
+  const aliasFlat = flat(b);
+  // "Priyan" vs "Priyann", "Sunnyvale" vs "Sunnyvale Facility".
+  if (nameFlat.includes(aliasFlat) || aliasFlat.includes(nameFlat)) return true;
+  // "DW" for "Daniela Whitfield", "AA" for "Acme Aerospace".
+  const initials = a.map((token) => token[0]).join("");
+  if (aliasFlat.length > 1 && (initials === aliasFlat || initials.startsWith(aliasFlat))) return true;
+
+  return type === "site" && nameKey(name, type) === nameKey(alias, type);
+}
+
 export function isJunkName(name) {
   const cleaned = String(name || "").trim().toLowerCase().replace(/^the\s+/, "");
   if (!cleaned) return true;
@@ -128,7 +159,8 @@ export function consolidateFacts(facts = []) {
     const groups = byType.get(type);
     const lookup = lookupByType.get(type);
 
-    const keys = [fact.name, ...(fact.aliases || [])].map((n) => nameKey(n, type)).filter(Boolean);
+    const usableAliases = (fact.aliases || []).filter((alias) => aliasPlausible(fact.name, alias, type));
+    const keys = [fact.name, ...usableAliases].map((n) => nameKey(n, type)).filter(Boolean);
     const groupKey = keys.map((key) => lookup.get(key)).find(Boolean) || nameKey(fact.name, type);
     if (!groups.has(groupKey)) groups.set(groupKey, []);
     groups.get(groupKey).push(fact);
