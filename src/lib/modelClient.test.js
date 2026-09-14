@@ -110,7 +110,11 @@ describe("OpenAI workflow integration", () => {
   it("improves both existing and new activities through OpenAI with unchanged schema", async () => {
     const row = { title: "Sync", comments: "Reviewed licensing.", type: "Strategic Relationship Management", subtype: "EA Admin Sync" };
     const change = { index: 0, ...row, comments: "Confirmed the licensing plan." };
-    const fetchMock = vi.fn().mockResolvedValue(Response.json(completed(JSON.stringify({ message: "Tightened the summary.", changes: [change] }))));
+    const body = JSON.stringify({ message: "Tightened the summary.", changes: [change] });
+    // Non-streaming Claude calls above ~21k output tokens are rejected by the
+    // SDK outright, so the route streams for every provider; the OpenAI
+    // adapter's streaming path still returns the same completed shape.
+    const fetchMock = vi.fn().mockResolvedValue(sse([{ type: "response.output_text.delta", delta: body }, { type: "response.completed", response: completed(body) }]));
     vi.stubGlobal("fetch", fetchMock);
     const response = await improveReport(request({ rows: [{ ...row, origin: "note" }, { ...row, origin: "generated" }] }));
     expect(response.status).toBe(200);

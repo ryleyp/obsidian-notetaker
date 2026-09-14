@@ -130,7 +130,7 @@ export default function ActivityPreview({
           )}
           {onCheckClassifications && rows.length > 0 && !streaming && (
             <button
-              onClick={onCheckClassifications}
+              onClick={() => onCheckClassifications()}
               disabled={classifying}
               className="btn-secondary text-xs px-3 py-1.5"
               title="Ask a fast model to re-check every row's Type/Subtype against the full taxonomy. Suggestions only — nothing changes until you apply one."

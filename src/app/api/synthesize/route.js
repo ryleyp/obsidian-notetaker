@@ -478,7 +478,7 @@ Field rules:
 - **sourceTitle**: the exact title of the source note this activity came from, copied verbatim from its ### heading (the part after the date). Every row MUST cite its source.
 - **title**: short descriptive name matching the style of these real examples — "Beacon Systems RF User Group - March 2026", "CSM / FAE Cardinal Account Interlock", "NI Connect Promotional Email", "Acme Aerospace Proficiency Plan - LabVIEW Core Training Scheduling"
 - **type** and **subtype**: must exactly match one option from the taxonomy below
-- **comments**: max 800 characters — this is pasted into the SFDC Comment field. Past tense, no first person. Name specific contacts and titles. Lead with what happened and why it matters. Connect to adoption, expansion, renewal, or risk.
+- **comments**: HARD LIMIT 800 characters — this is pasted directly into the SFDC Comment field, and an over-limit comment cannot be filed. This is a Salesforce field limit, not a target: draft the comment, count the characters, then trim until it fits — cut the weakest detail, never the outcome. Past tense, no first person. Name specific contacts and titles. Lead with what happened and why it matters. Connect to adoption, expansion, renewal, or risk.
 - **review**: set to true ONLY when you are genuinely unsure of the type/subtype classification (e.g. a session that could be either Demo Days or User Group), with a short reviewReason explaining the ambiguity. When confident, use false and an empty reviewReason.
 
 CLASSIFICATION PROCESS — for each activity, evaluate ALL 6 Type options before selecting. Do not stop at the first type that seems plausible:
@@ -515,7 +515,7 @@ COMMENT REQUIREMENTS:
 - Connect to revenue where possible — note how the activity ties to expansion, adoption health, or renewal
 - Be specific — reference actual product names, site names, topics discussed, decisions made
 - For Demo Days and User Groups: always include Region, Attendees (or TBD), topics, and Outcome
-- Keep comments under 800 characters but use the full space when the detail is there — do not be artificially brief
+- HARD LIMIT: every comment must be 800 characters or fewer — count before finalizing each row, and trim any that run over. Use the full space when the detail is there, but never exceed the limit.
 - Skip activities that are purely logistics with no outcome (routine calendar holds, placeholder reminders with no substance)
 
 SOURCES (${rangeLabel}):

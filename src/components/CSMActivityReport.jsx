@@ -79,6 +79,10 @@ function extractCandidateTerms(row, ownTerms) {
 export default function CSMActivityReport({ settings, onSettingsClick, onAccountsUpdate }) {
   const [improvementSession, setImprovementSession] = useState(0);
   const [runMode, setRunMode] = useState("quick");
+  // null = "follow the primary model's usual alternate provider"; once the
+  // CSM picks a reviewer explicitly (RunModePicker), that choice sticks even
+  // if the primary model changes later.
+  const [reviewModelOverride, setReviewModelOverride] = useState(null);
   const [pendingImprovement, setPendingImprovement] = useState(false);
   const [pendingAlternative, setPendingAlternative] = useState(false);
   const [pendingFlaggedReview, setPendingFlaggedReview] = useState(false);
@@ -156,9 +160,12 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   const account = (settings.accounts || []).find((a) => a.name === accountName) || null;
   const reportHistoryKey = `report:ea-activity:drafts:${settings.vaultPath || "default"}:${wf.selectedFolder || "root"}`;
   const resolvedReportModel = resolveAutoModel(wf.model, { apiKey: settings.apiKey, openaiApiKey: settings.openaiApiKey });
-  const reportAlternativeModel = alternateModel(resolvedReportModel);
+  // The reviewer for every cross-check on this tab (classification check,
+  // verify vs sources, improve activities, compare report) — user-chosen via
+  // RunModePicker, defaulting to the usual alternate provider.
+  const reviewModel = reviewModelOverride || alternateModel(resolvedReportModel);
   const estimatedReportCost = estimateUsage(wf.activeNotes || [], resolvedReportModel, 3500).cost;
-  const estimatedAlternateReportCost = estimateUsage(wf.activeNotes || [], reportAlternativeModel, 3500).cost;
+  const estimatedAlternateReportCost = estimateUsage(wf.activeNotes || [], reviewModel, 3500).cost;
 
   useEffect(() => {
     setHistoryReady(false);
@@ -245,7 +252,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
     // Titles participate in filed-row identity. Carry that state to renamed
     // activities so editing never makes an already-filed activity look new.
     setFiledMap((prev) => changes.reduce((map, { index }) => rows[index].filed ? markFiled(map, next[index], true) : map, prev));
-    commitRows(next, `${providerLabel(reportAlternativeModel)} improvement`, reportAlternativeModel);
+    commitRows(next, `${providerLabel(reviewModel)} improvement`, reviewModel);
   }
 
   function openReportHistory(item) {
@@ -311,7 +318,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
 
   async function runAlternativeReport() {
     if (!wf.activeNotes?.length || alternativeLoading) return;
-    const comparisonModel = reportAlternativeModel;
+    const comparisonModel = reviewModel;
     setAlternativeLoading(true);
     setAlternativeError("");
     try {
@@ -382,7 +389,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
 
   // Second opinion on every row's Type/Subtype from the detailed taxonomy.
   // Produces suggestions the CSM applies or dismisses — never silent edits.
-  async function checkClassifications(reviewModel = reportAlternativeModel) {
+  async function checkClassifications(overrideModel = reviewModel) {
     if (!rows.length) return;
     setClassifying(true);
     const reps = settings.replacements || [];
@@ -394,7 +401,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
           rows: rows.map(({ title, type, subtype, comments }) => ({ title, type, subtype, comments })),
           replacements: reps,
           corrections: settings.corrections || [],
-          model: reviewModel,
+          model: overrideModel,
           apiKey: settings.apiKey || undefined,
           openaiApiKey: settings.openaiApiKey || undefined,
         }),
@@ -412,7 +419,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
           suggestReason: reps.length ? reverseReplacements(s.reason || "", reps) : s.reason || "",
         };
       });
-      commitRows(checked, `${providerLabel(reviewModel)} classification review`, reviewModel);
+      commitRows(checked, `${providerLabel(overrideModel)} classification review`, overrideModel);
     } catch (e) {
       // No API key or a transient failure: the table is still complete
       // without suggestions, so don't interrupt the CSM.
@@ -521,7 +528,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
 
   // Second-pass audit of generated rows against their cited sources. Rows
   // harvested from notes were reviewed at save time and are skipped.
-  async function handleVerify(indices = null, reviewModel = reportAlternativeModel) {
+  async function handleVerify(indices = null, overrideModel = reviewModel) {
     const selected = indices ? new Set(indices) : null;
     const toVerify = rows.map((row, i) => ({ row, i })).filter(({ row, i }) => selected ? selected.has(i) : row.origin !== "note");
     if (!toVerify.length || !wf.activeNotes?.length) return;
@@ -539,7 +546,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
           replacements: settings.replacements || [],
           corrections: settings.corrections || [],
           restoredIds: [...wf.restoredIds],
-          model: reviewModel,
+          model: overrideModel,
           apiKey: settings.apiKey || undefined,
           openaiApiKey: settings.openaiApiKey || undefined,
         }),
@@ -558,7 +565,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
         const restore = (value) => reps.length ? reverseReplacements(value || "", reps) : value || "";
         return { ...r, verify: v.supported ? "passed" : "failed", verifyReason: restore(v.reason), verifySource: restore(v.sourceTitle), verifyEvidence: restore(v.evidenceQuote) };
       });
-      commitRows(next, `${providerLabel(reviewModel)} source check`, reviewModel);
+      commitRows(next, `${providerLabel(overrideModel)} source check`, overrideModel);
     } catch (e) {
       alert(`Verification failed: ${e.message}`);
     } finally {
@@ -571,7 +578,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
     if (!pendingFlaggedReview || pendingClassifyCheck || classifying || wf.synthesizing) return;
     setPendingFlaggedReview(false);
     const flagged = rows.map((row, index) => row.review || row.suggestedType ? index : -1).filter((index) => index >= 0);
-    if (flagged.length) handleVerify(flagged, reportAlternativeModel);
+    if (flagged.length) handleVerify(flagged, reviewModel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingFlaggedReview, pendingClassifyCheck, classifying, wf.synthesizing]);
 
@@ -704,7 +711,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
           </div>
 
           <div className="mt-4"><DraftRestoreList entries={draftHistory} onRestore={restoreReport} title="Recent EA report drafts" /></div>
-          {wf.activeNotes?.length > 0 && <div className="mt-4"><RunModePicker value={runMode} onChange={setRunMode} estimatedCost={estimatedReportCost} alternateEstimatedCost={estimatedAlternateReportCost} model={resolvedReportModel} allowFlagged disabled={wf.synthesizing} /></div>}
+          {wf.activeNotes?.length > 0 && <div className="mt-4"><RunModePicker value={runMode} onChange={setRunMode} estimatedCost={estimatedReportCost} alternateEstimatedCost={estimatedAlternateReportCost} model={resolvedReportModel} reviewModel={reviewModel} onReviewModelChange={setReviewModelOverride} allowFlagged disabled={wf.synthesizing} /></div>}
           {wf.activeNotes?.length > 0 && !wf.showConfirm && (
             <GeneratePanel
               scrub={scrub}
@@ -722,11 +729,11 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
               intro={
                 <>
                   {harvestPlan.remaining.length === 0 ? (
-                    <>All <strong>{harvestPlan.rows.length}</strong> usable notes already carry a reviewed SFDC Activity Entry — the table is built straight from those. {runMode === "second-opinion" ? `Then ${providerLabel(reportAlternativeModel)} reviews all activities against the source notes.` : runMode === "compare" ? `Then ${providerLabel(reportAlternativeModel)} independently builds a second report for comparison.` : runMode === "flagged" ? `Then ${providerLabel(reportAlternativeModel)} reviews uncertain classifications and checks flagged rows against the source notes.` : "No second model pass will run."}</>
+                    <>All <strong>{harvestPlan.rows.length}</strong> usable notes already carry a reviewed SFDC Activity Entry — the table is built straight from those. {runMode === "second-opinion" ? `Then ${providerLabel(reviewModel)} reviews all activities against the source notes.` : runMode === "compare" ? `Then ${providerLabel(reviewModel)} independently builds a second report for comparison.` : runMode === "flagged" ? `Then ${providerLabel(reviewModel)} reviews uncertain classifications and checks flagged rows against the source notes.` : "No second model pass will run."}</>
                   ) : (
                     <>
                       <strong>{harvestPlan.rows.length}</strong> note{harvestPlan.rows.length !== 1 ? "s" : ""} already carr{harvestPlan.rows.length !== 1 ? "y" : "ies"} a reviewed SFDC Activity Entry and will be used as-is.
-                      Sending the other <strong>{harvestPlan.remaining.length}</strong> note{harvestPlan.remaining.length !== 1 ? "s" : ""} (no entry) to {providerLabel(resolvedReportModel)} to classify. {runMode === "second-opinion" && `Then ${providerLabel(reportAlternativeModel)} reviews the full table and source notes.`}{runMode === "compare" && ` Then ${providerLabel(reportAlternativeModel)} independently generates a comparison report.`}
+                      Sending the other <strong>{harvestPlan.remaining.length}</strong> note{harvestPlan.remaining.length !== 1 ? "s" : ""} (no entry) to {providerLabel(resolvedReportModel)} to classify. {runMode === "second-opinion" && `Then ${providerLabel(reviewModel)} reviews the full table and source notes.`}{runMode === "compare" && ` Then ${providerLabel(reviewModel)} independently generates a comparison report.`}
                     </>
                   )}
                   {harvestPlan.skipped.length > 0 && (
@@ -855,7 +862,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
               settings={settings}
               accountName={accountName}
               restoredIds={wf.restoredIds}
-              model={reportAlternativeModel}
+              model={reviewModel}
               disabled={classifying || verifying || regeneratingRow !== null || wf.saving}
               onApply={applyImprovementChanges}
             />
@@ -873,7 +880,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
               cost={wf.synthCost}
               sourceInfo={sourceInfo}
               onVerify={handleVerify}
-              onVerifyRow={(index) => handleVerify([index], reportAlternativeModel)}
+              onVerifyRow={(index) => handleVerify([index], reviewModel)}
               verifying={verifying}
               verifyingRow={verifyingRow}
               onFlagBleed={openBleedPanel}

@@ -1,9 +1,13 @@
 "use client";
 
-import { alternateModel, modelDisplayName } from "@/lib/models";
+import ModelPicker from "@/components/ModelPicker";
+import { modelDisplayName } from "@/lib/models";
 import { runMode, RUN_MODES } from "@/lib/runModes";
 
-export default function RunModePicker({ value, onChange, estimatedCost, alternateEstimatedCost, model, allowFlagged = false, disabled = false }) {
+export default function RunModePicker({
+  value, onChange, estimatedCost, alternateEstimatedCost, model,
+  reviewModel, onReviewModelChange, allowFlagged = false, disabled = false,
+}) {
   const modes = allowFlagged ? RUN_MODES : RUN_MODES.filter((mode) => mode.id !== "flagged");
   const selected = runMode(value);
   const otherCost = alternateEstimatedCost ?? estimatedCost;
@@ -22,9 +26,15 @@ export default function RunModePicker({ value, onChange, estimatedCost, alternat
           </label>
         ))}
       </div>
+      {selected.id !== "quick" && onReviewModelChange && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-600 whitespace-nowrap">Review with:</span>
+          <ModelPicker model={reviewModel} setModel={onReviewModelChange} compact ariaLabel="Review model" />
+        </div>
+      )}
       {total != null && <p className="text-xs text-gray-500">
         Estimated {selected.label.toLowerCase()}: <strong>{modelDisplayName(model)}</strong> ~${estimatedCost.toFixed(4)}
-        {selected.id !== "quick" && <> + <strong>{modelDisplayName(alternateModel(model))}</strong> ~${reviewCost.toFixed(4)}</>}
+        {selected.id !== "quick" && <> + <strong>{modelDisplayName(reviewModel)}</strong> ~${reviewCost.toFixed(4)}</>}
         {selected.id !== "quick" && <> = <strong>~${total.toFixed(4)} total</strong></>}. Actual usage varies.
       </p>}
     </fieldset>

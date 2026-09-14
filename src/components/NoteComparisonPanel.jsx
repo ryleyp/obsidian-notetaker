@@ -4,8 +4,10 @@ import { alternateModel, formatCost, providerLabel } from "@/lib/models";
 import { changedNoteSections } from "@/lib/noteSections";
 import SourceEvidenceDrawer from "@/components/SourceEvidenceDrawer";
 
-export default function NoteComparisonPanel({ current, alternative, loading, error, selectedModel, onRunAlternative, onApply, onUndo, canUndo, draftHistory, onRestore, sources }) {
-  const other = alternateModel(selectedModel);
+export default function NoteComparisonPanel({ current, alternative, loading, error, selectedModel, reviewModel, onRunAlternative, onApply, onUndo, canUndo, draftHistory, onRestore, sources }) {
+  // reviewModel is the CSM's chosen reviewer (see RunModePicker); fall back
+  // to the usual alternate provider only if this panel is used without one.
+  const other = reviewModel || alternateModel(selectedModel);
   const changes = alternative ? changedNoteSections(current, alternative.content) : [];
 
   return (

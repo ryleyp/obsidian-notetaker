@@ -9,10 +9,10 @@ const PRESETS = [
   { id: "gpt-6-astra", label: "Highest quality", sub: "GPT-6 Astra", price: modelRateLabel("gpt-6-astra") },
 ];
 
-export default function ModelPicker({ model, setModel, compact = false }) {
+export default function ModelPicker({ model, setModel, compact = false, ariaLabel = "AI model" }) {
   if (compact) {
     return (
-      <select aria-label="AI model" value={model} onChange={(event) => setModel(event.target.value)} className="input !w-auto text-xs py-1">
+      <select aria-label={ariaLabel} value={model} onChange={(event) => setModel(event.target.value)} className="input !w-auto text-xs py-1">
         <option value={AUTO_MODEL}>Auto — task-based routing</option>
         <optgroup label="OpenAI (ChatGPT)">{MODEL_OPTIONS.filter((item) => item.provider === "ChatGPT").map((item) => <option key={item.id} value={item.id}>{item.label} · {modelRateLabel(item.id)}</option>)}</optgroup>
         <optgroup label="Anthropic (Claude)">{MODEL_OPTIONS.filter((item) => item.provider === "Claude").map((item) => <option key={item.id} value={item.id}>{item.label} · {modelRateLabel(item.id)}</option>)}</optgroup>

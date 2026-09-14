@@ -49,6 +49,10 @@ export default function Home() {
   const [existingNote, setExistingNote] = useState(null);
   const [model, setModel] = useState(FAST_MODEL);
   const [runMode, setRunMode] = useState("quick");
+  // null = "follow the primary model's usual alternate provider"; once the
+  // CSM picks a reviewer explicitly, that choice sticks even if the primary
+  // model changes later.
+  const [reviewModelOverride, setReviewModelOverride] = useState(null);
   const [includeFollowUp, setIncludeFollowUp] = useState(false);
   const [followUpAudience, setFollowUpAudience] = useState("customer");
   const [followUpTone, setFollowUpTone] = useState("warm-professional");
@@ -87,13 +91,20 @@ export default function Home() {
 
   const generation = useNoteGeneration({ settings, model, meeting });
 
+  // null = "follow the primary model's usual alternate provider"; once the
+  // CSM picks a reviewer explicitly, that choice sticks even if the primary
+  // model changes later. Computed here (not just where it's displayed) so
+  // the actual generate() call uses the same reviewer the picker shows.
+  const resolvedNoteModel = resolveAutoModel(model, { apiKey: settings.apiKey, openaiApiKey: settings.openaiApiKey });
+  const reviewModel = reviewModelOverride || alternateModel(resolvedNoteModel);
+
   const sanitize = useSanitizeReview({
     settings,
     model,
     applySettingsPatch,
     onScanSkipped: generation.setProcessError,
     actions: {
-      generate: (replacements) => generation.generate(replacements, { onSaved: saving.clearSaved, runMode }),
+      generate: (replacements) => generation.generate(replacements, { onSaved: saving.clearSaved, runMode, reviewModel }),
       saveTranscript: (replacements) => saving.saveTranscript(replacements),
     },
   });
@@ -163,9 +174,8 @@ export default function Home() {
   // picker still shows its own name rather than defaulting to "Claude".
   const modelLabel = modelDisplayName(model);
   const noteEstimateSources = [{ title: meetingTitle, content: [transcript, extendedTranscript, meetingContext, existingNote?.content].filter(Boolean).join("\n\n") }];
-  const resolvedNoteModel = resolveAutoModel(model, { apiKey: settings.apiKey, openaiApiKey: settings.openaiApiKey });
   const estimatedNoteCost = estimateUsage(noteEstimateSources, resolvedNoteModel).cost;
-  const estimatedAlternateNoteCost = estimateUsage(noteEstimateSources, alternateModel(resolvedNoteModel)).cost;
+  const estimatedAlternateNoteCost = estimateUsage(noteEstimateSources, reviewModel).cost;
   const canProcess = transcript.trim().length > 0
     && (!updateExisting || !!existingNote)
     && !generation.processing
@@ -241,6 +251,7 @@ export default function Home() {
                   loading={generation.alternativeLoading}
                   error={generation.alternativeError}
                   selectedModel={resolvedNoteModel}
+                  reviewModel={reviewModel}
                   onRunAlternative={(kind, otherModel) => generation.generateAlternative(kind, otherModel)}
                   onApply={(section) => generation.applyAlternative(section, { onSaved: saving.clearSaved })}
                   onUndo={() => generation.undo({ onSaved: saving.clearSaved })}
@@ -466,7 +477,7 @@ export default function Home() {
                     </button>
                   </div>
                   <div className="card p-4">
-                    <RunModePicker value={runMode} onChange={setRunMode} estimatedCost={estimatedNoteCost} alternateEstimatedCost={estimatedAlternateNoteCost} model={resolvedNoteModel} disabled={generation.processing || sanitize.sanitizing} />
+                    <RunModePicker value={runMode} onChange={setRunMode} estimatedCost={estimatedNoteCost} alternateEstimatedCost={estimatedAlternateNoteCost} model={resolvedNoteModel} reviewModel={reviewModel} onReviewModelChange={setReviewModelOverride} disabled={generation.processing || sanitize.sanitizing} />
                   </div>
 
                   {/* Save transcript only */}

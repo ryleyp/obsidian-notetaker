@@ -203,7 +203,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
     }
   }
 
-  async function generate(replacements, { onSaved, runMode = "quick" } = {}) {
+  async function generate(replacements, { onSaved, runMode = "quick", reviewModel } = {}) {
     setActiveReplacements(replacements);
     setAlternative(null);
     setAlternativeError(null);
@@ -253,10 +253,13 @@ export function useNoteGeneration({ settings, model, meeting }) {
     };
     const primary = await streamGenerateRequest(requestConfig, { onSaved });
     if (!primary) return;
+    // reviewModel is the CSM's explicit choice from RunModePicker; fall back
+    // to the usual alternate provider only if a caller doesn't supply one.
+    const chosenReviewModel = reviewModel || alternateModel(selectedPrimaryModel);
     if (runMode === "compare") {
-      await generateAlternative("independent", alternateModel(selectedPrimaryModel), primary, requestConfig);
+      await generateAlternative("independent", chosenReviewModel, primary, requestConfig);
     } else if (runMode === "second-opinion") {
-      await generateAlternative("review", alternateModel(selectedPrimaryModel), primary, requestConfig);
+      await generateAlternative("review", chosenReviewModel, primary, requestConfig);
     }
   }
 
