@@ -14,6 +14,7 @@ import {
   reverseReplacements,
 } from "@/lib/sanitize";
 import { inferNextMappingSection } from "@/lib/contactMapping";
+import { consolidateFacts } from "@/lib/factConsolidation";
 import { savedReplacementsInSources, withProvenance } from "@/lib/mappingNames";
 import { assessNoteDominance } from "@/lib/scrub";
 import { apiFetch } from "@/lib/apiClient";
@@ -86,6 +87,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
   const [factError, setFactError] = useState(null);
   const [mappingFacts, setMappingFacts] = useState(null);
   const [factStats, setFactStats] = useState(null);
+  const [factCleanup, setFactCleanup] = useState(null); // { merges, dropped, before, after }
   const [changedOnly, setChangedOnly] = useState(false);
   const [forceExtract, setForceExtract] = useState(false);
 
@@ -164,6 +166,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setFactError(null);
     setMappingFacts(null);
     setFactStats(null);
+    setFactCleanup(null);
     setVerifyFindings(null);
   }
 
@@ -192,6 +195,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setFactError(null);
     setMappingFacts(null);
     setFactStats(null);
+    setFactCleanup(null);
     setVerifyFindings(null);
 
     try {
@@ -337,6 +341,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     if (!options.keepExisting) {
       setMappingFacts(null);
       setFactStats(null);
+      setFactCleanup(null);
     }
 
     try {
@@ -361,7 +366,12 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Fact extraction failed");
-      const facts = normalizedFacts(data.facts || []);
+      // Extraction emits one fact per mention, so the same person or site
+      // arrives once per note and per spelling. Consolidate before review so
+      // the CSM edits one entry per entity, not a dozen near-copies.
+      const { facts: consolidated, merges, dropped } = consolidateFacts(data.facts || []);
+      const facts = normalizedFacts(consolidated);
+      setFactCleanup({ merges, dropped, before: (data.facts || []).length, after: facts.length });
       setMappingFacts(facts);
       setFactStats(data.stats || null);
       return facts;
@@ -599,6 +609,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     setFactError(null);
     setMappingFacts(null);
     setFactStats(null);
+    setFactCleanup(null);
     setVerifyFindings(null);
   }
 
@@ -983,6 +994,33 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
                     {factStats.skippedSources > 0 && <span>{factStats.skippedSources} unchanged skipped</span>}
                     {factStats.batches > 0 && <span>{factStats.batches} batch{factStats.batches !== 1 ? "es" : ""}</span>}
                   </div>
+                )}
+
+                {factCleanup && (factCleanup.merges.length > 0 || factCleanup.dropped.length > 0) && (
+                  <details className="mb-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <summary className="cursor-pointer text-xs text-gray-700">
+                      Cleaned up {factCleanup.before} extracted entries into {factCleanup.after}
+                      {factCleanup.merges.length > 0 && ` — ${factCleanup.merges.length} merged`}
+                      {factCleanup.dropped.length > 0 && `, ${factCleanup.dropped.length} placeholder${factCleanup.dropped.length !== 1 ? "s" : ""} dropped`}
+                    </summary>
+                    <div className="mt-2 space-y-1">
+                      {factCleanup.merges.map((merge) => (
+                        <p key={`${merge.type}-${merge.name}`} className="text-xs text-gray-600">
+                          <span className="text-gray-400">{merge.type}</span> <strong>{merge.name}</strong>
+                          {merge.variants.length > 0 && <> — also seen as {merge.variants.join(", ")}</>}
+                          {" "}({merge.count} mentions)
+                        </p>
+                      ))}
+                      {factCleanup.dropped.length > 0 && (
+                        <p className="text-xs text-gray-500">
+                          Dropped as placeholders: {factCleanup.dropped.join(", ")}
+                        </p>
+                      )}
+                      <p className="text-[11px] text-gray-400">
+                        Merged entries keep every source and detail; untick any below to leave it out of the map.
+                      </p>
+                    </div>
+                  </details>
                 )}
 
                 {factError && (
