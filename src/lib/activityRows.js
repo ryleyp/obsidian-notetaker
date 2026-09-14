@@ -87,9 +87,9 @@ export function sortRowsByDate(rows) {
 // in Obsidian ("[x]") and the next run of the same folder honors it.
 export function rowsToMarkdown(rows) {
   const lines = [
-    "| Filed | Event Date | Title | Type | Subtype | EA/EP | Comments |",
-    "|-------|------------|-------|------|---------|-------|----------|",
-    ...rows.map((r) => `| ${r.filed ? "[x]" : "[ ]"} | ${esc(r.eventDate)} | ${esc(r.title)} | ${esc(r.type)} | ${esc(r.subtype)} | ${esc(r.agreement)} | ${esc(r.comments)} |`),
+    "| Filed | Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |",
+    "|-------|------------|-------|------|---------|-------|-------------|----------|",
+    ...rows.map((r) => `| ${r.filed ? "[x]" : "[ ]"} | ${esc(r.eventDate)} | ${esc(r.title)} | ${esc(r.type)} | ${esc(r.subtype)} | ${esc(r.agreement)} | ${esc(r.sourceTitle)} | ${esc(r.comments)} |`),
   ];
   return lines.join("\n");
 }

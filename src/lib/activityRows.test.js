@@ -46,7 +46,7 @@ describe("rowsToMarkdown", () => {
   it("renders a well-formed table and escapes pipes in cells", () => {
     const md = rowsToMarkdown([{ ...ROW, comments: "A | B" }]);
     const lines = md.split("\n");
-    expect(lines[0]).toContain("| Event Date |");
+    expect(lines[0]).toBe("| Filed | Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |");
     expect(lines[2]).toContain("A \\| B");
     // Every line has the same number of unescaped column separators
     const cols = (l) => (l.replace(/\\\|/g, "").match(/\|/g) || []).length;
@@ -56,6 +56,17 @@ describe("rowsToMarkdown", () => {
   it("flattens newlines inside comments", () => {
     const md = rowsToMarkdown([{ ...ROW, comments: "line one\nline two" }]);
     expect(md.split("\n")).toHaveLength(3);
+  });
+});
+
+describe("source note column", () => {
+  it("includes the source note in the saved markdown table", () => {
+    const md = rowsToMarkdown([ROW]);
+    const lines = md.split("\n");
+    const headerCells = lines[0].split("|").map((c) => c.trim());
+    const sourceIdx = headerCells.indexOf("Source Note");
+    expect(sourceIdx).toBeGreaterThan(-1);
+    expect(lines[2].split("|").map((c) => c.trim())[sourceIdx]).toBe("Q2 Admin Sync");
   });
 });
 
@@ -109,7 +120,7 @@ describe("Filed column round trip", () => {
       { ...ROW, filed: true },
       { ...ROW, title: "Second | pipe", eventDate: "2026-04-13", filed: false },
     ]);
-    expect(md.split("\n")[0]).toBe("| Filed | Event Date | Title | Type | Subtype | EA/EP | Comments |");
+    expect(md.split("\n")[0]).toBe("| Filed | Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |");
     expect(parseReportTable(md)).toEqual([
       { eventDate: "2026-04-12", title: "EA Admin Sync", filed: true },
       { eventDate: "2026-04-13", title: "Second | pipe", filed: false },

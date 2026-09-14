@@ -12,6 +12,7 @@ const COLUMNS = [
   { key: "type", label: "Type" },
   { key: "subtype", label: "Subtype" },
   { key: "agreement", label: "EA/EP" },
+  { key: "sourceTitle", label: "Source Note" },
   { key: "comments", label: "Comments" },
 ];
 
@@ -196,7 +197,8 @@ export default function ActivityPreview({
                         const text = row[c.key] || "";
                         const isComment = c.key === "comments";
                         const isTitle = c.key === "title";
-                        const meta = isTitle ? sourceMeta(row) : null;
+                        const isSourceTitle = c.key === "sourceTitle";
+                        const meta = isSourceTitle ? sourceMeta(row) : null;
                         const over = isComment && text.length > COMMENT_LIMIT;
                         const isEditing = editing === key;
 
@@ -233,12 +235,13 @@ export default function ActivityPreview({
                                 ) : (
                                   <span className="text-gray-500 bg-gray-100 border border-gray-200 rounded-full px-1" title="Classified by Claude from the note body">generated</span>
                                 )}
-                                {row.sourceTitle && <span>from: {row.sourceTitle}</span>}
-                                {meta?.source === "cross-vault" && (
-                                  <span className="text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1" title="Source note came from another folder — double-check attribution">
-                                    cross-folder
-                                  </span>
-                                )}
+                              </div>
+                            )}
+                            {isSourceTitle && meta?.source === "cross-vault" && (
+                              <div className="mt-0.5 text-[10px]">
+                                <span className="text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1" title="Source note came from another folder — double-check attribution">
+                                  cross-folder
+                                </span>
                               </div>
                             )}
                             {c.key === "type" && row.suggestedType && (
