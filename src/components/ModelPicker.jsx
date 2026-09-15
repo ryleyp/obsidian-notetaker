@@ -1,44 +1,98 @@
 "use client";
 
-import { AUTO_MODEL, MODEL_OPTIONS, modelRateLabel } from "@/lib/models";
+import { AUTO_MODEL, MODEL_OPTIONS, MODEL_TIERS, PROVIDERS, TIER_MODELS, modelDisplayName, modelRateLabel } from "@/lib/models";
 
-const PRESETS = [
-  { id: AUTO_MODEL, label: "Auto", sub: "Routes each task", price: "Uses the best configured provider" },
-  { id: "gpt-5.6-luna", label: "Fast", sub: "GPT-5.6 Luna", price: modelRateLabel("gpt-5.6-luna") },
-  { id: "gpt-5.6-terra", label: "Recommended", sub: "GPT-5.6 Terra", price: modelRateLabel("gpt-5.6-terra") },
-  { id: "gpt-6-astra", label: "Highest quality", sub: "GPT-6 Astra", price: modelRateLabel("gpt-6-astra") },
-];
+// Both providers get the same three tiers, the same layout, and the same
+// amount of space. Nothing here marks one of them as the recommended choice.
+
+function Tile({ selected, onClick, title, sub, price, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg border px-2 py-2 text-left transition-colors ${className} ${
+        selected ? "bg-obsidian-600 border-obsidian-600 text-white" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+      }`}
+    >
+      <span className="block text-xs font-semibold">{title}</span>
+      <span className={`block text-[10px] ${selected ? "text-obsidian-100" : "text-gray-500"}`}>{sub}</span>
+      <span className={`block text-[10px] mt-0.5 ${selected ? "text-obsidian-200" : "text-gray-400"}`}>{price}</span>
+    </button>
+  );
+}
 
 export default function ModelPicker({ model, setModel, compact = false, ariaLabel = "AI model" }) {
   if (compact) {
     return (
       <select aria-label={ariaLabel} value={model} onChange={(event) => setModel(event.target.value)} className="input !w-auto text-xs py-1">
         <option value={AUTO_MODEL}>Auto — task-based routing</option>
-        <optgroup label="OpenAI (ChatGPT)">{MODEL_OPTIONS.filter((item) => item.provider === "ChatGPT").map((item) => <option key={item.id} value={item.id}>{item.label} · {modelRateLabel(item.id)}</option>)}</optgroup>
-        <optgroup label="Anthropic (Claude)">{MODEL_OPTIONS.filter((item) => item.provider === "Claude").map((item) => <option key={item.id} value={item.id}>{item.label} · {modelRateLabel(item.id)}</option>)}</optgroup>
+        {PROVIDERS.map((provider) => (
+          <optgroup key={provider} label={provider === "Claude" ? "Anthropic (Claude)" : "OpenAI (ChatGPT)"}>
+            {MODEL_OPTIONS.filter((item) => item.provider === provider).map((item) => (
+              <option key={item.id} value={item.id}>{item.label} · {modelRateLabel(item.id)}</option>
+            ))}
+          </optgroup>
+        ))}
       </select>
     );
   }
 
+  const tierModels = PROVIDERS.flatMap((provider) => Object.values(TIER_MODELS[provider]));
+  const isPreset = model === AUTO_MODEL || tierModels.includes(model);
+
   return (
     <div className="w-full space-y-2">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-        {PRESETS.map((preset) => <button key={preset.id} type="button" onClick={() => setModel(preset.id)} className={`rounded-lg border px-2 py-2 text-left transition-colors ${model === preset.id ? "bg-obsidian-600 border-obsidian-600 text-white" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
-          <span className="block text-xs font-semibold">{preset.label}</span>
-          <span className={`block text-[10px] ${model === preset.id ? "text-obsidian-100" : "text-gray-500"}`}>{preset.sub}</span>
-          <span className={`block text-[10px] mt-0.5 ${model === preset.id ? "text-obsidian-200" : "text-gray-400"}`}>{preset.price}</span>
-        </button>)}
-      </div>
-      <details open={!PRESETS.some((preset) => preset.id === model)}>
-        <summary className="cursor-pointer text-xs text-gray-600">Advanced model list</summary>
+      <Tile
+        selected={model === AUTO_MODEL}
+        onClick={() => setModel(AUTO_MODEL)}
+        title="Auto"
+        sub="Routes each task to whichever provider you have configured"
+        price="Price varies by routed model"
+        className="w-full"
+      />
+
+      {PROVIDERS.map((provider) => (
+        <div key={provider}>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">{provider}</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {MODEL_TIERS.map((tier) => {
+              const id = TIER_MODELS[provider][tier.id];
+              return (
+                <Tile
+                  key={id}
+                  selected={model === id}
+                  onClick={() => setModel(id)}
+                  title={tier.label}
+                  sub={modelDisplayName(id)}
+                  price={modelRateLabel(id)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      <details open={!isPreset}>
+        <summary className="cursor-pointer text-xs text-gray-600">Every model</summary>
         <div className="mt-2 grid sm:grid-cols-2 gap-2">
-          {["ChatGPT", "Claude"].map((provider) => <div key={provider} className="rounded-lg border border-gray-200 p-2">
-            <p className="text-xs font-semibold mb-1">{provider}</p>
-            <div className="space-y-1">{MODEL_OPTIONS.filter((item) => item.provider === provider).map((item) => <button key={item.id} type="button" onClick={() => setModel(item.id)} className={`w-full rounded px-2 py-1.5 text-left ${model === item.id ? "bg-obsidian-600 text-white" : "hover:bg-gray-50 text-gray-700"}`}>
-              <span className="flex justify-between gap-2 text-xs"><strong>{item.label}</strong><span>{item.sub}</span></span>
-              <span className={`block text-[10px] ${model === item.id ? "text-obsidian-100" : "text-gray-400"}`}>{modelRateLabel(item.id)}</span>
-            </button>)}</div>
-          </div>)}
+          {PROVIDERS.map((provider) => (
+            <div key={provider} className="rounded-lg border border-gray-200 p-2">
+              <p className="text-xs font-semibold mb-1">{provider}</p>
+              <div className="space-y-1">
+                {MODEL_OPTIONS.filter((item) => item.provider === provider).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setModel(item.id)}
+                    className={`w-full rounded px-2 py-1.5 text-left ${model === item.id ? "bg-obsidian-600 text-white" : "hover:bg-gray-50 text-gray-700"}`}
+                  >
+                    <span className="flex justify-between gap-2 text-xs"><strong>{item.label}</strong><span>{item.sub}</span></span>
+                    <span className={`block text-[10px] ${model === item.id ? "text-obsidian-100" : "text-gray-400"}`}>{modelRateLabel(item.id)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </details>
     </div>

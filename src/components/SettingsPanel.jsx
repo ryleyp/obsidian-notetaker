@@ -896,7 +896,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
         <div>
           <label className="label">Default Model</label>
           <p className="text-xs text-gray-500 mb-2">
-            Choose a current ChatGPT API model or a Claude model. Each option shows its input and output price per million tokens, and you can change models for every note or report.
+            Claude and ChatGPT both offer the same three tiers, and either can write your notes — pick whichever you prefer. Each option shows its input and output price per million tokens, and you can change models for every note or report.
           </p>
           <ModelPicker model={form.model} setModel={(id) => handleChange("model", id)} />
         </div>

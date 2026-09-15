@@ -46,11 +46,14 @@ export const providerLabel = (model) => model === AUTO_MODEL ? "automatic model 
 export const alternateModel = (model) => isOpenAIModel(model) || model === AUTO_MODEL ? "claude-sonnet-5" : OPENAI_MODEL;
 export const FAST_MODEL = "claude-haiku-4-5";
 
+// Auto follows the key that is actually configured. When both providers are
+// configured — or neither is visible here, because the key lives in
+// .env.local — it falls back to the app's default provider rather than
+// silently preferring one vendor's models.
 export function resolveAutoModel(model, { apiKey, openaiApiKey, task = "generation" } = {}) {
   if (model !== AUTO_MODEL) return model || DEFAULT_MODEL;
-  if (openaiApiKey) return task === "fast" ? "gpt-5.6-luna" : OPENAI_MODEL;
-  if (apiKey) return task === "fast" ? FAST_MODEL : "claude-sonnet-5";
-  return OPENAI_MODEL;
+  if (openaiApiKey && !apiKey) return task === "fast" ? "gpt-5.6-luna" : OPENAI_MODEL;
+  return task === "fast" ? FAST_MODEL : "claude-sonnet-5";
 }
 
 // A capable second model from the same provider, for when the other
@@ -88,21 +91,53 @@ export function missingProviderKey(model, { apiKey, openaiApiKey } = {}) {
 // over-fill a prompt or under-report a cost for something we don't recognize.
 const FALLBACK = MODELS["claude-haiku-4-5"];
 
+// Auto has no single spec until it resolves, so budgets use the smaller of
+// what either provider offers. Costs shown after a run always come from the
+// model that actually ran, so this only sizes prompts and estimates.
+const AUTO_SPEC = { context: 1_000_000, maxOutput: 32_000, input: 3.0, output: 15.0, label: "Auto" };
+
 function spec(model) {
-  if (model === AUTO_MODEL) return MODELS[OPENAI_MODEL];
+  if (model === AUTO_MODEL) return AUTO_SPEC;
   return MODELS[model] || FALLBACK;
 }
 
+// Both providers, in the same order everywhere they are listed.
+export const PROVIDERS = ["Claude", "ChatGPT"];
+
 // Shared model options for the report tab pickers.
 export const MODEL_OPTIONS = [
+  { id: "claude-opus-5", label: "Opus", provider: "Claude", sub: "Smartest · 1M" },
+  { id: "claude-sonnet-5", label: "Sonnet", provider: "Claude", sub: "Best value · 1M" },
+  { id: "claude-haiku-4-5", label: "Haiku", provider: "Claude", sub: "Faster · 200k" },
   { id: "gpt-6-astra", label: "GPT-6 Astra", provider: "ChatGPT", sub: "Most capable · 1.05M" },
   { id: "gpt-5.6-sol", label: "GPT-5.6 Sol", provider: "ChatGPT", sub: "Flagship · 1.05M" },
   { id: OPENAI_MODEL, label: "GPT-5.6 Terra", provider: "ChatGPT", sub: "Balanced · 1.05M" },
   { id: "gpt-5.6-luna", label: "GPT-5.6 Luna", provider: "ChatGPT", sub: "Lowest cost · 1.05M" },
-  { id: "claude-haiku-4-5", label: "Haiku", provider: "Claude", sub: "Faster · 200k" },
-  { id: "claude-sonnet-5", label: "Sonnet", provider: "Claude", sub: "Best value · 1M" },
-  { id: "claude-opus-5", label: "Opus", provider: "Claude", sub: "Smartest · 1M" },
 ];
+
+// The same three choices on both sides, so picking a provider is a separate
+// decision from picking how much to spend. Neither provider is labelled
+// "recommended": which one writes a better note is the CSM's call, and the
+// second-opinion pass exists precisely because the two disagree usefully.
+export const MODEL_TIERS = [
+  { id: "fast", label: "Fast", sub: "Quick and cheapest" },
+  { id: "balanced", label: "Balanced", sub: "Everyday choice" },
+  { id: "best", label: "Highest quality", sub: "Hardest transcripts" },
+];
+
+export const TIER_MODELS = {
+  Claude: { fast: FAST_MODEL, balanced: "claude-sonnet-5", best: "claude-opus-5" },
+  ChatGPT: { fast: "gpt-5.6-luna", balanced: OPENAI_MODEL, best: "gpt-6-astra" },
+};
+
+// The tier a model sits in, so switching provider can keep the same tier.
+export function tierForModel(model) {
+  for (const provider of PROVIDERS) {
+    const found = Object.entries(TIER_MODELS[provider]).find(([, id]) => id === model);
+    if (found) return found[0];
+  }
+  return null;
+}
 
 const dollars = (value) => value < 1 ? value.toFixed(2) : Number.isInteger(value) ? value.toFixed(0) : value.toFixed(2);
 export function modelRateLabel(model) {

@@ -50,6 +50,10 @@ import {
   maxOutputTokens,
   modelRateLabel,
   resolveAutoModel,
+  MODEL_TIERS,
+  PROVIDERS,
+  TIER_MODELS,
+  tierForModel,
 } from "@/lib/models";
 
 describe("firstTextBlock", () => {
@@ -113,14 +117,34 @@ describe("model capability lookups", () => {
 
   it("offers only current models in the picker", () => {
     expect(MODEL_OPTIONS.map((o) => o.id)).toEqual([
+      "claude-opus-5",
+      "claude-sonnet-5",
+      "claude-haiku-4-5",
       "gpt-6-astra",
       "gpt-5.6-sol",
       "gpt-5.6-terra",
       "gpt-5.6-luna",
-      "claude-haiku-4-5",
-      "claude-sonnet-5",
-      "claude-opus-5",
     ]);
+  });
+
+  it("offers both providers the same tiers, so neither is the recommended one", () => {
+    expect(PROVIDERS).toEqual(["Claude", "ChatGPT"]);
+    for (const provider of PROVIDERS) {
+      expect(MODEL_TIERS.map((tier) => TIER_MODELS[provider][tier.id]).filter(Boolean)).toHaveLength(MODEL_TIERS.length);
+    }
+    // Every tier model is a real, currently offered model.
+    const offered = new Set(MODEL_OPTIONS.map((o) => o.id));
+    for (const provider of PROVIDERS) {
+      for (const id of Object.values(TIER_MODELS[provider])) expect(offered.has(id)).toBe(true);
+    }
+    // No tier label endorses a provider.
+    expect(MODEL_TIERS.map((tier) => tier.label.toLowerCase()).join(" ")).not.toContain("recommend");
+  });
+
+  it("maps a model back to its tier, so switching provider can keep the tier", () => {
+    expect(tierForModel("claude-opus-5")).toBe("best");
+    expect(tierForModel("gpt-5.6-luna")).toBe("fast");
+    expect(tierForModel("gpt-5.4")).toBeNull();
   });
 
   it("still resolves a retired model saved in settings without offering it", () => {
@@ -139,6 +163,17 @@ describe("model capability lookups", () => {
     expect(resolveAutoModel("auto", { openaiApiKey: "key" })).toBe("gpt-5.6-terra");
     expect(resolveAutoModel("auto", { apiKey: "key", task: "fast" })).toBe("claude-haiku-4-5");
     expect(resolveAutoModel("auto", { apiKey: "key" })).toBe("claude-sonnet-5");
+  });
+
+  it("falls back to the app default provider when both keys, or neither, are set", () => {
+    expect(resolveAutoModel("auto", { apiKey: "a", openaiApiKey: "b" })).toBe("claude-sonnet-5");
+    expect(resolveAutoModel("auto", {})).toBe("claude-sonnet-5");
+    expect(resolveAutoModel("auto", { task: "fast" })).toBe("claude-haiku-4-5");
+  });
+
+  it("budgets Auto on what either provider can take, not one vendor's numbers", () => {
+    expect(contextLimit("auto")).toBe(1_000_000);
+    expect(maxOutputTokens("auto")).toBe(32_000);
   });
 });
 
