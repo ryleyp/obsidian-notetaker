@@ -5,6 +5,7 @@ import { assertTrustedRequest } from "@/lib/requestSafety";
 import { maxOutputTokens } from "@/lib/models";
 import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 import { taxonomyForNotePrompt } from "@/lib/sfdcTaxonomy";
+import { GOAL_SECTION_HEADING, NO_CONTRIBUTIONS, formatGoalsForPrompt } from "@/lib/goals";
 
 const SYSTEM_PROMPT = `You are an expert meeting notes specialist working for a Customer Success Manager (CSM) at NI (National Instruments). The person who recorded this meeting is that CSM — their job is driving adoption, expansion, and renewal of NI products at large customer accounts.
 
@@ -98,7 +99,7 @@ export function buildPrompt(
   meetingTitle,
   suggestedAgreements = [],
   meetingContext = "",
-  { sourceBundle, accounts = [], followUp, ownerNames = [] } = {}
+  { sourceBundle, accounts = [], followUp, ownerNames = [], goals = [] } = {}
 ) {
   const title = meetingTitle || "Meeting Notes";
   const sources = sourceBundle || buildSourceBundle({ transcript, rawNotes: meetingContext });
@@ -152,6 +153,30 @@ CONFLICT FLAGGING: If the CSM's notes DIRECTLY conflict with the transcript on a
   // EA/EP numbers matched to this meeting by keyword (matching done client-side
   // against the raw transcript). Listed in the SFDC entry so they can be copied
   // into Salesforce; Claude only echoes them, it does not invent numbers.
+  // Performance-review goals the CSM is measured on. The section is omitted
+  // entirely when no goals are configured, so nothing invents one; when they
+  // are, only evidence actually present in the sources may be recorded.
+  const goalList = formatGoalsForPrompt(goals);
+  const goalSection = goalList
+    ? `---
+
+## ${GOAL_SECTION_HEADING}
+
+The CSM is measured on the goals below this year. Record ONLY what this meeting genuinely contributed to one of them — work the CSM did or drove, a measurable result, or a concrete step toward the target. One line per contribution, in this exact format:
+- **Goal:** [goal name, copied exactly from the list] | **Contribution:** [what happened that advances it] | **Metric:** [number or measure if the sources state one; omit this part entirely when they do not]
+
+GOALS:
+${goalList}
+
+Rules for this section:
+- Use a goal name exactly as written above. Never invent a goal that is not listed.
+- A meeting usually contributes to zero or one goal. Do not stretch: attending a meeting, discussing a topic, or a customer mentioning something is not a contribution.
+- Only record a metric the sources actually state. Never estimate, extrapolate, or infer progress toward a target.
+- Write "${NO_CONTRIBUTIONS}" when nothing in this meeting clearly advances a listed goal — that is the normal case for most meetings.
+
+`
+    : "";
+
   const agreementBlock = suggestedAgreements.length
     ? `\nEA/EP NUMBERS ON FILE FOR THIS ACCOUNT (matched to this meeting by keyword): ${suggestedAgreements.map((g) => `${g.type} ${g.number}`).join(", ")}. In the SFDC Activity Entry, output an "**EA/EP Number(s):**" line listing the one(s) relevant to what this meeting was actually about, copied verbatim. If more than one clearly applies, list all. Do not invent or alter numbers, and do not list a number if nothing in the meeting relates to it.`
     : `\nNo EA/EP numbers are on file for this account. In the SFDC Activity Entry, output "**EA/EP Number(s):** None on file".`;
@@ -284,7 +309,7 @@ List all action items as Markdown task checkboxes. For each item include who own
 
 List the agreed-upon next steps, upcoming milestones, follow-up meetings, or planned deliverables in priority order. Do not restate items already listed under Action Items — this section is for milestones and plans that are not individual owned tasks. If everything agreed upon is already covered by Action Items, write "Covered by Action Items above."
 
----
+${goalSection}---
 
 ## SFDC Activity Entry
 
@@ -321,6 +346,7 @@ export async function POST(request) {
       accounts = [],
       followUp,
       ownerNames = [],
+      goals = [],
     } = body;
 
     if (!transcript || transcript.trim().length === 0) {
@@ -342,6 +368,7 @@ export async function POST(request) {
           sourceBundle,
           followUp,
           ownerNames,
+          goals,
         }),
       }],
     });

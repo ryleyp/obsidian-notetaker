@@ -13,6 +13,7 @@ export const EMPTY_SETTINGS = {
   transcriptsPath: "",
   apiKey: "",
   openaiApiKey: "",
+  goals: [],
   todoistApiToken: "",
   todoistProject: "",
   aiPrivacyScan: true,
@@ -51,6 +52,7 @@ export function useAppSettings({ onSettingsSaved } = {}) {
             accounts: s.accounts || DEFAULT_ACCOUNTS,
             corrections: s.corrections || [],
             ownerNames: s.ownerNames || [],
+            goals: s.goals || [],
           },
           glossary: {
             replacements: s.replacements || [],

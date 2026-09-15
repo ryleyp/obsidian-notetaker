@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { DEFAULT_ACCOUNTS } from "@/lib/accounts";
 import { apiFetch, approveLocalPaths } from "@/lib/apiClient";
 import { parseTodoistProjectId } from "@/lib/todoist";
+import { goalsToText, parseGoalsText } from "@/lib/goals";
 import { EXAMPLE_TRANSCRIPTS_PATH, EXAMPLE_VAULT_PATH } from "@/lib/hostPlatform";
 import ModelPicker from "@/components/ModelPicker";
 
@@ -36,6 +37,9 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
     todoistProject: settings.todoistProject || "",
     aiPrivacyScan: settings.aiPrivacyScan !== false,
     ownerNamesText: (settings.ownerNames || []).join(", "),
+    // Goals are edited as pasted text and parsed on save, so a review
+    // document can be dropped in whole.
+    goalsText: goalsToText(settings.goals || []),
     model: settings.model || "claude-haiku-4-5",
     replacements: settings.replacements || [],
     corrections: settings.corrections || [],
@@ -60,6 +64,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
   const [cleanupResult, setCleanupResult] = useState(null); // { ok, message }
   const [importMsg, setImportMsg] = useState(null); // { ok, message }
   const importInputRef = useRef(null);
+  const goalsFileRef = useRef(null);
 
   async function handleTodoistBackfill() {
     setBackfilling(true);
@@ -354,6 +359,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       corrections: form.corrections,
       ownerNames: form.ownerNamesText.split(",").map((n) => n.trim()).filter(Boolean),
       accounts: serializeAccounts(),
+      goals: parseGoalsText(form.goalsText),
     });
   }
 
@@ -371,6 +377,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       replacements: form.replacements,
       corrections: form.corrections,
       accounts: serializeAccounts(),
+      goals: parseGoalsText(form.goalsText),
       todoistProject: form.todoistProject.trim(),
       ...(includeKeyInExport && form.openaiApiKey.trim() ? { openaiApiKey: form.openaiApiKey.trim() } : {}),
       ...(includeKeyInExport && form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : {}),
@@ -410,6 +417,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           replacements: Array.isArray(cfg.replacements) ? cfg.replacements : f.replacements,
           corrections: Array.isArray(cfg.corrections) ? cfg.corrections : f.corrections,
           ownerNamesText: Array.isArray(cfg.ownerNames) ? cfg.ownerNames.join(", ") : f.ownerNamesText,
+          goalsText: Array.isArray(cfg.goals) ? goalsToText(cfg.goals) : f.goalsText,
           accounts: Array.isArray(cfg.accounts) && cfg.accounts.length
             ? cfg.accounts.map(accountToFormRow)
             : f.accounts,
@@ -670,6 +678,44 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
             value={form.ownerNamesText}
             onChange={(e) => handleChange("ownerNamesText", e.target.value)}
           />
+        </div>
+
+        <div>
+          <label htmlFor="goals-text" className="label">Performance Goals <span className="font-normal text-gray-400">(optional)</span></label>
+          <p className="text-xs text-gray-500 mb-2">
+            Paste your review goals — one per line, as <code className="bg-gray-100 px-1 rounded">Goal — target</code> or{" "}
+            <code className="bg-gray-100 px-1 rounded">Goal: target</code>. Bullets, numbering, and a pasted Markdown table all work.
+            New notes then record what actually contributed to a goal, and the Goals tab rolls those up for your review.
+          </p>
+          <textarea
+            id="goals-text"
+            className="input font-mono text-xs"
+            rows={5}
+            value={form.goalsText}
+            onChange={(e) => handleChange("goalsText", e.target.value)}
+            placeholder={"Training credit utilization — 15% by year end\nCase studies — 4 completed\nAccount growth — 7% above baseline"}
+          />
+          <div className="mt-2 flex items-center gap-3">
+            <button type="button" className="btn-secondary text-xs" onClick={() => goalsFileRef.current?.click()}>Upload goals file</button>
+            <span className="text-xs text-gray-500">
+              {parseGoalsText(form.goalsText).length} goal{parseGoalsText(form.goalsText).length !== 1 ? "s" : ""} detected
+            </span>
+            <input
+              ref={goalsFileRef}
+              type="file"
+              accept=".txt,.md,.csv"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                const text = await file.text();
+                // Append rather than replace, so uploading a second document
+                // never quietly discards goals already entered.
+                handleChange("goalsText", [form.goalsText.trim(), text.trim()].filter(Boolean).join("\n"));
+              }}
+            />
+          </div>
         </div>
 
         <div>

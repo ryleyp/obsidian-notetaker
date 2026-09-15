@@ -94,6 +94,16 @@ export default function Header({ onSettingsClick, isSettingsOpen, mode, onModeCh
               >
                 EA Activity
               </button>
+              <button
+                onClick={() => onModeChange("goals")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  mode === "goals"
+                    ? "bg-white text-obsidian-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Goals
+              </button>
             </div>
 
             <button

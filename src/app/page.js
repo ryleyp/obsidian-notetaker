@@ -12,6 +12,7 @@ import EmailThreadNote from "@/components/EmailThreadNote";
 import AccountStatus from "@/components/AccountStatus";
 import SystemLinkStatus from "@/components/SystemLinkStatus";
 import CSMActivityReport from "@/components/CSMActivityReport";
+import GoalReview from "@/components/GoalReview";
 import StakeholderMap from "@/components/StakeholderMap";
 import SanitizeReview from "@/components/SanitizeReview";
 import SpeakerReview from "@/components/SpeakerReview";
@@ -206,6 +207,11 @@ export default function Home() {
             onSettingsPatch={applySettingsPatch}
             onSettingsClick={() => setShowSettings(true)}
           />
+        )}
+
+        {/* ── Performance goals mode ── */}
+        {mode === "goals" && (
+          <GoalReview settings={settings} onSettingsClick={() => setShowSettings(true)} />
         )}
 
         {/* ── Account Status mode ── */}

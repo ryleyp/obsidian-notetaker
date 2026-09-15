@@ -246,6 +246,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
         sourceBundle: promptSourceBundle,
         accounts: settings.accounts || [],
         ownerNames: settings.ownerNames || [],
+        goals: settings.goals || [],
         followUp: meeting.followUp || { enabled: false },
       },
       replacements,

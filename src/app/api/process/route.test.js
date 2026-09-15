@@ -161,3 +161,23 @@ describe("buildPrompt meeting-lead context", () => {
     expect(prompt).toContain("Never write that the CSM observed");
   });
 });
+
+describe("buildPrompt goal contributions", () => {
+  const goals = [{ name: "Case studies", target: "4 completed" }, { name: "Account growth", target: "7%" }];
+
+  it("asks for contributions only against the configured goals", () => {
+    const prompt = buildPrompt("We kicked off the case study.", "Sync", [], "", { goals });
+    expect(prompt).toContain("## Goal Contributions");
+    expect(prompt).toContain("- Case studies (target: 4 completed)");
+    expect(prompt).toContain("- Account growth (target: 7%)");
+    expect(prompt).toContain("Never invent a goal that is not listed");
+    expect(prompt).toContain("Nothing noted.");
+    // The section sits before the Salesforce entry, which stays unchanged.
+    expect(prompt.indexOf("## Goal Contributions")).toBeLessThan(prompt.indexOf("## SFDC Activity Entry"));
+  });
+
+  it("omits the section entirely when no goals are configured", () => {
+    const prompt = buildPrompt("We kicked off the case study.", "Sync");
+    expect(prompt).not.toContain("Goal Contributions");
+  });
+});

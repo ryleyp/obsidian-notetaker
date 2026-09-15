@@ -44,6 +44,7 @@ export async function GET(request) {
   return NextResponse.json({
     config: {
       accounts: cfg?.accounts ?? undefined,
+      goals: cfg?.goals ?? undefined,
       corrections: cfg?.corrections ?? undefined,
       replacements: gls?.replacements ?? cfg?.replacements ?? undefined,
     },
@@ -66,6 +67,7 @@ export async function POST(request) {
       writeJSON(path.join(base, CONFIG_FILE), {
         ...existing,
         ...(config.accounts !== undefined && { accounts: config.accounts }),
+        ...(config.goals !== undefined && { goals: config.goals }),
         ...(config.corrections !== undefined && { corrections: config.corrections }),
       });
     }
