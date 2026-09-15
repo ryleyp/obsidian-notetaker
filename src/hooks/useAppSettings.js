@@ -14,6 +14,9 @@ export const EMPTY_SETTINGS = {
   apiKey: "",
   openaiApiKey: "",
   goals: [],
+  // Notes file into FY<year> subfolders inside their account folder; reading
+  // always spans the whole account, so this only changes where writes land.
+  fiscalYearFolders: true,
   todoistApiToken: "",
   todoistProject: "",
   aiPrivacyScan: true,

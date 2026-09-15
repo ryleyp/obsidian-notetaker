@@ -30,6 +30,114 @@ afterEach(() => {
   tmpRoot = null;
 });
 
+describe("/api/save fiscal-year filing", () => {
+  it("files a dated note into its fiscal-year folder, creating it", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    fs.mkdirSync(path.join(vault, "Acme"), { recursive: true });
+    allowDirectory(vault, "Vault path");
+
+    const data = await (await postSave({
+      notes: "# Sync",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "2026-10-02 - Acme Kickoff",
+      fiscalYearFolders: true,
+    })).json();
+
+    expect(data.savedPath).toBe(path.join("Acme", "FY2027", "2026-10-02 - Acme Kickoff.md"));
+  });
+
+  it("leaves an undated note in the account folder, but files a rollup in the open year", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    fs.mkdirSync(path.join(vault, "Acme"), { recursive: true });
+    allowDirectory(vault, "Vault path");
+
+    const note = await (await postSave({
+      notes: "# Contact", vaultPath: vault, folderPath: "Acme",
+      meetingTitle: "Contact Notes", fiscalYearFolders: true,
+    })).json();
+    expect(note.savedPath).toBe(path.join("Acme", "Contact Notes.md"));
+
+    const rollup = await (await postSave({
+      notes: "# Facts", vaultPath: vault, folderPath: "Acme",
+      meetingTitle: "Customer Facts", fiscalYearFolders: true, fiscalYearFallback: "current",
+    })).json();
+    expect(rollup.savedPath).toMatch(/^Acme[/\\]FY\d{4}[/\\]Customer Facts\.md$/);
+  });
+
+  it("keeps an email thread in the folder it already lives in across a year boundary", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const fy26 = path.join(vault, "Acme", "FY2026");
+    fs.mkdirSync(fy26, { recursive: true });
+    allowDirectory(vault, "Vault path");
+    fs.writeFileSync(path.join(fy26, "2026-09-20 - Email - Renewal.md"), "# first reply");
+
+    const data = await (await postSave({
+      notes: "# second reply",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "2026-10-05 - Email - Renewal",
+      upsertEmailThreadTitle: "RE: Renewal",
+      fiscalYearFolders: true,
+    })).json();
+
+    // Updated in place and renamed to the newest date, still under FY2026 —
+    // one thread, not a second copy in FY2027.
+    expect(data.updated).toBe(true);
+    expect(data.matchedByTitle).toBe(true);
+    expect(data.savedPath).toBe(path.join("Acme", "FY2026", "2026-10-05 - Email - Renewal.md"));
+    expect(fs.existsSync(path.join(vault, "Acme", "FY2027"))).toBe(false);
+  });
+
+  it("updates an existing note that lives in a fiscal-year subfolder", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const fy26 = path.join(vault, "Acme", "FY2026");
+    fs.mkdirSync(fy26, { recursive: true });
+    allowDirectory(vault, "Vault path");
+    const relativePath = path.join("Acme", "FY2026", "2026-09-08 - Acme Sync.md");
+    fs.writeFileSync(path.join(vault, relativePath), "# old");
+
+    const data = await (await postSave({
+      notes: "# new",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "2026-09-08 - Acme Sync",
+      existingRelativePath: relativePath,
+      fiscalYearFolders: true,
+    })).json();
+
+    expect(data.updated).toBe(true);
+    expect(data.savedPath).toBe(relativePath);
+    expect(fs.readFileSync(path.join(vault, relativePath), "utf-8")).toBe("# new");
+    expect(data.backupPath).toBeTruthy();
+  });
+
+  it("finds a duplicate transcript already filed in a fiscal-year subfolder", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const fy26 = path.join(vault, "Acme", "FY2026");
+    fs.mkdirSync(fy26, { recursive: true });
+    allowDirectory(vault, "Vault path");
+    fs.writeFileSync(path.join(fy26, "2026-09-08 - Acme Sync.md"), "# 2026-09-08 - Acme Sync\n\nSam said hello.");
+
+    const data = await (await postSave({
+      notes: "# Another Title\n\nSam said hello.",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "Another Title",
+      dedupeContent: true,
+      fiscalYearFolders: true,
+    })).json();
+
+    expect(data.alreadyExists).toBe(true);
+    expect(data.savedPath).toBe(path.join("Acme", "FY2026", "2026-09-08 - Acme Sync.md"));
+  });
+});
+
 describe("/api/save", () => {
   it("saves notes and avoids overwriting an existing file", async () => {
     const root = makeTmp();

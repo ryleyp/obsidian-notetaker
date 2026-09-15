@@ -565,6 +565,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
           vaultPath: settings.vaultPath,
           folderPath: selectedFolder,
           meetingTitle: `Customer Site Mapping ${TODAY}`,
+          fiscalYearFolders: settings.fiscalYearFolders !== false,
         }),
       });
       const data = await res.json();

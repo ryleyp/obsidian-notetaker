@@ -5,6 +5,7 @@ import { textHasAlias } from "@/lib/accounts";
 import { assertExistingChildDirectory } from "@/lib/fileSafety";
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
+import { EXCLUDED_FOLDERS, walkMarkdownFiles } from "@/lib/vaultScan";
 
 function parseDateFromFilename(filename) {
   const match = filename.match(/^(\d{4}-\d{2}-\d{2})/);
@@ -24,19 +25,18 @@ function dateOutsideWindow(date, cutoff) {
   return (cutoff.start && date < cutoff.start) || (cutoff.end && date > cutoff.end);
 }
 
+// A folder is read as a whole subtree, so the fiscal-year subfolders an
+// account is filed into are still one account when referencing it.
 function readFolder(dir, cutoff, source, sourceLabel, options = {}) {
   const notes = [];
   if (!fs.existsSync(dir)) return notes;
-  let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return notes; }
 
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
-    const filePath = path.join(dir, entry.name);
+  for (const entry of walkMarkdownFiles(dir, { skipFolders: EXCLUDED_FOLDERS, maxDepth: options.maxDepth ?? 3 })) {
+    const filePath = entry.filePath;
     let stat = null;
     try { stat = fs.statSync(filePath); } catch { continue; }
 
-    const filenameDate = parseDateFromFilename(entry.name);
+    const filenameDate = parseDateFromFilename(entry.filename);
     if (filenameDate && dateOutsideWindow(filenameDate, cutoff)) continue;
 
     let content = null;
@@ -59,12 +59,12 @@ function readFolder(dir, cutoff, source, sourceLabel, options = {}) {
     }
 
     notes.push({
-      filename: entry.name,
+      filename: entry.filename,
       relativePath: path.relative(options.basePath || dir, filePath),
       mtimeMs: stat.mtimeMs,
       size: stat.size,
       date: date ? date.toISOString().split("T")[0] : "",
-      title: entry.name.replace(/^\d{4}-\d{2}-\d{2}\s*-\s*/, "").replace(/\.md$/, ""),
+      title: entry.filename.replace(/^\d{4}-\d{2}-\d{2}\s*-\s*/, "").replace(/\.md$/, ""),
       content,
       source,
       sourceLabel,
@@ -128,9 +128,12 @@ export async function GET(request) {
   if (end) end.setHours(23, 59, 59, 999);
   const cutoff = { start, end };
   const readOptions = { includeUndated: allTime, basePath: resolvedVault };
+  // Selecting the vault root is not selecting an account, so it stays a flat
+  // read rather than pulling in every account's notes at once.
+  const primaryOptions = { ...readOptions, maxDepth: path.resolve(targetDir) === path.resolve(resolvedVault) ? 0 : 3 };
 
   // 1. Primary Obsidian folder notes
-  const primaryNotes = readFolder(targetDir, cutoff, "obsidian", folderPath || "Vault root", readOptions);
+  const primaryNotes = readFolder(targetDir, cutoff, "obsidian", folderPath || "Vault root", primaryOptions);
 
   // 2. Transcript archive notes for this account. Transcript filenames often
   // do not contain dates, so use modified time as a fallback for archive files.

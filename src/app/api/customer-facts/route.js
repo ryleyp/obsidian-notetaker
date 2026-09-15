@@ -5,18 +5,19 @@ import { assertExistingChildDirectory, sanitizeFilename } from "@/lib/fileSafety
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { buildCustomerFactsRollup, CUSTOMER_FACTS_FILENAME } from "@/lib/customerFacts";
+import { resolveFiscalYearDir } from "@/lib/fiscalYearPaths";
+import { folderMarkdownFiles } from "@/lib/vaultScan";
 
-function readMarkdownNotes(targetDir) {
-  const notes = fs.readdirSync(targetDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== CUSTOMER_FACTS_FILENAME)
-    .map((entry) => {
-      const filePath = path.join(targetDir, entry.name);
-      return {
-        filename: entry.name,
-        content: fs.readFileSync(filePath, "utf-8"),
-        modified: fs.statSync(filePath).mtimeMs,
-      };
-    });
+// Every meeting in the account, including the fiscal-year subfolders it is
+// filed into — the rollup covers the relationship, not one year.
+function readMarkdownNotes(vaultRoot, targetDir) {
+  const notes = folderMarkdownFiles(vaultRoot, targetDir)
+    .filter((entry) => entry.filename !== CUSTOMER_FACTS_FILENAME)
+    .map((entry) => ({
+      filename: entry.filename,
+      content: fs.readFileSync(entry.filePath, "utf-8"),
+      modified: fs.statSync(entry.filePath).mtimeMs,
+    }));
 
   // Old versions created "(1)" copies when the same email thread was run
   // again. Keep those source files untouched, but only use the newest copy in
@@ -41,16 +42,25 @@ function readMarkdownNotes(targetDir) {
 export async function POST(request) {
   try {
     assertTrustedRequest(request);
-    const { vaultPath, folderPath = "", accountName = "Selected Customer" } = await request.json();
+    const {
+      vaultPath,
+      folderPath = "",
+      accountName = "Selected Customer",
+      fiscalYearFolders = false,
+    } = await request.json();
     if (!vaultPath) return NextResponse.json({ error: "Vault path is required" }, { status: 400 });
 
     const resolvedVault = assertAllowedRoot(vaultPath, "Vault path");
     const targetDir = assertExistingChildDirectory(resolvedVault, folderPath, "Customer folder");
-    const notes = readMarkdownNotes(targetDir);
+    const notes = readMarkdownNotes(resolvedVault, targetDir);
     const safeAccountName = sanitizeFilename(accountName, "Selected Customer");
     const content = buildCustomerFactsRollup(notes, safeAccountName);
-    const filePath = path.join(targetDir, CUSTOMER_FACTS_FILENAME);
-    const tempPath = path.join(targetDir, `.${CUSTOMER_FACTS_FILENAME}.${process.pid}.${Date.now()}.tmp`);
+    const writeDir = resolveFiscalYearDir(resolvedVault, targetDir, {
+      enabled: !!fiscalYearFolders,
+      fallback: "current",
+    });
+    const filePath = path.join(writeDir, CUSTOMER_FACTS_FILENAME);
+    const tempPath = path.join(writeDir, `.${CUSTOMER_FACTS_FILENAME}.${process.pid}.${Date.now()}.tmp`);
 
     try {
       fs.writeFileSync(tempPath, content, "utf-8");

@@ -4,6 +4,7 @@ import path from "path";
 import { assertExistingChildDirectory } from "@/lib/fileSafety";
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
+import { folderMarkdownFiles } from "@/lib/vaultScan";
 import { parseReportTable } from "@/lib/activityRows";
 
 // The Filed column of the most recent saved EA Activity Report in a folder —
@@ -20,13 +21,16 @@ export async function GET(request) {
     const resolvedVault = assertAllowedRoot(vaultPath, "Vault path");
     const dir = assertExistingChildDirectory(resolvedVault, folderPath, "Target folder");
 
-    const reports = fs.readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isFile() && /^EA Activity Report\b.*\.md$/i.test(e.name))
-      .map((e) => {
-        const filePath = path.join(dir, e.name);
-        const dateInName = e.name.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || "";
-        return { filePath, name: e.name, dateInName, mtimeMs: fs.statSync(filePath).mtimeMs };
-      })
+    // Reports are searched through the account's fiscal-year subfolders too,
+    // so last year's filing is still found from the account folder.
+    const reports = folderMarkdownFiles(resolvedVault, dir)
+      .filter((e) => /^EA Activity Report\b.*\.md$/i.test(e.filename))
+      .map((e) => ({
+        filePath: e.filePath,
+        name: e.filename,
+        dateInName: e.filename.match(/(\d{4}-\d{2}-\d{2})/)?.[1] || "",
+        mtimeMs: fs.statSync(e.filePath).mtimeMs,
+      }))
       // Newest report first: by the date in its name, then by modification time
       // so "(1)" re-saves of the same day win over the original.
       .sort((a, b) => b.dateInName.localeCompare(a.dateInName) || b.mtimeMs - a.mtimeMs);

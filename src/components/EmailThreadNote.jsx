@@ -336,6 +336,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           folderPath: saveFolder,
           meetingTitle: saveTitle,
           upsertEmailThreadTitle: updateExisting ? correctedTitle.trim() || undefined : undefined,
+          fiscalYearFolders: settings.fiscalYearFolders !== false,
         }),
       });
       const saveData = await saveRes.json();
@@ -386,6 +387,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               vaultPath: settings.vaultPath,
               folderPath: saveFolder,
               accountName: account.name,
+              fiscalYearFolders: settings.fiscalYearFolders !== false,
             }),
           });
           const factsData = await factsRes.json();

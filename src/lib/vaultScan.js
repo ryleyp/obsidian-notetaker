@@ -49,7 +49,17 @@ export function collectFolders(dir, relativeFolder = "", depth = 0, maxDepth = 3
   return folders;
 }
 
-export function collectNoteFiles(dir, relativeFolder = "", depth = 0, maxDepth = 3) {
+// Every Markdown file under `dir`, including the fiscal-year subfolders an
+// account is filed into. `folder` is the path relative to the directory the
+// walk started from, so a caller that treats one account folder as a unit sees
+// its whole subtree without losing track of where each note actually lives.
+export function walkMarkdownFiles(dir, {
+  relativeFolder = "",
+  depth = 0,
+  maxDepth = 3,
+  skipFolders = null,
+  skipFilePatterns = null,
+} = {}) {
   const files = [];
   let entries;
   try {
@@ -62,15 +72,44 @@ export function collectNoteFiles(dir, relativeFolder = "", depth = 0, maxDepth =
     if (entry.name.startsWith(".")) continue;
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (EXCLUDED_FOLDERS.has(entry.name.trim().toLowerCase())) continue;
+      if (entry.name === "node_modules") continue;
+      if (skipFolders?.has(entry.name.trim().toLowerCase())) continue;
       if (depth < maxDepth) {
-        files.push(...collectNoteFiles(fullPath, path.join(relativeFolder, entry.name), depth + 1, maxDepth));
+        files.push(...walkMarkdownFiles(fullPath, {
+          relativeFolder: path.join(relativeFolder, entry.name),
+          depth: depth + 1,
+          maxDepth,
+          skipFolders,
+          skipFilePatterns,
+        }));
       }
       continue;
     }
     if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".md") continue;
-    if (EXCLUDED_FILE_PATTERNS.some((pattern) => pattern.test(entry.name))) continue;
+    if (skipFilePatterns?.some((pattern) => pattern.test(entry.name))) continue;
     files.push({ filePath: fullPath, filename: entry.name, folder: relativeFolder });
   }
   return files;
+}
+
+export function collectNoteFiles(dir, relativeFolder = "", depth = 0, maxDepth = 3) {
+  return walkMarkdownFiles(dir, {
+    relativeFolder,
+    depth,
+    maxDepth,
+    skipFolders: EXCLUDED_FOLDERS,
+    skipFilePatterns: EXCLUDED_FILE_PATTERNS,
+  });
+}
+
+// The Markdown files for a folder the app treats as one unit — an account and
+// the fiscal-year subfolders inside it. At the vault root there is no account
+// to gather, so the read stays flat instead of swallowing the whole vault.
+export function folderMarkdownFiles(vaultRoot, dir, options = {}) {
+  const isVaultRoot = path.resolve(dir) === path.resolve(vaultRoot);
+  return walkMarkdownFiles(dir, {
+    skipFolders: EXCLUDED_FOLDERS,
+    maxDepth: isVaultRoot ? 0 : 3,
+    ...options,
+  });
 }

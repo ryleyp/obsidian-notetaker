@@ -36,6 +36,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
     todoistApiToken: settings.todoistApiToken || "",
     todoistProject: settings.todoistProject || "",
     aiPrivacyScan: settings.aiPrivacyScan !== false,
+    fiscalYearFolders: settings.fiscalYearFolders !== false,
     ownerNamesText: (settings.ownerNames || []).join(", "),
     // Goals are edited as pasted text and parsed on save, so a review
     // document can be dropped in whole.
@@ -62,6 +63,11 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
   const [cleanupBusy, setCleanupBusy] = useState(false);
   const [cleanupPreview, setCleanupPreview] = useState(null); // route preview response
   const [cleanupResult, setCleanupResult] = useState(null); // { ok, message }
+  const [organizeBusy, setOrganizeBusy] = useState(false);
+  const [organizePreview, setOrganizePreview] = useState(null);
+  const [organizeResult, setOrganizeResult] = useState(null); // { ok, message }
+  const [organizeRollups, setOrganizeRollups] = useState(false);
+  const [canUndoOrganize, setCanUndoOrganize] = useState(false);
   const [importMsg, setImportMsg] = useState(null); // { ok, message }
   const importInputRef = useRef(null);
   const goalsFileRef = useRef(null);
@@ -100,6 +106,76 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       setBackfillResult({ ok: false, message: err.message });
     } finally {
       setBackfilling(false);
+    }
+  }
+
+  async function handleOrganizePreview(includeRollups = organizeRollups) {
+    setOrganizeBusy(true);
+    setOrganizePreview(null);
+    setOrganizeResult(null);
+    try {
+      await approveLocalPaths({ vaultPath: form.vaultPath.trim() });
+      const res = await apiFetch("/api/organize-fy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "preview", vaultPath: form.vaultPath.trim(), includeRollups }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Preview failed");
+      setOrganizePreview(data);
+      setCanUndoOrganize(!!data.canUndo);
+    } catch (err) {
+      setOrganizeResult({ ok: false, message: err.message });
+    } finally {
+      setOrganizeBusy(false);
+    }
+  }
+
+  async function handleOrganizeApply() {
+    if (!organizePreview?.moves?.length) return;
+    setOrganizeBusy(true);
+    setOrganizeResult(null);
+    try {
+      const res = await apiFetch("/api/organize-fy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "apply", vaultPath: form.vaultPath.trim(), moves: organizePreview.moves }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Organize failed");
+      setOrganizePreview(null);
+      setCanUndoOrganize(!!data.canUndo);
+      setOrganizeResult({
+        ok: true,
+        message: `${data.moved} note${data.moved !== 1 ? "s" : ""} filed into fiscal-year folders${data.skipped ? ` (${data.skipped} skipped — changed since preview)` : ""}.`,
+      });
+    } catch (err) {
+      setOrganizeResult({ ok: false, message: err.message });
+    } finally {
+      setOrganizeBusy(false);
+    }
+  }
+
+  async function handleOrganizeUndo() {
+    setOrganizeBusy(true);
+    setOrganizeResult(null);
+    try {
+      const res = await apiFetch("/api/organize-fy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "undo", vaultPath: form.vaultPath.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Undo failed");
+      setCanUndoOrganize(!!data.canUndo);
+      setOrganizeResult({
+        ok: true,
+        message: `${data.restored} note${data.restored !== 1 ? "s" : ""} put back${data.skipped ? ` (${data.skipped} left alone — moved or renamed since)` : ""}.`,
+      });
+    } catch (err) {
+      setOrganizeResult({ ok: false, message: err.message });
+    } finally {
+      setOrganizeBusy(false);
     }
   }
 
@@ -354,6 +430,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       todoistApiToken: form.todoistApiToken.trim(),
       todoistProject: form.todoistProject.trim(),
       aiPrivacyScan: form.aiPrivacyScan,
+      fiscalYearFolders: form.fiscalYearFolders,
       model: form.model,
       replacements: form.replacements,
       corrections: form.corrections,
@@ -591,6 +668,104 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
               <p className={`text-xs ${backfillResult.ok ? "text-green-700" : "text-red-600"}`}>{backfillResult.message}</p>
             )}
           </div>
+        </div>
+
+        <div>
+          <label className="label">Fiscal-Year Folders</label>
+          <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded accent-obsidian-600"
+              checked={form.fiscalYearFolders}
+              onChange={(e) => handleChange("fiscalYearFolders", e.target.checked)}
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-800">File notes by fiscal year (Oct&nbsp;1 – Sep&nbsp;30)</span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                A note saved into an account folder goes into an <code className="font-mono">FY2026</code> subfolder chosen by
+                the date in its title — October 2025 through September 2026 is FY2026. A note with no date in its title stays
+                in the account folder. This only changes where notes are written: reports, mapping, keyword search and
+                everything else still read the whole account across every year.
+              </span>
+            </span>
+          </label>
+
+          <p className="text-xs text-gray-500 mt-3 mb-2">
+            Already have notes sitting in your account folders? This files them by the date in each name. Undated notes are
+            left where they are. Nothing moves until you apply, and the whole run can be undone.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => handleOrganizePreview()}
+              disabled={organizeBusy || !form.vaultPath.trim()}
+              className="btn-secondary text-xs"
+            >
+              {organizeBusy && !organizePreview ? "Scanning vault..." : "Preview filing"}
+            </button>
+            {canUndoOrganize && (
+              <button type="button" onClick={handleOrganizeUndo} disabled={organizeBusy} className="btn-secondary text-xs">
+                Undo last filing
+              </button>
+            )}
+          </div>
+
+          {organizePreview && (
+            <div className="mt-2 space-y-2">
+              <p className="text-xs text-gray-600">
+                {organizePreview.scanned} notes scanned — {organizePreview.moves.length} to file,{" "}
+                {organizePreview.alreadyFiled} already filed, {organizePreview.skippedCount} left in place (no date in the name).
+              </p>
+              {organizePreview.accounts.length ? (
+                <>
+                  <div className="max-h-56 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100 text-xs">
+                    {organizePreview.accounts.map((account) => (
+                      <div key={account.account} className="p-2">
+                        <p className="font-medium text-gray-700 truncate">
+                          {account.account} <span className="text-gray-400">— {account.total} note{account.total !== 1 ? "s" : ""}</span>
+                        </p>
+                        <p className="mt-1 text-gray-500">
+                          {account.years.map((year) => `${year.fiscalYear}: ${year.count}`).join(" · ")}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <label className="flex items-start gap-2 text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={organizeRollups}
+                      onChange={(e) => {
+                        setOrganizeRollups(e.target.checked);
+                        handleOrganizePreview(e.target.checked);
+                      }}
+                    />
+                    <span>
+                      Also move the undated rollups (Customer Facts &amp; Callouts, Customer Site Mapping) into the open
+                      fiscal year — otherwise they stay at the account root and a new copy appears the next time one is rebuilt.
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleOrganizeApply}
+                    disabled={organizeBusy}
+                    className="btn-primary text-xs"
+                  >
+                    {organizeBusy ? "Filing..." : `File ${organizePreview.moves.length} note${organizePreview.moves.length !== 1 ? "s" : ""}`}
+                  </button>
+                  <p className="text-xs text-gray-500">
+                    Obsidian resolves <code className="font-mono">[[links]]</code> by note name, so links between these notes
+                    keep working after the move.
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-green-700">Nothing to file — every dated note is already in a fiscal-year folder.</p>
+              )}
+            </div>
+          )}
+          {organizeResult && (
+            <p className={`mt-2 text-xs ${organizeResult.ok ? "text-green-700" : "text-red-600"}`}>{organizeResult.message}</p>
+          )}
         </div>
 
         <div>

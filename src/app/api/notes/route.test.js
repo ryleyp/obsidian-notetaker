@@ -71,6 +71,60 @@ describe("/api/notes", () => {
     ]));
   });
 
+  it("reads an account's fiscal-year subfolders as one account", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const fy26 = path.join(vault, "Acme", "FY2026");
+    const fy27 = path.join(vault, "Acme", "FY2027");
+    const otherAccount = path.join(vault, "Beacon", "FY2027");
+    fs.mkdirSync(fy26, { recursive: true });
+    fs.mkdirSync(fy27, { recursive: true });
+    fs.mkdirSync(otherAccount, { recursive: true });
+    // Side folders stay excluded even though the walk now recurses.
+    fs.mkdirSync(path.join(vault, "Acme", "Todos"), { recursive: true });
+    allowDirectory(vault, "Vault path");
+
+    fs.writeFileSync(path.join(fy26, "2026-09-08 - Acme Sync.md"), "# Sync\n\nAcme licensing.");
+    fs.writeFileSync(path.join(fy27, "2026-10-02 - Acme Kickoff.md"), "# Kickoff\n\nAcme kickoff.");
+    fs.writeFileSync(path.join(vault, "Acme", "Undated Contact.md"), "# Contact\n\nAcme contact.");
+    fs.writeFileSync(path.join(vault, "Acme", "Todos", "2026-09-09 - Todos.md"), "# Todos\n\nAcme todos.");
+    fs.writeFileSync(path.join(otherAccount, "2026-10-05 - Beacon Sync.md"), "# Beacon\n\nAcme came up here.");
+
+    const params = new URLSearchParams({
+      vaultPath: vault,
+      folderPath: "Acme",
+      accountAliases: "acme",
+      allTime: "true",
+    });
+    const data = await (await getNotes(params)).json();
+
+    expect(data.notes.map((n) => n.filename).sort()).toEqual([
+      "2026-09-08 - Acme Sync.md",
+      "2026-10-02 - Acme Kickoff.md",
+      "2026-10-05 - Beacon Sync.md",
+      "Undated Contact.md",
+    ]);
+    // Both fiscal years count as the selected account, not as cross-vault hits.
+    expect(data.counts).toEqual({ obsidian: 3, transcripts: 0, crossVault: 1 });
+    // The cross-vault hit was found inside another account's FY subfolder.
+    expect(data.notes.find((n) => n.source === "cross-vault").relativePath)
+      .toBe(path.join("Beacon", "FY2027", "2026-10-05 - Beacon Sync.md"));
+  });
+
+  it("keeps the vault root a flat read instead of pulling in every account", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    fs.mkdirSync(path.join(vault, "Acme", "FY2026"), { recursive: true });
+    allowDirectory(vault, "Vault path");
+    fs.writeFileSync(path.join(vault, "2026-09-01 - Loose Note.md"), "# Loose");
+    fs.writeFileSync(path.join(vault, "Acme", "FY2026", "2026-09-08 - Acme Sync.md"), "# Sync");
+
+    const params = new URLSearchParams({ vaultPath: vault, folderPath: "", allTime: "true" });
+    const data = await (await getNotes(params)).json();
+
+    expect(data.notes.map((n) => n.filename)).toEqual(["2026-09-01 - Loose Note.md"]);
+  });
+
   it("skips reading date-prefixed files outside the requested window", async () => {
     const root = makeTmp();
     const vault = path.join(root, "vault");

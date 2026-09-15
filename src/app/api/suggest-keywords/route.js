@@ -4,6 +4,7 @@ import path from "path";
 import { detectAccount } from "@/lib/accounts";
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
+import { EXCLUDED_FOLDERS, walkMarkdownFiles } from "@/lib/vaultScan";
 
 const MAX_FILES_PER_FOLDER = 300;
 const MAX_FILE_BYTES = 300_000;
@@ -26,14 +27,13 @@ hardware server enterprise admin admins customer customers account accounts emai
 engineers engineering site sites region attendees outcome demo user users group groups
 `.trim().split(/\s+/));
 
+// Includes the fiscal-year subfolders an account is filed into, so keyword
+// suggestions keep seeing the whole account.
 function* mdFiles(dir) {
-  let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
   let n = 0;
-  for (const e of entries) {
-    if (!e.isFile() || !e.name.endsWith(".md")) continue;
+  for (const entry of walkMarkdownFiles(dir, { skipFolders: EXCLUDED_FOLDERS })) {
     if (++n > MAX_FILES_PER_FOLDER) return;
-    yield path.join(dir, e.name);
+    yield entry.filePath;
   }
 }
 

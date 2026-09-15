@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import {
   assertExistingChildDirectory,
+  isPathInside,
   resolveInsideDirectory,
   sanitizeFilename,
   uniqueFilePath,
@@ -10,6 +11,14 @@ import {
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { stripCitationMarkers } from "@/lib/sourceBundle";
+import { resolveFiscalYearDir } from "@/lib/fiscalYearPaths";
+import { folderMarkdownFiles } from "@/lib/vaultScan";
+
+// Both lookups below search the selected folder AND its fiscal-year
+// subfolders: a note filed under FY2026 is still the same account's note, and
+// an email thread that started last fiscal year must keep updating in place
+// instead of forking a second copy in the new year.
+
 
 function normalizedEmailThreadTitle(value) {
   // Reply prefixes stack up ("RE: RE: FW: subject"); strip them before
@@ -30,14 +39,12 @@ function normalizedTranscriptBody(value) {
   return normalizedFileContent(value).replace(/^#[^\n]*\n+/, "").trim();
 }
 
-export function findDuplicateContentFile(targetDir, notes) {
+export function findDuplicateContentFile(vaultRoot, targetDir, notes) {
   const wanted = normalizedTranscriptBody(notes);
   if (!wanted) return null;
 
-  for (const entry of fs.readdirSync(targetDir, { withFileTypes: true })) {
-    if (!entry.isFile() || path.extname(entry.name).toLowerCase() !== ".md") continue;
-    const filePath = path.join(targetDir, entry.name);
-    if (normalizedTranscriptBody(fs.readFileSync(filePath, "utf-8")) === wanted) return filePath;
+  for (const entry of folderMarkdownFiles(vaultRoot, targetDir)) {
+    if (normalizedTranscriptBody(fs.readFileSync(entry.filePath, "utf-8")) === wanted) return entry.filePath;
   }
   return null;
 }
@@ -47,18 +54,14 @@ function emailThreadTitleFromFilename(filename) {
   return base.match(/^\d{4}-\d{2}-\d{2} - Email - (.+)$/i)?.[1] || "";
 }
 
-export function findExistingEmailThread(targetDir, threadTitle, meetingTitle = "") {
+export function findExistingEmailThread(vaultRoot, targetDir, threadTitle, meetingTitle = "") {
   const wanted = normalizedEmailThreadTitle(threadTitle);
   if (!wanted) return null;
 
   const desiredFilename = `${sanitizeFilename(meetingTitle || "Email Thread")}.md`;
-  const matches = fs.readdirSync(targetDir, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && path.extname(entry.name).toLowerCase() === ".md")
-    .filter((entry) => normalizedEmailThreadTitle(emailThreadTitleFromFilename(entry.name)) === wanted)
-    .map((entry) => {
-      const filePath = path.join(targetDir, entry.name);
-      return { filePath, filename: entry.name, modified: fs.statSync(filePath).mtimeMs };
-    })
+  const matches = folderMarkdownFiles(vaultRoot, targetDir)
+    .filter((entry) => normalizedEmailThreadTitle(emailThreadTitleFromFilename(entry.filename)) === wanted)
+    .map((entry) => ({ filePath: entry.filePath, filename: entry.filename, modified: fs.statSync(entry.filePath).mtimeMs }))
     .sort((a, b) => {
       if (a.filename === desiredFilename) return -1;
       if (b.filename === desiredFilename) return 1;
@@ -68,7 +71,7 @@ export function findExistingEmailThread(targetDir, threadTitle, meetingTitle = "
   return matches[0]?.filePath || null;
 }
 
-function replaceExistingNote(finalPath, targetDir, resolvedVault, notes) {
+function replaceExistingNote(finalPath, resolvedVault, notes) {
   const relativeDir = path.dirname(path.relative(resolvedVault, finalPath));
   const backupDir = resolveInsideDirectory(resolvedVault, path.join(".notetaker", "backups", relativeDir), "Backup folder");
   fs.mkdirSync(backupDir, { recursive: true });
@@ -77,7 +80,7 @@ function replaceExistingNote(finalPath, targetDir, resolvedVault, notes) {
   const backupPath = path.join(backupDir, `${base}.backup-${stamp}.md`);
   fs.copyFileSync(finalPath, backupPath);
 
-  const tempPath = path.join(targetDir, `.${path.basename(finalPath)}.${process.pid}.${Date.now()}.tmp`);
+  const tempPath = path.join(path.dirname(finalPath), `.${path.basename(finalPath)}.${process.pid}.${Date.now()}.tmp`);
   try {
     fs.writeFileSync(tempPath, notes, "utf-8");
     fs.renameSync(tempPath, finalPath);
@@ -100,6 +103,8 @@ export async function POST(request) {
       existingRelativePath,
       upsertEmailThreadTitle,
       dedupeContent,
+      fiscalYearFolders = false,
+      fiscalYearFallback = "none",
     } = body;
 
     // Source markers ([T1], [N2]...) only mean something inside the app's
@@ -113,7 +118,7 @@ export async function POST(request) {
     const targetDir = assertExistingChildDirectory(resolvedVault, folderPath, "Target folder");
 
     if (dedupeContent && !existingRelativePath) {
-      const duplicatePath = findDuplicateContentFile(targetDir, notes);
+      const duplicatePath = findDuplicateContentFile(resolvedVault, targetDir, notes);
       if (duplicatePath) {
         return NextResponse.json({
           savedPath: path.relative(resolvedVault, duplicatePath),
@@ -131,12 +136,13 @@ export async function POST(request) {
     let previousTitle = null;
 
     const matchedEmailPath = !existingRelativePath && upsertEmailThreadTitle
-      ? findExistingEmailThread(targetDir, upsertEmailThreadTitle, meetingTitle)
+      ? findExistingEmailThread(resolvedVault, targetDir, upsertEmailThreadTitle, meetingTitle)
       : null;
 
     if (existingRelativePath || matchedEmailPath) {
       finalPath = matchedEmailPath || resolveInsideDirectory(resolvedVault, existingRelativePath, "Existing note");
-      if (path.dirname(finalPath) !== targetDir) {
+      // Inside the selected folder, or one of its fiscal-year subfolders.
+      if (!isPathInside(targetDir, finalPath)) {
         return NextResponse.json({ error: "Existing note must be in the selected folder" }, { status: 400 });
       }
       if (path.extname(finalPath).toLowerCase() !== ".md") {
@@ -146,7 +152,7 @@ export async function POST(request) {
         return NextResponse.json({ error: "Existing note was not found" }, { status: 404 });
       }
 
-      backupPath = replaceExistingNote(finalPath, targetDir, resolvedVault, notes);
+      backupPath = replaceExistingNote(finalPath, resolvedVault, notes);
       updated = true;
       previousTitle = path.basename(finalPath, path.extname(finalPath));
 
@@ -155,7 +161,9 @@ export async function POST(request) {
       if (matchedEmailPath && meetingTitle) {
         const desiredFilename = `${sanitizeFilename(meetingTitle)}.md`;
         if (desiredFilename !== path.basename(finalPath)) {
-          const renamedPath = uniqueFilePath(path.join(targetDir, desiredFilename));
+          // An updated thread stays in the folder it already lives in, even
+          // when its newest date has crossed into the next fiscal year.
+          const renamedPath = uniqueFilePath(path.join(path.dirname(finalPath), desiredFilename));
           fs.renameSync(finalPath, renamedPath);
           finalPath = renamedPath;
         }
@@ -163,7 +171,12 @@ export async function POST(request) {
     } else {
       const title = sanitizeFilename(meetingTitle || "Meeting Notes");
       const filename = `${title}.md`;
-      const filePath = path.join(targetDir, filename);
+      const writeDir = resolveFiscalYearDir(resolvedVault, targetDir, {
+        enabled: !!fiscalYearFolders,
+        title: meetingTitle,
+        fallback: fiscalYearFallback,
+      });
+      const filePath = path.join(writeDir, filename);
       finalPath = uniqueFilePath(filePath);
       fs.writeFileSync(finalPath, notes, "utf-8");
     }

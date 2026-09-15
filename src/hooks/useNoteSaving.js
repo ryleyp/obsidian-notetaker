@@ -72,6 +72,7 @@ export function useNoteSaving({ settings, meeting }) {
           folderPath,
           meetingTitle,
           existingRelativePath: existingNote?.relativePath || undefined,
+          fiscalYearFolders: settings.fiscalYearFolders !== false,
         }),
       });
       const data = await res.json();
@@ -94,6 +95,7 @@ export function useNoteSaving({ settings, meeting }) {
               vaultPath: settings.vaultPath,
               folderPath,
               accountName: account.name,
+              fiscalYearFolders: settings.fiscalYearFolders !== false,
             }),
           });
           const factsData = await factsRes.json();
@@ -188,6 +190,7 @@ export function useNoteSaving({ settings, meeting }) {
           folderPath,
           meetingTitle: title,
           dedupeContent: true,
+          fiscalYearFolders: settings.fiscalYearFolders !== false,
         }),
       });
       const data = await res.json();

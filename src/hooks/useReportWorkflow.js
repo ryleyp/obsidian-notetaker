@@ -401,6 +401,7 @@ export function useReportWorkflow({
           vaultPath: settings.vaultPath,
           folderPath: selectedFolder,
           meetingTitle: title,
+          fiscalYearFolders: settings.fiscalYearFolders !== false,
         }),
       });
       const data = await res.json();

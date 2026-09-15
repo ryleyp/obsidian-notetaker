@@ -92,6 +92,32 @@ You can also draft or redraft a follow-up after generating notes and save it man
 
 The file is saved as `YYYY-MM-DD - Meeting Title.md` in your chosen folder.
 
+### Fiscal-year folders
+
+With **File notes by fiscal year** on (Settings), a note saved into an account folder
+lands in an `FY<year>` subfolder chosen by the date in its title. The fiscal year runs
+October 1 through September 30 and is named for the year it ends in, so October 2025
+through September 2026 is `FY2026`:
+
+```
+1. Acme Aerospace/
+  FY2026/
+    2026-09-08 - Acme Sync.md
+  FY2027/
+    2026-10-02 - Acme Kickoff.md
+```
+
+A note whose title carries no date stays in the account folder rather than being filed
+by guesswork. Filing only changes where notes are *written*: reports, the customer facts
+rollup, site and contact mapping, keyword suggestions, cleanup and the goal review all
+read an account folder together with every fiscal year inside it, so referencing an
+account still covers its whole history. An email thread that started in one fiscal year
+keeps updating in place when a reply arrives in the next one.
+
+To file notes you already have, use **Preview filing** in Settings. It plans the moves,
+shows them per account and year, and writes nothing until you apply. Every run is
+recorded and can be reversed with **Undo last filing**.
+
 Raw transcript saves are deduplicated. Uploading identical transcript content reuses
 the existing file, and saving changed content under the same transcript title updates
 that archive file instead of creating a numbered copy.
