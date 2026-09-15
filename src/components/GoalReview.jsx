@@ -41,6 +41,19 @@ export default function GoalReview({ settings, onSettingsClick }) {
   const [savedPath, setSavedPath] = useState("");
   const [model, setModel] = useState(settings.model || "claude-haiku-4-5");
 
+  // Backfill: reading goal contributions out of notes written before goals
+  // were configured. Proposals only — nothing is written until they are ticked.
+  const [backfillOpen, setBackfillOpen] = useState(false);
+  const [backfillScanning, setBackfillScanning] = useState(false);
+  const [backfillNotes, setBackfillNotes] = useState(null);
+  const [backfillStats, setBackfillStats] = useState(null);
+  const [backfillWarnings, setBackfillWarnings] = useState([]);
+  const [backfillCost, setBackfillCost] = useState(null);
+  const [backfillDropped, setBackfillDropped] = useState(new Set()); // "path||goal||contribution"
+  const [markEmpty, setMarkEmpty] = useState(true);
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState(null);
+
   const goals = settings.goals || [];
   const resolvedModel = resolveAutoModel(model, { apiKey: settings.apiKey, openaiApiKey: settings.openaiApiKey });
 
@@ -86,6 +99,92 @@ export default function GoalReview({ settings, onSettingsClick }) {
       setError(e.message);
     } finally {
       setScanning(false);
+    }
+  }
+
+  const backfillKey = (relativePath, item) => `${relativePath}||${item.goal}||${item.contribution}`;
+  const backfillFiles = (backfillNotes || [])
+    .map((note) => ({
+      relativePath: note.relativePath,
+      contributions: (note.contributions || []).filter((item) => !backfillDropped.has(backfillKey(note.relativePath, item))),
+    }))
+    // A note with nothing to record is only written when the CSM asks for it
+    // to be marked, so the section says "assessed" rather than "not yet read".
+    .filter((file) => file.contributions.length || markEmpty);
+  const backfillKeptCount = backfillFiles.reduce((sum, file) => sum + file.contributions.length, 0);
+  const emptyNoteCount = (backfillNotes || []).filter((note) => !note.contributions?.length).length;
+
+  function toggleBackfillItem(relativePath, item) {
+    setBackfillDropped((previous) => {
+      const next = new Set(previous);
+      const key = backfillKey(relativePath, item);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  async function handleBackfillPreview() {
+    if (!settings.vaultPath) { onSettingsClick(); return; }
+    setBackfillScanning(true);
+    setError("");
+    setBackfillNotes(null);
+    setBackfillStats(null);
+    setBackfillWarnings([]);
+    setBackfillDropped(new Set());
+    setApplied(null);
+    try {
+      await approveLocalPaths(settings);
+      const res = await apiFetch("/api/goal-backfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "preview",
+          vaultPath: settings.vaultPath,
+          goals,
+          startDate,
+          endDate,
+          model,
+          apiKey: settings.apiKey || undefined,
+          openaiApiKey: settings.openaiApiKey || undefined,
+          replacements: settings.replacements || [],
+          corrections: settings.corrections || [],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Backfill scan failed");
+      setBackfillNotes(data.notes || []);
+      setBackfillStats(data.stats || null);
+      setBackfillWarnings(data.warnings || []);
+      if (data.usage) setBackfillCost(calcCost(data.usage, data.model));
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBackfillScanning(false);
+    }
+  }
+
+  async function handleBackfillApply() {
+    if (!backfillFiles.length) return;
+    setApplying(true);
+    setError("");
+    try {
+      const res = await apiFetch("/api/goal-backfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "apply", vaultPath: settings.vaultPath, files: backfillFiles }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Backfill failed");
+      setApplied(data);
+      setBackfillNotes(null);
+      setBackfillStats(null);
+      // The evidence list above is now out of date — refresh it from the notes.
+      if (data.notesUpdated) await handleScan();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setApplying(false);
     }
   }
 
@@ -203,6 +302,102 @@ export default function GoalReview({ settings, onSettingsClick }) {
 
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       </div>
+
+      <details className="card p-6" open={backfillOpen} onToggle={(e) => setBackfillOpen(e.currentTarget.open)}>
+        <summary className="cursor-pointer text-sm font-semibold text-gray-900">
+          Backfill older notes
+        </summary>
+
+        <p className="text-sm text-gray-500 mt-2">
+          Notes written before you added goals carry no contribution section, so nothing above can find them.
+          This reads those notes with {providerLabel(resolvedModel)} and proposes what each one contributed.
+          Nothing is written until you tick it, notes that already record contributions are never touched,
+          and every note it edits is backed up first.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-3 mt-3">
+          <button onClick={handleBackfillPreview} disabled={backfillScanning} className="btn-secondary text-sm">
+            {backfillScanning ? "Reading notes…" : "Find notes missing the section"}
+          </button>
+          <span className="text-xs text-gray-500">Uses the date range above</span>
+          {backfillCost && <span className="text-xs text-gray-400 font-mono">{formatCost(backfillCost)}</span>}
+        </div>
+
+        {backfillStats && (
+          <div className="flex flex-wrap gap-3 text-xs text-gray-500 mt-3">
+            <span>{backfillStats.candidates} notes missing the section</span>
+            <span>{backfillStats.alreadyRecorded} already recorded</span>
+            <span>{backfillStats.contributions} contributions found</span>
+            {backfillStats.dropped > 0 && <span>{backfillStats.dropped} dropped (goal not in your list)</span>}
+          </div>
+        )}
+
+        {backfillWarnings.map((warning) => (
+          <p key={warning} className="text-xs text-amber-700 mt-2">{warning}</p>
+        ))}
+
+        {backfillNotes && !backfillNotes.length && (
+          <p className="text-sm text-gray-600 mt-3">Every note in this range already records its goal contributions.</p>
+        )}
+
+        {backfillNotes?.length > 0 && (
+          <div className="mt-4 space-y-3">
+            {backfillNotes.filter((note) => note.contributions.length).map((note) => (
+              <div key={note.relativePath} className="rounded-lg border border-gray-200 p-3">
+                <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                  <strong className="text-sm text-gray-900">{note.title}</strong>
+                  <span className="text-xs text-gray-400 font-mono">{note.date}</span>
+                </div>
+                <ul className="mt-2 space-y-1">
+                  {note.contributions.map((item) => {
+                    const off = backfillDropped.has(backfillKey(note.relativePath, item));
+                    return (
+                      <li key={backfillKey(note.relativePath, item)} className={`flex gap-2 text-xs ${off ? "opacity-40" : ""}`}>
+                        <input
+                          type="checkbox"
+                          checked={!off}
+                          onChange={() => toggleBackfillItem(note.relativePath, item)}
+                          className="mt-0.5"
+                          title="Write this contribution into the note"
+                        />
+                        <span>
+                          <strong className="text-gray-900">{item.goal}</strong> — {item.contribution}
+                          {item.metric && <span className="text-gray-600"> ({item.metric})</span>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+
+            {emptyNoteCount > 0 && (
+              <label className="flex items-start gap-2 text-xs text-gray-600">
+                <input type="checkbox" checked={markEmpty} onChange={(e) => setMarkEmpty(e.target.checked)} className="mt-0.5" />
+                <span>
+                  {`Mark the ${emptyNoteCount} note${emptyNoteCount !== 1 ? "s" : ""} with nothing to record`} as
+                  {" "}&ldquo;Nothing noted.&rdquo; — they were read, so this stops a later run from paying to read them again.
+                </span>
+              </label>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3 border-t border-gray-200 pt-3">
+              <button onClick={handleBackfillApply} disabled={applying || !backfillFiles.length} className="btn-primary text-sm">
+                {applying ? "Writing…" : `Write into ${backfillFiles.length} note${backfillFiles.length !== 1 ? "s" : ""}`}
+              </button>
+              <span className="text-xs text-gray-500">{backfillKeptCount} contribution{backfillKeptCount !== 1 ? "s" : ""} included</span>
+            </div>
+          </div>
+        )}
+
+        {applied && (
+          <p className="text-sm text-green-700 mt-3">
+            Wrote the section into {applied.notesUpdated} note{applied.notesUpdated !== 1 ? "s" : ""}
+            {applied.notesSkipped ? `, skipped ${applied.notesSkipped} that already had one` : ""}. Backups are in
+            {" "}<code className="font-mono text-xs bg-green-50 px-1 rounded">.notetaker/backups</code>.
+          </p>
+        )}
+      </details>
 
       {groups && (
         <div className="card p-6 space-y-4">
