@@ -76,6 +76,7 @@ Style rules:
 - No filler, no restated context, no commentary about the sources or the reporting process.
 - Factual, not emotional: record stated positions, objections, complaints, and praise as what was said — no sentiment analysis, mood commentary, or speculation about how anyone felt. (Pillar G/Y/R ratings and health assessments are business judgments and belong here; emotional read-outs do not.)
 - Exclude personal updates, check-ins, and anecdotes; business content only.
+- Do NOT list open action items, to-dos, or checkbox items anywhere in this report — the weekly ToDos file and Todoist track those. An outstanding commitment belongs here only when it is the substance of a decision, a risk, or a pillar rating, written as prose rather than as a task.
 
 Sources include Obsidian meeting notes and notes from other folders that mention this account [folder name].
 
@@ -105,14 +106,6 @@ ${TEMPORAL_ACCURACY_RULE}
 ## Recent Highlights
 
 Key decisions, outcomes, and notable updates from the quarter scoped to NI Software. Group by theme or project. Include specifics — names, dates, numbers, product names.
-
----
-
-## Open Action Items
-
-Aggregate ALL unchecked action items (- [ ]) from across all sources. Include owner and source date. Omit items resolved in a later note.
-
-- [ ] [Action item] — **Owner:** [Name] | **From:** [Date]
 
 ---
 
