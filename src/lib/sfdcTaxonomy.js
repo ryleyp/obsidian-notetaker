@@ -201,7 +201,7 @@ export const CONTRIBUTION_VERBS = [
 
 export function activityWritingRules() {
   return `WHAT COUNTS AS ONE ACTIVITY
-- One record per meaningful engagement or completed body of work. Scheduling mail, replies, and routine coordination are part of the engagement they serve, not activities of their own.
+- One record per meaningful engagement or completed body of work, and at most one record per source note. A meeting note or an email thread produces one activity, never two. Scheduling mail, replies, and routine coordination are part of the engagement they serve, not activities of their own.
 - Each occurrence of a recurring engagement (monthly sponsor sync, quarterly user group) is its own record.
 - One substantive conversation stays one record even when it covers several themes. Never reduce a broad strategic conversation to its easiest administrative topic — if a meeting covered adoption, an escalation, licensing, and enablement, the summary shows that breadth.
 - Split into separate records only when the sources describe genuinely separate engagements, audiences, dates, or outcomes.

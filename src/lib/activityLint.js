@@ -54,6 +54,21 @@ const GROUP_SUBTYPES = ["Demo Days", "User Group"];
 
 export const wordCount = (text) => String(text || "").trim().split(/\s+/).filter(Boolean).length;
 
+const sourceKey = (title) => String(title || "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+
+// The source notes that more than one row cites, for lintActivityRow's
+// duplicateSources option. Rows with no source are not duplicates of
+// each other.
+export function duplicateSourceNotes(rows = []) {
+  const seen = new Map();
+  for (const row of rows) {
+    const key = sourceKey(row?.sourceTitle);
+    if (!key) continue;
+    seen.set(key, (seen.get(key) || 0) + 1);
+  }
+  return new Set([...seen.entries()].filter(([, count]) => count > 1).map(([key]) => key));
+}
+
 function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -113,7 +128,7 @@ function collapse(text) {
 
 // Every problem with a row, most serious first. Pure and cheap — safe to run
 // on every render.
-export function lintActivityRow(row, { ownerNames = [], agreementsOnFile = false, today = new Date() } = {}) {
+export function lintActivityRow(row, { ownerNames = [], agreementsOnFile = false, today = new Date(), duplicateSources = null } = {}) {
   const issues = [];
   const push = (code, severity, message, fixable = false) => issues.push({ code, severity, message, fixable });
   const title = String(row?.title || "");
@@ -190,6 +205,11 @@ export function lintActivityRow(row, { ownerNames = [], agreementsOnFile = false
   }
   if (status === "Planned" && /\bOutcomes?:\s*(?!None\b)\S/i.test(body)) {
     push("planned-with-outcome", "hard", "A planned record cannot already have an outcome.");
+  }
+  // One meeting or email thread is one activity. A note split across two rows
+  // inflates the count and splits one engagement's story in half.
+  if (duplicateSources?.has(sourceKey(row?.sourceTitle))) {
+    push("split-note", "hard", "Another row cites the same source note — one meeting or email thread is one activity. Merge them, keeping the primary purpose and folding the other themes into the summary.");
   }
   if (GROUP_SUBTYPES.includes(subtype) && inThePast && ATTENDANCE_TBD.test(body)) {
     push("attendance-tbd", "soft", "Event has happened but attendance is still TBD — fill in the final count.");
@@ -283,4 +303,5 @@ export const LINT_RULES = [
   { code: "planned-with-outcome", severity: "hard", catches: "An outcome on a record for something that has not happened yet.", fix: "Remove the outcome until the engagement occurs, or correct the status." },
   { code: "canceled-no-reason", severity: "soft", catches: "A canceled record with no reason recorded.", fix: "Say briefly why it did not happen — postponed, declined, rescheduled." },
   { code: "attendance-tbd", severity: "soft", catches: "A past user group or demo still showing \"Attendees: TBD\".", fix: "Fill in the final count now that the event has happened." },
+  { code: "split-note", severity: "hard", catches: "Two rows citing the same source note — one meeting or email thread split into several activities.", fix: "Merge them into one record: classify by the primary purpose and carry the other themes in the summary." },
 ];

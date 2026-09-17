@@ -38,6 +38,7 @@ Hard limits: comment **800 characters and 120 words**, title **200 characters**.
 | `planned-with-outcome` | Must fix | An outcome on a record for something that has not happened yet. | Remove the outcome until the engagement occurs, or correct the status. |
 | `canceled-no-reason` | Should fix | A canceled record with no reason recorded. | Say briefly why it did not happen — postponed, declined, rescheduled. |
 | `attendance-tbd` | Should fix | A past user group or demo still showing "Attendees: TBD". | Fill in the final count now that the event has happened. |
+| `split-note` | Must fix | Two rows citing the same source note — one meeting or email thread split into several activities. | Merge them into one record: classify by the primary purpose and carry the other themes in the summary. |
 
 These can be applied mechanically without changing meaning: `csm-name`, `citations`, `no-outcome`, `empty-next-steps`, `title-noise`.
 Everything else needs a judgement call — make it, or hand the record back with the

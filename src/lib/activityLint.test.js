@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cleanActivityTitle,
+  duplicateSourceNotes,
   csmNameToRole,
   describeIssues,
   fixActivityRow,
@@ -192,5 +193,41 @@ describe("status accuracy", () => {
       comments: "Summary: RF User Group — Region: AMER, Attendees: TBD. FAE demoed InstrumentStudio. Contribution: CSM coordinated the session. Outcomes: Exposure across the RF community." };
     expect(at(group)).toContain("attendance-tbd");
     expect(at({ ...group, eventDate: "2026-11-02", status: "Planned" })).not.toContain("attendance-tbd");
+  });
+});
+
+describe("one activity per source note", () => {
+  const fromNote = (title, sourceTitle) => ({ ...good, title, sourceTitle });
+
+  it("finds the notes that more than one row cites", () => {
+    const rows = [
+      fromNote("Acme Admin Sync - Licensing", "2026-08-12 - Acme Sync"),
+      fromNote("Acme Admin Sync - Escalation", "2026-08-12 - Acme Sync"),
+      fromNote("Acme RF User Group", "2026-08-20 - RF UG"),
+      { ...good, sourceTitle: "" },
+      { ...good, sourceTitle: "" },
+    ];
+    // Spacing and case do not make two citations different; a missing source
+    // is not a duplicate of another missing source.
+    expect(duplicateSourceNotes(rows)).toEqual(new Set(["2026-08-12 - acme sync"]));
+  });
+
+  it("flags every row that shares a source note", () => {
+    const rows = [
+      fromNote("Acme Admin Sync - Licensing", "2026-08-12 - Acme Sync"),
+      fromNote("Acme Admin Sync - Escalation", "2026-08-12  -  ACME SYNC"),
+      fromNote("Acme RF User Group - August", "2026-08-20 - RF UG"),
+    ];
+    const duplicateSources = duplicateSourceNotes(rows);
+    expect(lintActivityRow(rows[0], { duplicateSources }).map((i) => i.code)).toContain("split-note");
+    expect(lintActivityRow(rows[1], { duplicateSources }).map((i) => i.code)).toContain("split-note");
+    expect(lintActivityRow(rows[2], { duplicateSources }).map((i) => i.code)).not.toContain("split-note");
+  });
+
+  it("says nothing when every note produced one activity", () => {
+    const rows = [fromNote("Acme Admin Sync - License Server", "a"), fromNote("Acme RF User Group - August", "b")];
+    const duplicateSources = duplicateSourceNotes(rows);
+    expect(duplicateSources.size).toBe(0);
+    expect(lintActivityRow(rows[0], { duplicateSources })).toEqual([]);
   });
 });

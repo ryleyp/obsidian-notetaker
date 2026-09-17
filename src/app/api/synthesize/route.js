@@ -455,7 +455,9 @@ CRITICAL ACCOUNT SCOPING RULES — these override everything else:
 - Do not mention any other account name, alias, or keyword in any field.
 - ATTRIBUTION RULE: Lines and sections mentioning other accounts were removed before these notes reached you, so some sources (especially internal or multi-account meetings like site-level reviews and team syncs) may contain orphaned fragments whose account is no longer identifiable. NEVER assume such content is about ${acct}. Only report an activity as ${acct}'s when the surrounding text explicitly names ${acct} or an unambiguous ${acct} identifier (a site, program, or contact you can see belongs to ${acct} in the same source). When the subject is unclear, SKIP the activity entirely — do not rewrite another account's activity to sound like it happened at ${acct}. A partial report is correct; a misattributed row is a serious error.
 
-TASK: Identify all meaningful, reportable CSM activities from these sources and output an EA Engagement Activity Report. Do NOT include routine emails, low-value check-ins, or any activity that wouldn't impress an executive reader. If two notes describe the same session, produce only one activity — no duplicates.
+TASK: Turn these source notes into an EA Engagement Activity Report.
+
+ONE ACTIVITY PER SOURCE NOTE — this is absolute. Each note (a meeting or an email thread) produces AT MOST ONE row, never two. A note that covered several themes — adoption, an escalation, licensing, enablement — is still one engagement: classify it by its primary purpose and carry the other themes in that one comment's Summary. Never split a note into one row per topic, per attendee, per site, or per outcome. Output zero rows for a note when nothing in it is reportable: routine scheduling, low-value check-ins, internal work with no decision, or anything that would not survive an executive reader. If two notes describe the same session, produce one activity between them, not one each.
 ${resumeRows?.length ? `
 ALREADY REPORTED — a previous run already produced the activities below. Do NOT output them again. Continue with the remaining activities only:
 ${resumeRows.map((r) => `- ${r.eventDate}: ${r.title}`).join("\n")}
@@ -469,7 +471,7 @@ OUTPUT FORMAT — output ONLY newline-delimited JSON (NDJSON): exactly one JSON 
 
 Field rules:
 - **eventDate**: the date of the note this activity came from (YYYY-MM-DD, taken from the ### heading of the source)
-- **sourceTitle**: the exact title of the source note this activity came from, copied verbatim from its ### heading (the part after the date). Every row MUST cite its source.
+- **sourceTitle**: the exact title of the source note this activity came from, copied verbatim from its ### heading (the part after the date). Every row MUST cite its source, and no two rows may cite the same source note.
 - **title**: names the engagement AND its purpose, in the style of these real examples — "Beacon Systems RF User Group - March 2026", "CSM / FAE Cardinal Account Interlock", "NI Connect Promotional Email", "Acme Aerospace Proficiency Plan - LabVIEW Core Training Scheduling". "Engineering sponsor sync on adoption blockers and rollout timing" beats "Sponsor sync"
 - **type** and **subtype**: must exactly match one option from the taxonomy below
 - **comments**: four labelled parts on one line, in this order and exactly these labels — "Summary: ... Contribution: ... Outcomes: ... Next steps: ..." — matching the entries the CSM already writes in their notes, so harvested and generated rows read identically in the table. HARD LIMIT 800 characters for the whole thing: this is pasted directly into the SFDC Comment field and an over-limit comment cannot be filed. Draft it, count the characters, then trim — cut detail from Summary first, never the Contribution or Outcomes. Past tense, no first person.
@@ -494,7 +496,7 @@ COMMENT REQUIREMENTS:
 - Skip activities that are purely logistics with no outcome (routine calendar holds, placeholder reminders with no substance)
 - Skip what a CSM would never log as an EA engagement: manager 1:1s, team or staff meetings, career or scorecard conversations, training the CSM took themselves
 
-POSTABILITY CHECK — every row is pasted into Salesforce as written. Before emitting a row confirm: 800 characters / 120 words or fewer; no "I", "we", "our", "my"; the CSM's name appears nowhere (say "CSM"); no source markers like [T1], no Markdown, no placeholders like [Name] or [#] (an honest "TBD" for an attendee count is fine); no "CSM attended / observed / listened"; no corporate filler; all four labels present (Summary, Contribution, Outcomes, Next steps); a Contribution that opens with a real verb rather than "attended"; no revenue causation the sources do not state; Type and Subtype copied character-for-character. A row that fails any of these is rewritten, not emitted.
+POSTABILITY CHECK — every row is pasted into Salesforce as written. Before emitting a row confirm: 800 characters / 120 words or fewer; no "I", "we", "our", "my"; the CSM's name appears nowhere (say "CSM"); no source markers like [T1], no Markdown, no placeholders like [Name] or [#] (an honest "TBD" for an attendee count is fine); no "CSM attended / observed / listened"; no corporate filler; no other row already cites this source note; all four labels present (Summary, Contribution, Outcomes, Next steps); a Contribution that opens with a real verb rather than "attended"; no revenue causation the sources do not state; Type and Subtype copied character-for-character. A row that fails any of these is rewritten, not emitted.
 
 SOURCES (${rangeLabel}):
 

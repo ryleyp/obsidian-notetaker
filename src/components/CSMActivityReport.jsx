@@ -18,7 +18,7 @@ import { useReportWorkflow, TODAY } from "@/hooks/useReportWorkflow";
 import { ScanButton, CountsBadges, NoteList, GeneratePanel, PreflightPanel, OutputHeader, HistoryMenu, BleedWarning, StrictToggle } from "@/components/ReportSections";
 import { parseActivityRows, rowsToNDJSON, rowsToMarkdown, sortRowsByDate, STATUSES } from "@/lib/activityRows";
 import { harvestNotes } from "@/lib/sfdcHarvest";
-import { fixActivityRow, lintActivityRow, lintSummary } from "@/lib/activityLint";
+import { duplicateSourceNotes, fixActivityRow, lintActivityRow, lintSummary } from "@/lib/activityLint";
 import { reviewActivityPortfolio } from "@/lib/activityPortfolio";
 import { isFiled, loadFiledRows, markFiled, recentFiledRows } from "@/lib/filedRows";
 import { consumeSseText } from "@/lib/sseClient";
@@ -247,14 +247,18 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   // Every row — harvested or generated — is linted on the way in, so what
   // the table shows is what would actually post.
   const rows = useMemo(() => {
-    return sortRowsByDate(parseActivityRows(wf.output)).map((row) => {
+    const parsed = sortRowsByDate(parseActivityRows(wf.output));
+    // One meeting or email thread is one activity, so a note cited twice is a
+    // defect every row involved should show.
+    const duplicateSources = duplicateSourceNotes(parsed);
+    return parsed.map((row) => {
       let agreement = row.agreement;
       if (!agreement && row.origin !== "note" && account) {
         const note = findSourceNote(row);
         if (note) agreement = suggestAgreements(note.content || "", account).map((g) => `${g.type} ${g.number}`).join(", ");
       }
       const decorated = { ...row, agreement, filed: isFiled(filedMap, row) };
-      return { ...decorated, lint: lintActivityRow(decorated, { ownerNames: settings.ownerNames || [], agreementsOnFile }) };
+      return { ...decorated, lint: lintActivityRow(decorated, { ownerNames: settings.ownerNames || [], agreementsOnFile, duplicateSources }) };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wf.output, filedMap, account, wf.loadedNotes, settings.ownerNames, agreementsOnFile]);
