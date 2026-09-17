@@ -20,6 +20,7 @@ export default function ActivityPreview({
   rows, rawText, streaming, onUpdateRow, onSave, saving, saved, savedPath, cost, sourceInfo,
   onVerify, onVerifyRow, verifying, verifyingRow, onFlagBleed, onToggleFiled, onRegenerateRow, regeneratingRow,
   onCheckClassifications, classifying, onApplySuggestion, onDismissSuggestion,
+  issueSummary, onFixIssues, portfolio,
 }) {
   const [viewMode, setViewMode] = useState("table");
   const [copiedKey, setCopiedKey] = useState(null);
@@ -79,6 +80,19 @@ export default function ActivityPreview({
           {classifying && (
             <span className="text-xs text-gray-400">checking classifications…</span>
           )}
+          {!streaming && issueSummary?.rowsWithIssues > 0 && (
+            <span
+              className={`text-xs rounded-full px-2 py-0.5 border ${issueSummary.hard ? "text-red-700 bg-red-50 border-red-200" : "text-amber-700 bg-amber-50 border-amber-200"}`}
+              title="Deterministic postability check on every row: Salesforce limits, first person, the CSM's name, placeholders, markers, user-group format"
+            >
+              {issueSummary.hard ? `${issueSummary.hard} must-fix` : ""}{issueSummary.hard && issueSummary.soft ? " · " : ""}{issueSummary.soft ? `${issueSummary.soft} should-fix` : ""} in {issueSummary.rowsWithIssues} row{issueSummary.rowsWithIssues !== 1 ? "s" : ""}
+            </span>
+          )}
+          {!streaming && rows.length > 0 && issueSummary?.rowsWithIssues === 0 && (
+            <span className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5" title="Every row passes the postability check">
+              ready to post
+            </span>
+          )}
           {!streaming && reviewCount > 0 && (
             <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
               ⚠ {reviewCount} row{reviewCount !== 1 ? "s" : ""} to review
@@ -118,6 +132,15 @@ export default function ActivityPreview({
               Markdown
             </button>
           </div>
+          {onFixIssues && issueSummary?.fixable > 0 && !streaming && (
+            <button
+              onClick={() => onFixIssues()}
+              className="btn-secondary text-xs px-3 py-1.5"
+              title="Apply the fixes that cannot change meaning: the CSM's name to CSM, source markers out, empty 'Outcomes: None stated' fragments out, mail prefixes off titles. Filed rows are left alone."
+            >
+              Fix {issueSummary.fixable} safe issue{issueSummary.fixable !== 1 ? "s" : ""}
+            </button>
+          )}
           {onVerify && rows.some((r) => r.origin !== "note") && !streaming && (
             <button
               onClick={() => onVerify()}
@@ -162,6 +185,7 @@ export default function ActivityPreview({
           <>
             <p className="text-xs text-gray-400 mb-2">
               Click a cell to copy it for Salesforce entry. Click a comment to edit it in place. Tick Filed once a row is logged in SFDC — it stays greyed out on future runs.
+              {issueSummary?.hard > 0 && " Red tags are things Salesforce or the reporting convention rejects as written; amber tags will read badly."}
               {reviewCount > 0 && " Rows marked ⚠ need a classification double-check."}
             </p>
             <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
@@ -254,6 +278,19 @@ export default function ActivityPreview({
                                 </div>
                               </div>
                             )}
+                            {isComment && row.lint?.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+                                {row.lint.map((issue) => (
+                                  <span
+                                    key={issue.code}
+                                    title={issue.message}
+                                    className={`text-[10px] rounded-full px-1.5 border cursor-help ${issue.severity === "hard" ? "text-red-700 bg-red-50 border-red-200" : "text-amber-700 bg-amber-50 border-amber-200"}`}
+                                  >
+                                    {issue.code.replace(/-/g, " ")}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             {isComment && (
                               <div className="mt-1 flex items-center gap-2">
                                 <span className={`font-mono text-[10px] ${over ? "text-red-600 font-bold" : "text-gray-400"}`}>
@@ -325,6 +362,19 @@ export default function ActivityPreview({
                 </tbody>
               </table>
             </div>
+            {portfolio?.findings?.length > 0 && !streaming && (
+              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
+                <p className="text-xs font-semibold text-slate-800">
+                  How this quarter reads as a whole
+                  <span className="ml-2 font-normal text-slate-500">
+                    {portfolio.stats.customerFacing} customer-facing · {portfolio.stats.internal} internal · {portfolio.stats.byType.length} categor{portfolio.stats.byType.length !== 1 ? "ies" : "y"}
+                  </span>
+                </p>
+                {portfolio.findings.map((finding) => (
+                  <p key={finding.code} className="text-xs text-slate-700">• {finding.message}</p>
+                ))}
+              </div>
+            )}
             {rows.some((r) => r.review && r.reviewReason) && !streaming && (
               <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1">
                 <p className="text-xs font-semibold text-amber-800">Classification notes from Claude:</p>

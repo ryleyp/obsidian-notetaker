@@ -3,7 +3,7 @@ import { createModelClient } from "@/lib/modelClient";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { firstTextBlock, maxOutputTokens } from "@/lib/models";
 import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBundle";
-import { taxonomyForNotePrompt } from "@/lib/sfdcTaxonomy";
+import { activityWritingRules, classificationGuidance, taxonomyForReportPrompt } from "@/lib/sfdcTaxonomy";
 
 const SYSTEM_PROMPT = `You turn customer-success email threads into concise Obsidian notes for an NI Customer Success Manager.
 
@@ -126,19 +126,26 @@ Summarize the thread chronologically, newest-to-oldest if the source makes that 
 
 Create a Salesforce-ready activity entry for this email thread. Output exactly this shape inside this section:
 
+**Activity Title:** <a short Salesforce engagement title in the style of the examples — account, what it was, month or product when useful; never the subject line, no "RE:"/"FW:", no dates>
 **Type:** <one approved type below>
 **Subtype:** <a subtype listed under that type>
 **EA/EP Number(s):** <a number explicitly present in the sources, or "None on file">
+**Reportable:** <Yes when this is an EA engagement worth logging; "No — reason" for internal chatter or threads with no outcome>
 
 **Summary/Notes:**
-Summary: <what the email thread covered and what happened>
-Outcomes: <explicit outcomes, or "None stated">
+Summary: <who was on the thread with roles, what drove it, what it covered>
+Contribution: <what the CSM personally did, opening with a real verb, or "None beyond correspondence">
+Outcomes: <what was confirmed, or "None stated">
 Next steps: <the CSM's own 1-3 actions, or "None">
 
-Approved Type → Subtype pairs (copy the exact text):
-${taxonomyForNotePrompt()}
+Approved Type → Subtype pairs (copy the exact text; the examples show the title style and comment voice that gets posted):
+${taxonomyForReportPrompt()}
 
-Choose the primary purpose of the thread and the most specific valid pair. The Summary/Notes block must be 120 words or fewer and 800 characters or fewer. Use past tense, no first person, no citations; refer to the CSM as "CSM", never by name; and do not invent outcomes, owners, numbers, or next steps.`;
+${classificationGuidance()}
+
+${activityWritingRules()}
+
+The Summary/Notes block is copied into Salesforce as written: all four labels (Summary, Contribution, Outcomes, Next steps); 120 words or fewer and 800 characters or fewer; past tense; no "I"/"we"/"our"; no citations, Markdown, or placeholders; refer to the CSM as "CSM", never by name; name customer contacts with their role when the thread states it; never write that the CSM observed or attended; no corporate filler (synergy, leverage, circle back, bandwidth, actionable, value-add); and do not invent outcomes, owners, numbers, or next steps.`;
 }
 
 export async function createEmailThreadMessage(client, request) {

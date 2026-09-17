@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatCost } from "@/lib/models";
 import { extractReferencedSourceIds, sourceExcerpt, stripCitationMarkers } from "@/lib/sourceBundle";
+import { fixNoteEntry, lintNoteEntry } from "@/lib/sfdcHarvest";
 
 // One-click revision instructions for the regenerate panel. Each fills the
 // instruction box so the CSM can tweak before submitting.
@@ -85,6 +86,7 @@ export default function NotesPreview({
   followUpSaving,
   followUpSavedPath,
   followUpSaveError,
+  ownerNames = [],
 }) {
   const [viewMode, setViewMode] = useState("preview");
   const [regenerationInstruction, setRegenerationInstruction] = useState("");
@@ -98,6 +100,16 @@ export default function NotesPreview({
     const byId = new Map(sources.map((source) => [source.id, source]));
     return referencedIds.map((id) => byId.get(id)).filter(Boolean);
   }, [referencedIds, sources]);
+
+  // The SFDC entry is the part of this note that gets pasted somewhere
+  // else verbatim, so it is checked here, before the note is saved.
+  const entryCheck = useMemo(() => (streaming ? null : lintNoteEntry(notes, { ownerNames })), [notes, streaming, ownerNames]);
+
+  function fixEntry() {
+    if (!editable) return;
+    const { content, applied } = fixNoteEntry(notes, { ownerNames });
+    if (applied.length) onNotesChange(content);
+  }
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(stripCitationMarkers(notes)).catch(() => {});
@@ -325,6 +337,34 @@ export default function NotesPreview({
                   {followUpDraft}
                 </pre>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {entryCheck && (
+        <div className={`px-6 py-3 border-t text-xs ${entryCheck.issues.length ? (entryCheck.issues.some((i) => i.severity === "hard") ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200") : "bg-green-50 border-green-200"}`}>
+          {entryCheck.issues.length === 0 ? (
+            <p className="text-green-800"><strong>SFDC entry ready to post</strong> — {entryCheck.row.comments.length} characters, within Salesforce limits, no first person, no markers.</p>
+          ) : (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <p className={entryCheck.issues.some((i) => i.severity === "hard") ? "text-red-800" : "text-amber-800"}>
+                  <strong>SFDC entry check:</strong> {entryCheck.issues.length} issue{entryCheck.issues.length !== 1 ? "s" : ""} before this can be posted as written.
+                </p>
+                {editable && entryCheck.fixable > 0 && (
+                  <button type="button" onClick={fixEntry} className="btn-secondary text-xs px-3 py-1" title="Applies only fixes that cannot change meaning">
+                    Fix {entryCheck.fixable} safe issue{entryCheck.fixable !== 1 ? "s" : ""}
+                  </button>
+                )}
+              </div>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {entryCheck.issues.map((issue) => (
+                  <li key={issue.code} className={issue.severity === "hard" ? "text-red-700" : "text-amber-700"}>
+                    <span className="font-medium">{issue.severity === "hard" ? "Must fix" : "Should fix"}:</span> {issue.message}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

@@ -4,7 +4,7 @@ import { looksSpeakerLabeled } from "@/lib/speakers";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { maxOutputTokens } from "@/lib/models";
 import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBundle";
-import { taxonomyForNotePrompt } from "@/lib/sfdcTaxonomy";
+import { activityWritingRules, classificationGuidance, taxonomyForReportPrompt } from "@/lib/sfdcTaxonomy";
 import { GOAL_SECTION_HEADING, NO_CONTRIBUTIONS, formatGoalsForPrompt } from "@/lib/goals";
 
 const SYSTEM_PROMPT = `You are an expert meeting notes specialist working for a Customer Success Manager (CSM) at NI (National Instruments). The person who recorded this meeting is that CSM — their job is driving adoption, expansion, and renewal of NI products at large customer accounts.
@@ -68,31 +68,54 @@ Only include a tag if that city/state/technology is actually discussed — not j
 const SFDC_ACTIVITY_RULES = `
 Rules for the SFDC Activity Entry section:
 
-APPROVED TYPE AND SUBTYPE OPTIONS — copy the exact text; Subtype must come from the chosen Type's list:
-${taxonomyForNotePrompt()}
+APPROVED TYPE AND SUBTYPE OPTIONS — copy the exact text; Subtype must come from the chosen Type's list. Read the descriptions and the real filed examples: they show the title style and comment voice that gets posted.
+${taxonomyForReportPrompt()}
 
-CLASSIFICATION RULES
-- Identify the primary purpose of the meeting before choosing a type.
-- Use the most specific valid type and subtype the transcript (or the CSM's context/notes) supports.
-- Subtype must come from the chosen type's list; if none fit, use "Other" within that type.
-- Top-level "Other" type always outputs "Subtype: Other".
-- A live training or support session delivered to users is Entitlement Awareness & Promotion → Training/Support Webinar.
-- A product-led session (NI presenting/demoing) is Demo Days, not User Group. "User Group" means customer-led.
-- NI-internal-only work (no customer present) is Internal Alignment & Collaboration — prefer "Account Planning" or "Other", with an outcome-focused description.
-- Tie-breakers when two types fit: (1) match the primary purpose, not a topic that just came up; (2) if the meeting spans onboarding and training, classify by account stage — new/ramping accounts default to Onboarding & Kick-Off; (3) if risk or escalation is the reason for the meeting, Escalation/Risk Management wins over a routine sync; (4) if still tied, pick the type reflecting the strategic outcome.
+${classificationGuidance()}
+- Subtype must come from the chosen type's list; if none fit, use "Other" within that type. Top-level "Other" type always outputs "Subtype: Other".
+- Prefer "Account Planning" or "Other" for NI-internal work, with an outcome-focused description.
+- If the meeting spans onboarding and training, classify by account stage — new/ramping accounts default to Onboarding & Kick-Off.
+
+ACTIVITY TITLE
+- A short Salesforce engagement title naming the engagement AND its purpose, in the style of the examples above: "Beacon Systems RF User Group - March 2026", "CSM / FAE Cardinal Account Interlock", "Acme Aerospace Proficiency Plan - LabVIEW Core Training Scheduling".
+- Purpose is what makes a title useful: "Engineering sponsor sync on adoption blockers and Q3 rollout timing" beats "User group sponsor sync". Name the initiative, customer team, site, or product when it helps someone find this record later.
+- Not the file name, not an email subject line: no dates at the front, no "RE:"/"FW:", no "Email -".
+
+REPORTABLE
+- "Yes" when this is an EA engagement the account team would log in Salesforce: customer-facing work, or NI-internal work that produced a concrete decision or outcome.
+- "No" — with a short reason after a dash — for manager 1:1s, team or staff meetings, career or scorecard conversations, training the CSM took, routine internal syncs with no decision, and anything not about this account's EA. Still fill in every other line; the entry stays in the note either way.
 
 SUMMARY/NOTES RULES
-- Exactly three labeled lines, in this order: Summary, Outcomes, Next steps. No other headings or sections inside this block.
+
+${activityWritingRules()}
+
+- Exactly four labeled lines, in this order: Summary, Contribution, Outcomes, Next steps. No other headings or sections inside this block.
 - HARD LIMIT: the entire Summary/Notes block — Summary + Outcomes + Next steps combined, including the labels — must be at most 120 words and 800 characters or fewer. This is a Salesforce field limit, not a target. Draft, count the words, then trim until it is 120 or fewer: cut the weakest detail, not the outcomes or next steps. Never exceed it.
 - This block is pasted into a plain-text SFDC Comment field, so keep each section as a labeled run of plain sentences ("Summary: ...", "Outcomes: ...", "Next steps: ...") — no bullets, no bold, no sub-lists inside it.
 - Past tense, no first person ("I"/"we"). Refer to the CSM as "CSM" — never by name — since this text is read by people who don't know who wrote it.
 - Persona: write like a CSM in their late twenties/around 27, a couple years into the role, with an engineering degree — reads like notes typed up right after the call, not an AI-cleaned recap. Plain, conversational-professional language, not heavy business jargon (avoid "synergy," "leverage," "circle back," "bandwidth," "actionable," "value-add," etc.). Grounded and direct, no stiff transitions or corporate filler.
-- Lead with outcome and business value, not meeting logistics.
+- Lead with outcome and business value, not meeting logistics. Every entry answers: what happened, who was involved, and why it matters to adoption, expansion, renewal, or risk.
+- Name customer contacts by name with their role or company when the sources state it ("Dana Whitfield, IT Admin Lead"; "Jordan (GTS, Acme Aerospace)"). Name NI colleagues by role (FAE, AM) and name only when it matters.
 - The CSM's participation: state it only when the CSM led, ran, or presented ("CSM led the EA admin sync..."). Never write that the CSM observed, listened, attended silently, or "was present" — when they didn't lead, describe the meeting itself and leave the CSM's participation unmentioned.
+- Say what the CSM actually did when the sources show it — drove, defined, coordinated, decided, submitted — not just that a meeting happened. Never manufacture CSM leadership the sources don't support.
+- User Groups (Demo Days / User Group): the Summary line carries "Region: [X], Attendees: [# or TBD]" and the Outcomes line states the impact (adoption, expansion, risk reduction, customer momentum), matching the format in the taxonomy.
 - Outcomes: if the transcript has no clear outcome, write "Outcomes: None stated" — never invent one.
 - Next steps: only the CSM's own owned actions (skip customer/other-team to-dos unless they gate a CSM action), top 1-3, phrased as concrete actions. If none, write "Next steps: None".
+- Budget the 800 characters across all four labels. When it is tight, cut detail from Summary first — Contribution and Outcomes are the two parts a reviewer is actually looking for.
 - Do not invent attendees, regions, outcomes, or next steps that aren't supported by the transcript or the CSM's own context/notes.
-- Exclude raw internal complaints/blame, speculative pricing or forecast figures, and anything the account team wouldn't want visible in CRM.`;
+- Exclude raw internal complaints/blame, speculative pricing or forecast figures, and anything the account team wouldn't want visible in CRM.
+
+POSTABILITY CHECK — the entry is copied into Salesforce exactly as written, so before output confirm every line below. An entry that fails any of them is rewritten, not shipped:
+- 120 words / 800 characters or fewer for the whole Summary/Notes block
+- No "I", "we", "our", "my" — past tense, "CSM" as the subject when one is needed
+- The CSM's name appears nowhere; customer contacts are named with role when known
+- No source markers like [T1] or [N1], no Markdown, no bullets, no placeholders like [Name] or [#] (an honest "TBD" for an attendee count is fine)
+- No "CSM attended / observed / listened"
+- No corporate filler: synergy, leverage, circle back, bandwidth, actionable, value-add, touch base
+- Type and Subtype copied character-for-character from the list
+- All four labels present: Summary, Contribution, Outcomes, Next steps
+- The Contribution line opens with a real verb and is not "attended" or "was present"
+- No revenue causation the sources do not state`;
 
 export function buildPrompt(
   transcript,
@@ -317,13 +340,16 @@ A Salesforce-ready activity entry for this meeting, following the rules below. O
 
 The no-length-limit instruction applies to Meeting Notes and NOT to this section. This section is pasted into a Salesforce field: the Summary/Notes block (Summary + Outcomes + Next steps, including the labels) must be 120 words or fewer and 800 characters or fewer. Write the block, count the words, and trim until it fits before you output it. Detail that does not fit belongs in Meeting Notes above, not here.
 
+**Activity Title:** <Salesforce engagement title, per the ACTIVITY TITLE rules>
 **Type:** <one approved type>
 **Subtype:** <matching subtype from that type's list>
 **EA/EP Number(s):** <relevant number(s) from the list below, or "None on file">
+**Reportable:** <Yes, or "No — reason">
 
 **Summary/Notes:**
-Summary: <what was covered and what happened>
-Outcomes: <explicit outcomes, or "None stated">
+Summary: <who took part with roles, what drove the engagement, what was covered>
+Contribution: <what the CSM personally did, opening with a real verb, or "None beyond attendance">
+Outcomes: <what was confirmed, or "None stated"; label anything expected as expected>
 Next steps: <the CSM's own 1-3 owned actions, or "None">
 ${SFDC_ACTIVITY_RULES}
 ${agreementBlock}${followUpOutput}`;

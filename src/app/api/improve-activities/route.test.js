@@ -113,6 +113,16 @@ describe("activity improvement", () => {
     expect(sent.response_format).toBeUndefined();
   });
 
+  it("passes each row's known issues through so the pass targets them", async () => {
+    await POST(request({ rows: [{ ...row, issues: "MUST FIX: Written in first person." }, row] }));
+    const prompt = stream.mock.calls[0][0].system;
+    expect(prompt).toContain('"knownIssues":"MUST FIX: Written in first person."');
+    expect(prompt).toContain("Every row with knownIssues MUST receive a proposal");
+    // Only the row that has issues carries the key, so the model is not told
+    // to touch the clean one.
+    expect((prompt.match(/"knownIssues":"/g) || []).length).toBe(1);
+  });
+
   it("rejects truncated output", async () => {
     mockFinalMessage({ stop_reason: "max_tokens" });
     const result = await POST(request());

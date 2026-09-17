@@ -46,3 +46,13 @@ describe("Account Status synthesis", () => {
     expect(prompt).toContain("## Open Action Items");
   });
 });
+
+describe("EA Activity report synthesis", () => {
+  it("classifies with the same guidance the note-time entry uses and states the postability check", async () => {
+    const prompt = await promptFrom(await post({ promptType: "csm-activity" }));
+    expect(prompt).toContain("CLASSIFICATION PROCESS");
+    expect(prompt).toContain("IMPORTANT DEFINITION — EA Admin");
+    expect(prompt).toContain("POSTABILITY CHECK");
+    expect(prompt).toContain("manager 1:1s, team or staff meetings");
+  });
+});

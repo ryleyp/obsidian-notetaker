@@ -8,6 +8,9 @@
 // rows carrying redaction marks are flagged for review.
 
 import { normalizeSfdcSubtype, normalizeSfdcType } from "./sfdcTaxonomy";
+import { cleanActivityTitle, csmNameToRole, fixActivityRow, lintActivityRow } from "./activityLint";
+
+export { cleanActivityTitle, csmNameToRole };
 
 function field(section, label) {
   const m = section.match(new RegExp(`\\*\\*${label}:\\*\\*\\s*([^\\n]*)`, "i"));
@@ -31,25 +34,6 @@ export function sfdcSectionOf(content) {
   return m ? m[1].replace(/\n---\s*$/, "").trim() : "";
 }
 
-// Filename → SFDC engagement title: drop the "Email - " marker, mail-client
-// prefixes ("[EXTERNAL] RE- ", "FW:", "Declined- "), a leading date, and a
-// "(1)" duplicate-file suffix.
-export function cleanActivityTitle(title) {
-  let out = String(title || "")
-    .replace(/^\d{4}-\d{2}-\d{2}\s*-?\s*/, "")
-    .replace(/^Email\s*-\s*/i, "");
-  // Markers and reply prefixes interleave ("FW: [EXTERNAL] Re- ..."), so
-  // peel them until nothing changes.
-  for (;;) {
-    const next = out
-      .replace(/^\s*\[(external|ext)\]\s*/i, "")
-      .replace(/^\s*(re|fw|fwd|aw|declined|accepted|tentative|canceled|cancelled)\s*[-:–]\s*/i, "");
-    if (next === out) break;
-    out = next;
-  }
-  return out.replace(/\s*\(\d+\)\s*$/, "").replace(/\s+/g, " ").trim();
-}
-
 // "EA-15552" / "ea 15552" / "EA #15552" → "EA 15552"; "None on file" → "".
 export function normalizeAgreements(value) {
   const text = String(value || "").trim();
@@ -59,18 +43,6 @@ export function normalizeAgreements(value) {
     .map((part) => part.trim().replace(/^(EA|EP)\s*[-#:]?\s*(\d+)$/i, (_, t, n) => `${t.toUpperCase()} ${n}`))
     .filter(Boolean)
     .join(", ");
-}
-
-// The CSM's own name in Salesforce text reads oddly; the convention is "CSM".
-export function csmNameToRole(text, ownerNames = []) {
-  let out = String(text || "");
-  for (const name of ownerNames || []) {
-    const n = String(name || "").trim();
-    if (!n) continue;
-    const esc = n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    out = out.replace(new RegExp(`\\b${esc}(?:'s)?\\b`, "g"), (m) => (m.endsWith("'s") ? "CSM's" : "CSM"));
-  }
-  return out;
 }
 
 // Manager 1:1s, team meetings, career conversations: internal to the CSM,
@@ -90,7 +62,17 @@ export function dedupeKey(row) {
 
 // Row shape matches parseActivityRows. Returns null when the note has no
 // usable entry (no section, or no Type).
-export function harvestSfdcRow(note, { ownerNames = [] } = {}) {
+// "Reportable: No — internal 1:1" → { reportable: false, reason }. Notes
+// written before the field existed have no line and count as reportable.
+export function reportableField(section) {
+  const raw = field(section, "Reportable");
+  if (!raw) return { reportable: true, reason: "" };
+  const m = raw.match(/^(yes|no)\b\s*[—–:-]?\s*(.*)$/i);
+  if (!m) return { reportable: true, reason: "" };
+  return { reportable: m[1].toLowerCase() === "yes", reason: m[2].trim() };
+}
+
+export function harvestSfdcRow(note, { ownerNames = [], agreementsOnFile = false } = {}) {
   const section = sfdcSectionOf(note?.content);
   if (!section) return null;
   const rawType = field(section, "Type");
@@ -99,31 +81,49 @@ export function harvestSfdcRow(note, { ownerNames = [] } = {}) {
   const type = normalizeSfdcType(rawType);
   const subtype = normalizeSfdcSubtype(rawType, field(section, "Subtype"));
   const agreement = normalizeAgreements(field(section, "EA/EP Number\\(s\\)"));
-  const comments = csmNameToRole(summaryBlock(section), ownerNames);
-  if (!comments) return null;
+  const rawComments = summaryBlock(section);
+  if (!rawComments.trim()) return null;
 
-  const redacted = /█/.test(comments) || /█/.test(note.title || "");
+  // The entry's own title, written in Salesforce style at note time, beats
+  // whatever the file happened to be called.
+  const activityTitle = field(section, "Activity Title");
+  const { reportable, reason: reportableReason } = reportableField(section);
 
-  return {
+  // Safe hygiene only: the CSM's name to "CSM", markers out, empty labelled
+  // fragments out. Anything needing judgement is reported, not changed.
+  const { row: fixed } = fixActivityRow({
+    title: activityTitle || cleanActivityTitle(note.title),
+    comments: rawComments,
+  }, { ownerNames });
+
+  const row = {
     eventDate: note.date || "",
-    title: cleanActivityTitle(note.title),
+    title: fixed.title,
     type,
     subtype,
-    comments,
+    comments: fixed.comments,
     agreement,
     sourceTitle: note.title || "",
     origin: "note",
-    review: redacted,
-    reviewReason: redacted ? "Mentions another account (redacted) — edit the comment before filing" : "",
+    reportable,
+    reportableReason,
     verify: "",
     verifyReason: "",
+  };
+  const lint = lintActivityRow(row, { ownerNames, agreementsOnFile });
+  const hard = lint.filter((issue) => issue.severity === "hard");
+  return {
+    ...row,
+    lint,
+    review: hard.length > 0,
+    reviewReason: hard.map((issue) => issue.message).join(" "),
   };
 }
 
 // Splits scanned notes into harvested rows, the notes Claude still needs to
 // read, and notes skipped as internal check-ins. Duplicate notes (same
 // cleaned title — e.g. "Thread" and "Thread (1)") collapse to the newest.
-export function harvestNotes(notes, { ownerNames = [], skipInternalCheckIns = true } = {}) {
+export function harvestNotes(notes, { ownerNames = [], skipInternalCheckIns = true, agreementsOnFile = false } = {}) {
   const rows = [];
   const remaining = [];
   const skipped = [];
@@ -135,9 +135,16 @@ export function harvestNotes(notes, { ownerNames = [], skipInternalCheckIns = tr
       skipped.push({ title: note.title || "", reason: "internal check-in" });
       continue;
     }
-    const row = harvestSfdcRow(note, { ownerNames });
+    const row = harvestSfdcRow(note, { ownerNames, agreementsOnFile });
     if (!row) {
       remaining.push(note);
+      continue;
+    }
+    // The note itself decided at save time that this was not an EA
+    // engagement worth logging. The same toggle that admits internal
+    // check-ins admits these, so nothing is hidden for good.
+    if (skipInternalCheckIns && !row.reportable) {
+      skipped.push({ title: note.title || "", reason: row.reportableReason ? `not reportable — ${row.reportableReason}` : "not reportable" });
       continue;
     }
     const key = dedupeKey(row);
@@ -149,4 +156,47 @@ export function harvestNotes(notes, { ownerNames = [], skipInternalCheckIns = tr
     rows.push(row);
   }
   return { rows, remaining, skipped };
+}
+
+// The postability check for the entry inside a note, before it is saved.
+// Returns null when the note has no entry to check.
+export function lintNoteEntry(content, { ownerNames = [], agreementsOnFile = false } = {}) {
+  const section = sfdcSectionOf(content);
+  if (!section) return null;
+  const rawType = field(section, "Type");
+  const row = {
+    eventDate: String(content || "").match(/(\d{4}-\d{2}-\d{2})/)?.[1] || "",
+    title: field(section, "Activity Title") || "Activity",
+    type: normalizeSfdcType(rawType),
+    subtype: normalizeSfdcSubtype(rawType, field(section, "Subtype")),
+    comments: summaryBlock(section),
+    agreement: normalizeAgreements(field(section, "EA/EP Number\\(s\\)")),
+  };
+  // A note's date is not the entry's problem; only the entry is judged here.
+  const issues = lintActivityRow(row, { ownerNames, agreementsOnFile }).filter((issue) => issue.code !== "date");
+  const fixable = issues.filter((issue) => issue.fixable);
+  return { issues, fixable: fixable.length, row };
+}
+
+// Rewrites the Summary/Notes block of the note's entry with the safe fixes
+// applied, leaving every other byte of the note alone.
+export function fixNoteEntry(content, { ownerNames = [] } = {}) {
+  const text = String(content || "");
+  const sectionMatch = text.match(/(## SFDC Activity Entry\s*\n)([\s\S]*?)(?=\n## |$)/);
+  if (!sectionMatch) return { content: text, applied: [] };
+  const section = sectionMatch[2];
+  const blockMatch = section.match(/(\*\*Summary\/Notes:\*\*\s*\n)([\s\S]*?)(?=\n\s*\n\s*(?:---|\*\*|##)|$)/);
+  if (!blockMatch) return { content: text, applied: [] };
+
+  const original = blockMatch[2];
+  const lines = original.split("\n").map((line) => line.trim()).filter(Boolean);
+  const { row, applied } = fixActivityRow({ title: "", comments: lines.join(" ") }, { ownerNames });
+  if (!applied.length) return { content: text, applied: [] };
+
+  // Keep the labelled lines on their own lines when they survived the fix.
+  const rebuilt = row.comments
+    .replace(/\s+(Contribution:|Outcomes?:|Next steps?:)/g, "\n$1")
+    .trim();
+  const nextSection = section.replace(blockMatch[0], `${blockMatch[1]}${rebuilt}`);
+  return { content: text.replace(sectionMatch[0], `${sectionMatch[1]}${nextSection}`), applied };
 }

@@ -290,6 +290,7 @@ export default function Home() {
                 customerFactsSaved={saving.customerFactsSaved}
                 updatedExisting={saving.updatedExisting}
                 backupPath={saving.backupPath}
+                ownerNames={settings.ownerNames || []}
                 updatingExisting={!!existingNote}
                 cost={generation.noteCost}
                 sourceBundle={generation.sourceBundle}

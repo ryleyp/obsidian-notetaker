@@ -181,3 +181,24 @@ describe("buildPrompt goal contributions", () => {
     expect(prompt).not.toContain("Goal Contributions");
   });
 });
+
+describe("buildPrompt SFDC entry postability", () => {
+  it("asks for a Salesforce title and a reportable verdict, and classifies with the full guidance", () => {
+    const prompt = buildPrompt("Jordan discussed the rollout.", "Planning Sync");
+    expect(prompt).toContain("**Activity Title:**");
+    expect(prompt).toContain("**Reportable:**");
+    expect(prompt).toContain("ACTIVITY TITLE");
+    expect(prompt).toContain("CLASSIFICATION PROCESS");
+    expect(prompt).toContain("IMPORTANT DEFINITION — EA Admin");
+    // The real filed examples travel with the taxonomy now.
+    expect(prompt).toContain("Example: \"Beacon Systems RF User Group");
+  });
+
+  it("states the postability check the entry must pass", () => {
+    const prompt = buildPrompt("Jordan discussed the rollout.", "Planning Sync");
+    expect(prompt).toContain("POSTABILITY CHECK");
+    expect(prompt).toContain("No \"I\", \"we\", \"our\", \"my\"");
+    expect(prompt).toContain("No \"CSM attended / observed / listened\"");
+    expect(prompt).toContain("Region: [X], Attendees: [# or TBD]");
+  });
+});

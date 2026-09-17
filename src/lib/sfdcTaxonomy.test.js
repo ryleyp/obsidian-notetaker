@@ -4,6 +4,7 @@ import {
   isCanonicalPair,
   normalizeSfdcSubtype,
   normalizeSfdcType,
+  classificationGuidance,
   taxonomyForNotePrompt,
   taxonomyForReportPrompt,
 } from "./sfdcTaxonomy";
@@ -55,5 +56,15 @@ describe("taxonomy prompt renderings", () => {
     expect(text).toContain("**Type: User Groups**");
     expect(text).toContain("Comment format:");
     expect(text).toContain("Example: \"Beacon Systems RF User Group");
+  });
+});
+
+describe("classificationGuidance", () => {
+  it("covers every type once, with the EA Admin definition and tiebreakers", () => {
+    const text = classificationGuidance();
+    for (const t of SFDC_TAXONOMY.filter((entry) => entry.type !== "Other")) expect(text).toContain(t.type);
+    expect(text).toContain("EA Admins are NOT NI employees");
+    expect(text).toContain("TIEBREAKERS");
+    expect(text).toContain("more specific type");
   });
 });

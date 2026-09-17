@@ -155,3 +155,67 @@ export function taxonomyForReportPrompt() {
     return lines.join("\n");
   }).join("\n\n");
 }
+
+// The classification reasoning every SFDC-bound prompt shares — the EA Admin
+// definition, the evaluate-every-type process, and the tiebreakers. The
+// note-time entry used to classify with a thin type list while the report
+// prompt had all of this, so a note filed "Strategic" at save time was often
+// reclassified later. Both now reason the same way.
+export function classificationGuidance() {
+  return `IMPORTANT DEFINITION — EA Admin: a customer-side IT administrator (employed by the customer account, not by NI) who runs the EA or maintains NI licensing on their company's behalf. EA Admins are NOT NI employees. Any meeting with an EA Admin is customer-facing — never Internal Alignment.
+NI-side roles are NOT EA Admins: AMs (Account Managers), FAEs (Field Application Engineers), CSMs, and any other NI employee. A meeting attended only by NI-side roles (a CSM/FAE or CSM/AM sync with no customer contact present) is Internal Alignment & Collaboration, NOT an EA Admin Sync.
+
+CLASSIFICATION PROCESS — evaluate ALL six types before choosing; do not stop at the first plausible one:
+1. Entitlement Awareness & Promotion — promoting EA entitlement awareness or usage (emails, newsletters, training plans, shared portals, live training sessions)
+2. Internal Alignment & Collaboration — NI-internal only, NO customer present, and a concrete decision or outcome resulted (no outcome → not reportable)
+3. Onboarding & Kick-Off — deliberately onboarding a new customer-side EA Admin or new end users to the EA scope and entitlements
+4. Strategic Relationship Management — a customer-facing governance or relationship sync that is not a User Group or Onboarding
+5. User Groups — a group session with multiple attendees (demo, user group, or the planning for one)
+6. Value Realization & Success Stories — the primary purpose was capturing or communicating ROI, outcomes, or a success story
+
+TIEBREAKERS:
+- NI-internal only (zero customer contacts) → Internal Alignment & Collaboration, never Strategic
+- Group session with multiple attendees → User Groups, not Strategic. NI-led demo = Demo Days; customer-run recurring group = User Group; planning a user group = Other
+- A live training or support session delivered to users → Entitlement Awareness & Promotion / Training/Support Webinar
+- Onboarding a new EA Admin or new end users → Onboarding & Kick-Off. A customer contact merely asking for help activating or using an entitlement is Strategic Relationship Management (EA Admin Sync if they are the EA Admin, else Other), not Onboarding
+- Capturing or writing ROI or a success story → Value Realization
+- Risk or escalation as the reason for the meeting → Escalation/Risk Management over a routine sync
+- Classify by the meeting's primary purpose, not a topic that merely came up; if still tied, pick the type reflecting the strategic outcome
+- Strategic Relationship Management is the catch-all for customer-facing work only after every more specific type is ruled out
+Before writing the row, ask once more: "Is there a more specific type that fits better than what I am about to pick?"`;
+}
+
+// The writing contract for an activity record, shared by the note-time entry,
+// the email-thread entry, and the EA Activity report so all three produce the
+// same thing. Encodes the CS reporting standard the account team reviews
+// against: one record per real engagement, the CSM's own contribution named
+// with a real verb, confirmed results kept apart from hoped-for ones, and no
+// revenue causation the source does not support.
+
+export const CONTRIBUTION_VERBS = [
+  "defined", "coordinated", "advised", "resolved", "escalated", "mapped",
+  "validated", "introduced", "documented", "secured", "drove", "scoped",
+  "negotiated", "facilitated", "recommended", "flagged", "connected",
+  "arranged", "prepared", "delivered", "reviewed", "confirmed", "submitted",
+];
+
+export function activityWritingRules() {
+  return `WHAT COUNTS AS ONE ACTIVITY
+- One record per meaningful engagement or completed body of work. Scheduling mail, replies, and routine coordination are part of the engagement they serve, not activities of their own.
+- Each occurrence of a recurring engagement (monthly sponsor sync, quarterly user group) is its own record.
+- One substantive conversation stays one record even when it covers several themes. Never reduce a broad strategic conversation to its easiest administrative topic — if a meeting covered adoption, an escalation, licensing, and enablement, the summary shows that breadth.
+- Split into separate records only when the sources describe genuinely separate engagements, audiences, dates, or outcomes.
+- Internal-only work is reportable only when it produced a decision, a plan, an escalation path, an ownership change, or a customer-facing consequence.
+- An outcome is not an extra activity. Describe it inside the activity that produced it.
+
+THE FOUR LABELLED PARTS — write each one, in this order, as plain sentences:
+- Summary: who took part (customer contacts by name with title or role when the sources give it, NI colleagues by role), what customer need, initiative, risk, or account objective drove the engagement, and what was actually discussed or delivered.
+- Contribution: what the CSM personally did, opened with a real verb — ${CONTRIBUTION_VERBS.slice(0, 12).join(", ")}. "Attended", "joined", "was present" are not contributions. Never claim sole ownership of work the wider account team did: when the FAE or AM led, say so and state the CSM's own part. When the sources show no CSM contribution beyond being in the room, write "Contribution: None beyond attendance" rather than inventing one.
+- Outcomes: what was actually confirmed — decisions, findings, customer feedback, risks, blockers. Keep confirmed results separate from intended ones: "the customer named the pilot site" is an outcome; "the pilot should validate the deployment model" is expected impact and is labelled as expected. "Outcomes: None stated" when the sources confirm nothing.
+- Next steps: the CSM's own next actions with owner and date when stated, plus any dependency or unresolved question that materially affects progress. "Next steps: None" when there are none.
+
+HONESTY RULES
+- Tie an activity to adoption, proficiency, retention, expansion, or risk reduction only where the sources support that link. Never assert revenue causation — no "drove renewal", "generated expansion", "secured the deal" unless a source says exactly that.
+- Never state attendance, regions, outcomes, or titles the sources do not give. "TBD" is the honest answer for an unknown attendee count.
+- Avoid the "Other" subtype when a specific one fits; reach for "Other" only when nothing else genuinely applies.`;
+}

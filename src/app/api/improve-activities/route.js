@@ -27,6 +27,9 @@ export async function POST(request) {
     const current = rows.map((r, index) => ({
       index, eventDate: clean(r.eventDate), title: clean(r.title), type: clean(r.type), subtype: clean(r.subtype),
       comments: clean(r.comments), agreement: clean(r.agreement), sourceTitle: clean(r.sourceTitle), origin: r.origin === "note" ? "note" : "generated",
+      // Concrete defects the deterministic lint already found, so the pass
+      // targets what is actually wrong instead of rewording everything.
+      ...(typeof r.issues === "string" && r.issues.trim() ? { knownIssues: clean(r.issues).slice(0, 600) } : {}),
     }));
     const guidance = clean(instructions);
 
@@ -58,6 +61,7 @@ Use the sources to preserve facts and correct errors. Never invent attendees, ou
 HARD LIMIT: comments must be at most 120 words AND 800 characters, never exceeded — this is a Salesforce field limit, not a target. Titles at most 200 characters. Use plain factual language, consolidate repetition, and avoid inflated executive impact. EA Admins are customer-side; NI-only meetings are internal. Classify using exact pairs from this taxonomy:
 ${taxonomyForReportPrompt()}
 
+Rows may carry "knownIssues": defects a deterministic check found (over the limit, first person, a placeholder, missing user-group format, and so on). Every row with knownIssues MUST receive a proposal that resolves each listed issue; fix the rest of the row only where it genuinely improves it.
 Return only one JSON object: {"message":"Brief summary of the improvement pass and any facts needing review","changes":[{"index":0,"title":"complete title","type":"exact type","subtype":"exact subtype","comments":"complete comment"}]}.
 Return changes=[] if no edits are needed. Never claim proposals have been saved or applied. In explanations, refer to the first row as activity 1, etc.; JSON index is zero-based.
 

@@ -122,6 +122,49 @@ Raw transcript saves are deduplicated. Uploading identical transcript content re
 the existing file, and saving changed content under the same transcript title updates
 that archive file instead of creating a numbered copy.
 
+### EA Activity entries
+
+Every generated note ends with an SFDC Activity Entry — the part that gets pasted into
+Salesforce verbatim. It carries a Salesforce-style **Activity Title**, the Type/Subtype
+pair, EA/EP numbers, a **Reportable** verdict, and a Summary/Notes block in four labelled
+parts:
+
+```
+Summary:      who took part with roles, what drove the engagement, what was covered
+Contribution: what the CSM personally did, opening with a real verb
+Outcomes:     what was confirmed (expected impact labelled as expected)
+Next steps:   the CSM's own actions, with owner and date when stated
+```
+
+Before you save, the note preview runs a **postability check** on that entry: Salesforce's
+800-character / 120-word limit, first person, the CSM's own name, leftover `[T1]` markers,
+placeholders, "CSM attended", corporate filler, a missing contribution, an unsupported
+revenue claim, and the user-group comment format. Fixes that cannot change meaning — name
+to "CSM", markers out, empty `Outcomes: None stated` fragments out — apply with one click;
+anything needing judgement is listed for you.
+
+Marking an entry **Reportable: No** (manager 1:1s, internal syncs with no decision, training
+you took) keeps it in the note but out of the EA Activity report, unless you tick *Include
+notes marked not reportable* when building the report.
+
+### The EA Activity report
+
+The report harvests the entry each note already carries — no model call, no reclassification —
+and only sends notes without one to the model. Both paths now share the same classification
+guidance and the same four-part comment format, so harvested and generated rows read
+identically.
+
+Every row is linted as it lands in the table. Red tags are what Salesforce or the reporting
+convention rejects as written; amber tags will read badly to whoever opens the record.
+**Fix N safe issues** applies the meaning-preserving fixes across every unfiled row at once,
+and whatever is left is handed to the improvement pass so it targets real defects instead of
+rewording rows that were already fine.
+
+Under the table, a portfolio review reads the quarter as a whole — the customer-facing to
+internal mix, over-concentration in one category, repeated `Other`, same-day duplicate titles,
+inconsistent EA/EP identifiers, invalid classifications, and long stretches with nothing
+logged. It costs nothing to run and updates as you edit rows.
+
 ### Upgrade an old meeting note
 
 1. Paste the old meeting transcript and select its customer folder.

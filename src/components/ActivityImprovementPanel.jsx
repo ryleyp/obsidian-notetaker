@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/apiClient";
 import { calcCost, formatCost, providerLabel } from "@/lib/models";
 import { IMPROVEMENT_FIELDS } from "@/lib/activityImprovement";
+import { describeIssues } from "@/lib/activityLint";
 
 export default function ActivityImprovementPanel({ rows, notes, settings, accountName, restoredIds, model, disabled, onApply, autoRun, onAutoRun }) {
   const [instructions, setInstructions] = useState("");
@@ -37,7 +38,7 @@ export default function ActivityImprovementPanel({ rows, notes, settings, accoun
     try {
       const response = await apiFetch("/api/improve-activities", {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: aborter.signal,
-        body: JSON.stringify({ rows, notes: notes || [], instructions, accountName,
+        body: JSON.stringify({ rows: rows.map((row) => ({ ...row, issues: describeIssues(row.lint || []) })), notes: notes || [], instructions, accountName,
           allAccounts: settings.accounts || [], replacements: settings.replacements || [], corrections: settings.corrections || [],
           restoredIds: [...restoredIds], apiKey: settings.apiKey || undefined,
           openaiApiKey: settings.openaiApiKey || undefined, model }),

@@ -1,4 +1,4 @@
-import { taxonomyForReportPrompt } from "@/lib/sfdcTaxonomy";
+import { activityWritingRules, classificationGuidance, taxonomyForReportPrompt } from "@/lib/sfdcTaxonomy";
 import { createModelClient } from "@/lib/modelClient";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
@@ -470,47 +470,31 @@ OUTPUT FORMAT — output ONLY newline-delimited JSON (NDJSON): exactly one JSON 
 Field rules:
 - **eventDate**: the date of the note this activity came from (YYYY-MM-DD, taken from the ### heading of the source)
 - **sourceTitle**: the exact title of the source note this activity came from, copied verbatim from its ### heading (the part after the date). Every row MUST cite its source.
-- **title**: short descriptive name matching the style of these real examples — "Beacon Systems RF User Group - March 2026", "CSM / FAE Cardinal Account Interlock", "NI Connect Promotional Email", "Acme Aerospace Proficiency Plan - LabVIEW Core Training Scheduling"
+- **title**: names the engagement AND its purpose, in the style of these real examples — "Beacon Systems RF User Group - March 2026", "CSM / FAE Cardinal Account Interlock", "NI Connect Promotional Email", "Acme Aerospace Proficiency Plan - LabVIEW Core Training Scheduling". "Engineering sponsor sync on adoption blockers and rollout timing" beats "Sponsor sync"
 - **type** and **subtype**: must exactly match one option from the taxonomy below
-- **comments**: HARD LIMIT 800 characters — this is pasted directly into the SFDC Comment field, and an over-limit comment cannot be filed. This is a Salesforce field limit, not a target: draft the comment, count the characters, then trim until it fits — cut the weakest detail, never the outcome. Past tense, no first person. Name specific contacts and titles. Lead with what happened and why it matters. Connect to adoption, expansion, renewal, or risk.
+- **comments**: four labelled parts on one line, in this order and exactly these labels — "Summary: ... Contribution: ... Outcomes: ... Next steps: ..." — matching the entries the CSM already writes in their notes, so harvested and generated rows read identically in the table. HARD LIMIT 800 characters for the whole thing: this is pasted directly into the SFDC Comment field and an over-limit comment cannot be filed. Draft it, count the characters, then trim — cut detail from Summary first, never the Contribution or Outcomes. Past tense, no first person.
 - **review**: set to true ONLY when you are genuinely unsure of the type/subtype classification (e.g. a session that could be either Demo Days or User Group), with a short reviewReason explaining the ambiguity. When confident, use false and an empty reviewReason.
 
-CLASSIFICATION PROCESS — for each activity, evaluate ALL 6 Type options before selecting. Do not stop at the first type that seems plausible:
-
-IMPORTANT DEFINITION — **EA Admin**: a customer-side IT administrator (employed by the customer account, not by NI) who runs the EA or maintains NI licensing on their company's behalf. EA Admins are NOT NI employees. Any meeting with an EA Admin is a customer-facing activity — never Internal Alignment.
-NI-side roles are NOT EA Admins: AMs (Account Managers), FAEs (Field Application Engineers), CSMs, and any other NI employee. A meeting attended only by NI-side roles (e.g. a CSM/FAE or CSM/AM sync with no customer contact present) is Internal Alignment & Collaboration, NOT an EA Admin Sync. Only classify something as EA Admin Sync or EA Admin Onboarding when an actual customer-side EA Admin is involved.
-
-1. **Entitlement Awareness & Promotion** — Is this about promoting EA entitlement awareness or usage? (emails, newsletters, training plans, shared portals)
-2. **Internal Alignment & Collaboration** — Was this NI-internal only with NO customer present? Did it produce a concrete decision or outcome? (If no clear outcome, skip it.) Any session that includes an EA Admin or any other customer contact is NOT internal.
-3. **Onboarding & Kick-Off** — Was this specifically onboarding a new EA Admin (customer-side) or new end users to the EA scope and entitlements?
-4. **Strategic Relationship Management** — Was this a 1:1 or small-group customer-facing governance or relationship sync that doesn't qualify as a User Group or Onboarding?
-5. **User Groups** — Was this a group session with multiple attendees (demo, user group, or planning/coordination for one)?
-6. **Value Realization & Success Stories** — Was the primary purpose to capture or communicate customer ROI, outcomes, or a success story?
-
-Tiebreaker rules:
-- If NI-internal only (zero customer contacts present) → Internal Alignment & Collaboration (not Strategic)
-- If group session with multiple attendees → User Groups (not Strategic)
-- If onboarding a new EA Admin (customer-side) or new end users → Onboarding & Kick-Off (not Strategic)
-- If capturing/writing ROI or a success story → Value Realization (not Strategic)
-- Strategic Relationship Management is a catch-all for customer-facing relationship activities only after ruling out all more-specific types above
-
-For each activity, silently verify your choice by asking: "Is there a more specific type that fits better than what I'm about to pick?" Only then write the row.
+${classificationGuidance()}
 
 EA ENGAGEMENT TYPE TAXONOMY — use the EXACT text shown below for both Type and Subtype (copy it character-for-character). Read descriptions and examples before picking.
 
 ${taxonomyForReportPrompt()}
 
+${activityWritingRules()}
+
 COMMENT REQUIREMENTS:
 - Voice: the same voice as the SFDC entries in the CSM's own notes — past tense, no first person ("I"/"we"). Write like a CSM in their late twenties, a couple years into the role, with an engineering degree: reads like notes typed up right after the call, not an AI-cleaned recap or an executive brief. Plain, conversational-professional language, no heavy business jargon ("synergy," "leverage," "circle back," "bandwidth," "actionable," "value-add"), no stiff transitions or corporate filler. Refer to the CSM as "CSM" when a subject is needed, but don't force every sentence to start with it.
 - Name specific people by name and title when available (e.g., "Dana Whitfield, IT Admin Lead")
 - Every comment must answer: what happened, who was involved, and why it matters — do not just describe logistics
-- State outcomes explicitly: what did this drive? (adoption, expansion signal, renewal positioning, risk reduction, customer momentum)
 - Describe what the CSM actually did when the sources show it — drove, defined, coordinated, decided — not just that a meeting occurred. The CSM often attends as an observer (customer-run sessions, FAE-led demos, AM-led calls); in those cases say who led and describe the session, but never write that the CSM observed, listened, or merely attended — leave the CSM's participation unmentioned. Never manufacture CSM leadership the sources don't support
-- Connect to revenue where possible — note how the activity ties to expansion, adoption health, or renewal
 - Be specific — reference actual product names, site names, topics discussed, decisions made
 - For Demo Days and User Groups: always include Region, Attendees (or TBD), topics, and Outcome
 - HARD LIMIT: every comment must be 800 characters or fewer — count before finalizing each row, and trim any that run over. Use the full space when the detail is there, but never exceed the limit.
 - Skip activities that are purely logistics with no outcome (routine calendar holds, placeholder reminders with no substance)
+- Skip what a CSM would never log as an EA engagement: manager 1:1s, team or staff meetings, career or scorecard conversations, training the CSM took themselves
+
+POSTABILITY CHECK — every row is pasted into Salesforce as written. Before emitting a row confirm: 800 characters / 120 words or fewer; no "I", "we", "our", "my"; the CSM's name appears nowhere (say "CSM"); no source markers like [T1], no Markdown, no placeholders like [Name] or [#] (an honest "TBD" for an attendee count is fine); no "CSM attended / observed / listened"; no corporate filler; all four labels present (Summary, Contribution, Outcomes, Next steps); a Contribution that opens with a real verb rather than "attended"; no revenue causation the sources do not state; Type and Subtype copied character-for-character. A row that fails any of these is rewritten, not emitted.
 
 SOURCES (${rangeLabel}):
 

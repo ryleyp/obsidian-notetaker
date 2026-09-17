@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   cleanActivityTitle,
   csmNameToRole,
+  fixNoteEntry,
   harvestNotes,
   harvestSfdcRow,
   isInternalCheckIn,
+  lintNoteEntry,
   normalizeAgreements,
+  reportableField,
 } from "./sfdcHarvest";
+import { parseGoalContributions } from "./goals";
 
 const NOTE_WITH_ENTRY = {
   date: "2026-08-20",
@@ -127,5 +131,99 @@ describe("harvestNotes", () => {
     const { rows, skipped } = harvestNotes([oneOnOne], { skipInternalCheckIns: false });
     expect(rows).toHaveLength(1);
     expect(skipped).toEqual([]);
+  });
+});
+
+const NOTE_WITH_NEW_FIELDS = {
+  date: "2026-09-02",
+  title: "2026-09-02 - Email - RE: license question",
+  content: `# 2026-09-02 - Email - RE: license question
+
+## SFDC Activity Entry
+
+**Activity Title:** Acme Aerospace EA Admin Sync - License Server
+**Type:** Strategic Relationship Management
+**Subtype:** EA Admin Sync
+**EA/EP Number(s):** EA 15552
+**Reportable:** Yes
+
+**Summary/Notes:**
+Summary: Dana Whitfield, IT Admin Lead, asked about the license server move [T1].
+Contribution: CSM mapped the dependency and advised on sequencing.
+Outcomes: None stated.
+Next steps: CSM to confirm the server hostname with IT.
+`,
+};
+
+describe("harvest with the note-time title, reportable flag, and lint", () => {
+  it("prefers the entry's own Salesforce title over the file name", () => {
+    const row = harvestSfdcRow(NOTE_WITH_NEW_FIELDS);
+    expect(row.title).toBe("Acme Aerospace EA Admin Sync - License Server");
+    expect(row.sourceTitle).toBe(NOTE_WITH_NEW_FIELDS.title);
+  });
+
+  it("applies the safe fixes and reports the rest", () => {
+    const row = harvestSfdcRow(NOTE_WITH_NEW_FIELDS);
+    // Marker stripped, empty outcome fragment stripped, real next step kept.
+    expect(row.comments).toBe("Summary: Dana Whitfield, IT Admin Lead, asked about the license server move. Contribution: CSM mapped the dependency and advised on sequencing. Next steps: CSM to confirm the server hostname with IT.");
+    expect(row.lint).toEqual([]);
+    expect(row.review).toBe(false);
+  });
+
+  it("marks hard problems for review with the reason", () => {
+    const row = harvestSfdcRow({
+      ...NOTE_WITH_NEW_FIELDS,
+      content: NOTE_WITH_NEW_FIELDS.content.replace("Dana Whitfield, IT Admin Lead, asked", "I asked Dana " + "and then ".repeat(60)),
+    });
+    expect(row.review).toBe(true);
+    expect(row.lint.map((i) => i.code)).toEqual(expect.arrayContaining(["over-limit", "first-person"]));
+    expect(row.reviewReason).toContain("first person");
+  });
+
+  it("reads the reportable flag, defaulting to yes for older notes", () => {
+    expect(reportableField("**Reportable:** No — manager 1:1")).toEqual({ reportable: false, reason: "manager 1:1" });
+    expect(reportableField("**Reportable:** Yes")).toEqual({ reportable: true, reason: "" });
+    expect(reportableField("**Type:** Other")).toEqual({ reportable: true, reason: "" });
+  });
+
+  it("keeps non-reportable notes out of the report unless asked", () => {
+    const internal = {
+      ...NOTE_WITH_NEW_FIELDS,
+      title: "Weekly sync with manager",
+      content: NOTE_WITH_NEW_FIELDS.content.replace("**Reportable:** Yes", "**Reportable:** No — internal sync, no decision"),
+    };
+    const { rows, skipped } = harvestNotes([internal]);
+    expect(rows).toEqual([]);
+    expect(skipped).toEqual([{ title: "Weekly sync with manager", reason: "not reportable — internal sync, no decision" }]);
+    expect(harvestNotes([internal], { skipInternalCheckIns: false }).rows).toHaveLength(1);
+  });
+});
+
+describe("note-level entry check", () => {
+  it("lints the entry inside a note and fixes only the safe parts", () => {
+    const check = lintNoteEntry(NOTE_WITH_NEW_FIELDS.content, { ownerNames: ["Ryley"] });
+    expect(check.issues.map((i) => i.code)).toEqual(expect.arrayContaining(["citations", "no-outcome"]));
+    expect(check.fixable).toBe(2);
+
+    const { content, applied } = fixNoteEntry(NOTE_WITH_NEW_FIELDS.content, { ownerNames: ["Ryley"] });
+    expect(applied).toEqual(expect.arrayContaining(["citations", "no-outcome"]));
+    expect(content).toContain("asked about the license server move.\nContribution: CSM mapped the dependency and advised on sequencing.\nNext steps: CSM to confirm");
+    expect(content).not.toContain("[T1]");
+    expect(content).not.toContain("Outcomes: None stated");
+    // Everything outside the block is untouched.
+    expect(content).toContain("**Activity Title:** Acme Aerospace EA Admin Sync - License Server");
+    expect(content.startsWith("# 2026-09-02 - Email - RE: license question")).toBe(true);
+    expect(lintNoteEntry(content).issues).toEqual([]);
+  });
+
+  it("returns nothing for a note without an entry and leaves it unchanged", () => {
+    expect(lintNoteEntry("# Plain\n\n## Meeting Notes\n\n- x")).toBeNull();
+    expect(fixNoteEntry("# Plain").content).toBe("# Plain");
+  });
+
+  it("does not disturb the goal contributions section beside the entry", () => {
+    const withGoals = NOTE_WITH_NEW_FIELDS.content.replace("## SFDC Activity Entry", "## Goal Contributions\n\n- **Goal:** Case studies | **Contribution:** Kicked it off\n\n---\n\n## SFDC Activity Entry");
+    const { content } = fixNoteEntry(withGoals);
+    expect(parseGoalContributions(content)).toHaveLength(1);
   });
 });

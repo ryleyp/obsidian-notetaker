@@ -18,6 +18,8 @@ import { useReportWorkflow, TODAY } from "@/hooks/useReportWorkflow";
 import { ScanButton, CountsBadges, NoteList, GeneratePanel, PreflightPanel, OutputHeader, HistoryMenu, BleedWarning, StrictToggle } from "@/components/ReportSections";
 import { parseActivityRows, rowsToNDJSON, rowsToMarkdown, sortRowsByDate } from "@/lib/activityRows";
 import { harvestNotes } from "@/lib/sfdcHarvest";
+import { fixActivityRow, lintActivityRow, lintSummary } from "@/lib/activityLint";
+import { reviewActivityPortfolio } from "@/lib/activityPortfolio";
 import { isFiled, loadFiledRows, markFiled, recentFiledRows } from "@/lib/filedRows";
 import { consumeSseText } from "@/lib/sseClient";
 
@@ -178,9 +180,11 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   }, [draftHistory, historyReady, reportHistoryKey]);
 
   // Notes whose saved SFDC entry can be used as-is vs. notes Claude must read.
+  const agreementsOnFile = !!((settings.accounts || []).find((a) => a.name === detectAccount(wf.selectedFolder, settings.accounts).name)?.agreements || [])
+    .some((g) => String(g?.number || "").trim());
   const harvestPlan = useMemo(
-    () => harvestNotes(wf.activeNotes || [], { ownerNames: settings.ownerNames || [], skipInternalCheckIns: !includeInternal }),
-    [wf.activeNotes, settings.ownerNames, includeInternal]
+    () => harvestNotes(wf.activeNotes || [], { ownerNames: settings.ownerNames || [], skipInternalCheckIns: !includeInternal, agreementsOnFile }),
+    [wf.activeNotes, settings.ownerNames, includeInternal, agreementsOnFile]
   );
 
   const findSourceNote = (row) => {
@@ -194,6 +198,8 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
 
   // Rows are newest-first and decorated with filed state and, for generated
   // rows, the EA/EP number(s) matched from the source note's keywords.
+  // Every row — harvested or generated — is linted on the way in, so what
+  // the table shows is what would actually post.
   const rows = useMemo(() => {
     return sortRowsByDate(parseActivityRows(wf.output)).map((row) => {
       let agreement = row.agreement;
@@ -201,10 +207,27 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
         const note = findSourceNote(row);
         if (note) agreement = suggestAgreements(note.content || "", account).map((g) => `${g.type} ${g.number}`).join(", ");
       }
-      return { ...row, agreement, filed: isFiled(filedMap, row) };
+      const decorated = { ...row, agreement, filed: isFiled(filedMap, row) };
+      return { ...decorated, lint: lintActivityRow(decorated, { ownerNames: settings.ownerNames || [], agreementsOnFile }) };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wf.output, filedMap, account, wf.loadedNotes]);
+  }, [wf.output, filedMap, account, wf.loadedNotes, settings.ownerNames, agreementsOnFile]);
+  const issueSummary = useMemo(() => lintSummary(rows), [rows]);
+  const portfolio = useMemo(() => reviewActivityPortfolio(rows, { rangeStart, rangeEnd }), [rows, rangeStart, rangeEnd]);
+
+  // The safe fixes for every unfiled row at once — the CSM's name to "CSM",
+  // markers out, empty fragments out, title noise off. One undo step.
+  function fixSafeIssues() {
+    let changed = 0;
+    const next = rows.map((row) => {
+      if (row.filed) return row;
+      const result = fixActivityRow(row, { ownerNames: settings.ownerNames || [] });
+      if (!result.changed) return row;
+      changed += 1;
+      return result.row;
+    });
+    if (changed) commitRows(next, `Fixed safe issues in ${changed} row${changed !== 1 ? "s" : ""}`);
+  }
 
   // note title (lowercased) -> origin, so the table can badge cross-folder sources
   const sourceInfo = useMemo(() => {
@@ -741,10 +764,10 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
                       Skipping {harvestPlan.skipped.length}: {harvestPlan.skipped.map((s) => `${s.title} (${s.reason})`).join("; ")}.
                     </span>
                   )}
-                  {(harvestPlan.skipped.some((s) => s.reason === "internal check-in") || includeInternal) && (
+                  {(harvestPlan.skipped.some((s) => s.reason === "internal check-in" || s.reason.startsWith("not reportable")) || includeInternal) && (
                     <label className="block mt-1 text-xs text-gray-500 cursor-pointer">
                       <input type="checkbox" className="mr-1 align-middle" checked={includeInternal} onChange={(e) => setIncludeInternal(e.target.checked)} />
-                      Include internal check-ins (1:1s, team meetings) in this report
+                      Include notes marked not reportable (1:1s, team meetings, internal syncs) in this report
                     </label>
                   )}
                 </>
@@ -891,6 +914,9 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
               classifying={classifying}
               onApplySuggestion={applySuggestion}
               onDismissSuggestion={dismissSuggestion}
+              issueSummary={issueSummary}
+              onFixIssues={fixSafeIssues}
+              portfolio={portfolio}
             />
           )}
           {wf.synthesizing && !wf.output && (
