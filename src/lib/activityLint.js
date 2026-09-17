@@ -49,6 +49,8 @@ const REVENUE_CLAIM = /\b(?:drove|generated|secured|delivered|produced|resulted 
 const ROLE_WORD = /\b(?:admin|administrator|lead|leads|manager|director|engineer|engineering|sponsor|architect|technician|scientist|analyst|owner|principal|supervisor)\b/i;
 const ROLE_ACRONYM = /\b(?:VP|CTO|CIO|FAE|AM|GTS|IT|PM|QA|R&D)\b/;
 const TITLE_GENERIC = /^(?:sync|meeting|call|check[- ]?in|touchpoint|discussion|update|follow[- ]?up|catch[- ]?up|chat|review|session)$/i;
+const ATTENDANCE_TBD = /\b(?:attendees|participants):\s*TBD\b/i;
+const GROUP_SUBTYPES = ["Demo Days", "User Group"];
 
 export const wordCount = (text) => String(text || "").trim().split(/\s+/).filter(Boolean).length;
 
@@ -111,11 +113,12 @@ function collapse(text) {
 
 // Every problem with a row, most serious first. Pure and cheap — safe to run
 // on every render.
-export function lintActivityRow(row, { ownerNames = [], agreementsOnFile = false } = {}) {
+export function lintActivityRow(row, { ownerNames = [], agreementsOnFile = false, today = new Date() } = {}) {
   const issues = [];
   const push = (code, severity, message, fixable = false) => issues.push({ code, severity, message, fixable });
   const title = String(row?.title || "");
   const comment = String(row?.comments || "");
+  const body = collapse(comment);
   const type = String(row?.type || "");
   const subtype = String(row?.subtype || "");
 
@@ -148,7 +151,6 @@ export function lintActivityRow(row, { ownerNames = [], agreementsOnFile = false
 
   // The reporting standard the account team reviews against: one record that
   // shows context, the CSM's own contribution, and a confirmed result.
-  const body = collapse(comment);
   if (body) {
     // An entry with no labels at all is free prose. One whose "Outcomes:
     // None stated" was stripped as Salesforce noise is not missing structure,
@@ -173,6 +175,24 @@ export function lintActivityRow(row, { ownerNames = [], agreementsOnFile = false
   }
   if (type === "Other" || subtype === "Other") {
     push("other-category", "soft", "Filed as \"Other\" — check whether a specific category fits before posting.");
+  }
+
+  // Status has to match reality: a record still sitting in "Planned" after
+  // its date is the single most common thing a quarter-end review catches.
+  const status = String(row?.status || "Completed");
+  const eventDate = String(row?.eventDate || "");
+  const inThePast = /^\d{4}-\d{2}-\d{2}$/.test(eventDate) && new Date(`${eventDate}T12:00:00`) < today;
+  if (status === "Planned" && inThePast) {
+    push("stale-planned", "hard", "Still marked Planned although its date has passed — update it with what happened, or cancel it.");
+  }
+  if (status === "Canceled" && !/\b(?:cancel|postpon|reschedul|declin|no[- ]show|did not|didn't)\w*\b/i.test(body)) {
+    push("canceled-no-reason", "soft", "Canceled with no reason recorded.");
+  }
+  if (status === "Planned" && /\bOutcomes?:\s*(?!None\b)\S/i.test(body)) {
+    push("planned-with-outcome", "hard", "A planned record cannot already have an outcome.");
+  }
+  if (GROUP_SUBTYPES.includes(subtype) && inThePast && ATTENDANCE_TBD.test(body)) {
+    push("attendance-tbd", "soft", "Event has happened but attendance is still TBD — fill in the final count.");
   }
 
   const rank = { hard: 0, soft: 1 };
@@ -217,7 +237,10 @@ export function lintSummary(rows = [], options = {}) {
     rowsWithIssues += 1;
     for (const issue of issues) {
       if (issue.severity === "hard") hard += 1; else soft += 1;
-      if (issue.fixable) fixable += 1;
+      // A row already filed in Salesforce is left alone by the bulk fix —
+      // editing it here would misrepresent what was actually filed — so its
+      // issues are reported but never counted as fixable.
+      if (issue.fixable && !row?.filed) fixable += 1;
     }
   }
   return { hard, soft, fixable, rowsWithIssues };
@@ -256,4 +279,8 @@ export const LINT_RULES = [
   { code: "no-participants", severity: "soft", catches: "Nobody named and no role given.", fix: "Name the customer contact with their title when the sources give it." },
   { code: "weak-title", severity: "soft", catches: "A title naming the engagement but not its purpose, or under four words.", fix: "Add the initiative, team, site, or product." },
   { code: "other-category", severity: "soft", catches: "Type or Subtype filed as \"Other\".", fix: "Check whether a specific category fits. Repeated \"Other\" is a taxonomy gap worth raising." },
+  { code: "stale-planned", severity: "hard", catches: "A record still marked Planned after its date has passed.", fix: "Update it with what actually happened and mark it Completed, or cancel it with a reason." },
+  { code: "planned-with-outcome", severity: "hard", catches: "An outcome on a record for something that has not happened yet.", fix: "Remove the outcome until the engagement occurs, or correct the status." },
+  { code: "canceled-no-reason", severity: "soft", catches: "A canceled record with no reason recorded.", fix: "Say briefly why it did not happen — postponed, declined, rescheduled." },
+  { code: "attendance-tbd", severity: "soft", catches: "A past user group or demo still showing \"Attendees: TBD\".", fix: "Fill in the final count now that the event has happened." },
 ];

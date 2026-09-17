@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { parseActivityRows, parseReportTable, rowsToMarkdown, rowsToNDJSON, sortRowsByDate } from "@/lib/activityRows";
+import { parseActivityRows, parseReportRows, parseReportTable, rowsToMarkdown, rowsToNDJSON, sortRowsByDate } from "@/lib/activityRows";
 
-const ROW = { eventDate: "2026-04-12", title: "EA Admin Sync", type: "Strategic Relationship Management", subtype: "EA Admin Sync", comments: "CSM synced with Dana Voss.", agreement: "", sourceTitle: "Q2 Admin Sync", origin: "generated", suggestedType: "", suggestedSubtype: "", suggestReason: "", review: false, reviewReason: "", verify: "", verifyReason: "" };
+const ROW = { eventDate: "2026-04-12", title: "EA Admin Sync", type: "Strategic Relationship Management", subtype: "EA Admin Sync", comments: "CSM synced with Dana Voss.", agreement: "", sourceTitle: "Q2 Admin Sync", origin: "generated", status: "Completed", suggestedType: "", suggestedSubtype: "", suggestReason: "", review: false, reviewReason: "", verify: "", verifyReason: "" };
 
 describe("parseActivityRows", () => {
   it("parses one JSON object per line", () => {
@@ -46,7 +46,7 @@ describe("rowsToMarkdown", () => {
   it("renders a well-formed table and escapes pipes in cells", () => {
     const md = rowsToMarkdown([{ ...ROW, comments: "A | B" }]);
     const lines = md.split("\n");
-    expect(lines[0]).toBe("| Filed | Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |");
+    expect(lines[0]).toBe("| Filed | Status | Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |");
     expect(lines[2]).toContain("A \\| B");
     // Every line has the same number of unescaped column separators
     const cols = (l) => (l.replace(/\\\|/g, "").match(/\|/g) || []).length;
@@ -120,7 +120,7 @@ describe("Filed column round trip", () => {
       { ...ROW, filed: true },
       { ...ROW, title: "Second | pipe", eventDate: "2026-04-13", filed: false },
     ]);
-    expect(md.split("\n")[0]).toBe("| Filed | Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |");
+    expect(md.split("\n")[0]).toBe("| Filed | Status | Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |");
     expect(parseReportTable(md)).toEqual([
       { eventDate: "2026-04-12", title: "EA Admin Sync", filed: true },
       { eventDate: "2026-04-13", title: "Second | pipe", filed: false },
@@ -143,5 +143,48 @@ describe("Filed column round trip", () => {
       "| [ ] | 2026-04-14 | Open | T | S |  | c |",
     ].join("\n");
     expect(parseReportTable(edited).map((r) => r.filed)).toEqual([true, true, false]);
+  });
+});
+
+describe("parseReportRows", () => {
+  it("reads a saved report back as complete, editable rows", () => {
+    const rows = [
+      { ...ROW, filed: true, comments: "Summary: Met Dana | Voss. Contribution: CSM advised." },
+      { ...ROW, title: "RF User Group", type: "User Groups", subtype: "Demo Days", eventDate: "2026-05-02", status: "Planned" },
+    ];
+    const reopened = parseReportRows(rowsToMarkdown(rows));
+
+    expect(reopened).toHaveLength(2);
+    expect(reopened[0]).toMatchObject({
+      eventDate: "2026-04-12",
+      title: "EA Admin Sync",
+      type: "Strategic Relationship Management",
+      subtype: "EA Admin Sync",
+      sourceTitle: "Q2 Admin Sync",
+      status: "Completed",
+      filed: true,
+      // A saved report was reviewed once already.
+      origin: "note",
+    });
+    // The escaped pipe survives the round trip.
+    expect(reopened[0].comments).toBe("Summary: Met Dana | Voss. Contribution: CSM advised.");
+    expect(reopened[1]).toMatchObject({ status: "Planned", subtype: "Demo Days", filed: false });
+  });
+
+  it("reads an older report written before Filed and Status existed", () => {
+    const legacy = [
+      "| Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |",
+      "|---|---|---|---|---|---|---|",
+      "| 2026-04-12 | EA Admin Sync | Strategic Relationship Management | EA Admin Sync | EA 15552 | Q2 Admin Sync | Summary: x. |",
+    ].join("\n");
+    const rows = parseReportRows(legacy);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ status: "Completed", filed: false, agreement: "EA 15552" });
+  });
+
+  it("returns nothing for prose or a table that is not a report", () => {
+    expect(parseReportRows("# EA Activity Report\n\nNo table here.")).toEqual([]);
+    expect(parseReportRows("| A | B |\n|---|---|\n| 1 | 2 |")).toEqual([]);
+    expect(parseReportRows("")).toEqual([]);
   });
 });

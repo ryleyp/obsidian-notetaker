@@ -16,6 +16,36 @@ const INTERNAL_SHARE_LIMIT = 0.35;
 const CONCENTRATION_LIMIT = 0.6;
 const OTHER_SHARE_LIMIT = 0.2;
 const QUIET_GAP_DAYS = 45;
+const DEPTH_MIN_ROWS = 5;
+
+// Senior stakeholders the coverage review looks for. An account logged
+// entirely against its admin has no visibility above the person who
+// administers the licences.
+const SENIOR_ROLE = /\b(?:director|manager|sponsor|VP|vice president|head of|chief|CTO|CIO|executive|principal)\b/i;
+
+// People named in a comment: two capitalised words in a row, minus the
+// labels and acronyms that are not people.
+const NOT_A_PERSON = new Set([
+  "Summary", "Contribution", "Outcomes", "Outcome", "Next", "Region", "Attendees",
+  "Participants", "Type", "Subtype", "None", "The", "This", "That", "EA", "EP",
+  "NI", "CSM", "FAE", "AM", "IT",
+  // Titles and roles pair up like names ("Admin Lead", "Engineering Director").
+  "Admin", "Administrator", "Lead", "Manager", "Director", "Engineer", "Engineering",
+  "Sponsor", "Architect", "Technician", "Scientist", "Analyst", "Owner", "Principal",
+  "Supervisor", "Vice", "President", "Head", "Chief", "Executive", "Team", "Group",
+  "User", "Site", "Lab", "Server", "License", "Training", "Support", "Account",
+]);
+
+function namedPeople(rows) {
+  const names = new Set();
+  for (const row of rows) {
+    for (const match of String(row?.comments || "").matchAll(/\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b/g)) {
+      if (NOT_A_PERSON.has(match[1]) || NOT_A_PERSON.has(match[2])) continue;
+      names.add(`${match[1]} ${match[2]}`.toLowerCase());
+    }
+  }
+  return names;
+}
 
 const normalizeTitle = (title) => String(title || "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -23,11 +53,11 @@ function daysBetween(earlier, later) {
   return Math.round((later - earlier) / 86_400_000);
 }
 
-export function reviewActivityPortfolio(rows = [], { rangeStart = "", rangeEnd = "" } = {}) {
+export function reviewActivityPortfolio(rows = [], { rangeStart = "", rangeEnd = "", today = new Date() } = {}) {
   const findings = [];
   const add = (code, message) => findings.push({ code, message });
   const total = rows.length;
-  if (!total) return { findings, stats: { total: 0, internal: 0, customerFacing: 0, other: 0, byType: [] } };
+  if (!total) return { findings, stats: { total: 0, internal: 0, customerFacing: 0, other: 0, byType: [], stalePlanned: 0 } };
 
   const counts = new Map();
   for (const row of rows) {
@@ -96,6 +126,29 @@ export function reviewActivityPortfolio(rows = [], { rangeStart = "", rangeEnd =
     }
   }
 
+  // Status hygiene: what a quarter-end review catches first.
+  const stalePlanned = rows.filter((row) => {
+    const date = String(row?.eventDate || "");
+    return row?.status === "Planned" && /^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T12:00:00`) < today;
+  }).length;
+  if (stalePlanned) {
+    add("stale-planned", `${stalePlanned} record${stalePlanned !== 1 ? "s are" : " is"} still Planned after their date. Update them with what happened or cancel them before this period closes.`);
+  }
+
+  // Stakeholder depth — an account carried by one contact, or logged
+  // entirely below the level where renewals are decided.
+  if (total >= DEPTH_MIN_ROWS) {
+    const people = namedPeople(rows);
+    if (people.size === 1) {
+      add("single-contact", `Every activity names the same one contact. An account resting on a single relationship is a risk worth naming before someone else notices it.`);
+    } else if (people.size === 0) {
+      add("no-contacts", "No customer contact is named anywhere in the report — a reader cannot tell who this account's relationships are with.");
+    }
+    if (!rows.some((row) => SENIOR_ROLE.test(String(row?.comments || "")))) {
+      add("no-senior-stakeholder", "No director, manager, or sponsor appears in any activity. Coverage reviews read that as engagement below the level where renewals are decided.");
+    }
+  }
+
   const unclassified = rows.filter((row) => {
     const entry = SFDC_TAXONOMY.find((t) => t.type === row?.type);
     return !entry || !entry.subtypes.some((sub) => sub.name === row?.subtype);
@@ -106,6 +159,6 @@ export function reviewActivityPortfolio(rows = [], { rangeStart = "", rangeEnd =
 
   return {
     findings,
-    stats: { total, internal, customerFacing, other, byType },
+    stats: { total, internal, customerFacing, other, byType, stalePlanned },
   };
 }

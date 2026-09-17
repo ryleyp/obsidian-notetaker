@@ -13,14 +13,19 @@ const row = (over = {}) => ({
 
 const codes = (rows, options) => reviewActivityPortfolio(rows, options).findings.map((f) => f.code);
 
-// Six rows spread across three types and three months: a healthy shape.
+// Six rows across three types and three months, several named contacts and a
+// director in the mix: the shape a coverage review should pass silently.
+const withPerson = (over, person) => row({
+  comments: `Summary: ${person} raised it. Contribution: CSM escalated. Outcomes: Confirmed.`,
+  ...over,
+});
 const healthy = [
-  row({ eventDate: "2026-07-05", title: "Acme RF User Group - July", type: "User Groups", subtype: "User Group" }),
-  row({ eventDate: "2026-07-20", title: "Acme Admin Sync - Licensing" }),
-  row({ eventDate: "2026-08-04", title: "Acme Case Study - SystemLink", type: "Value Realization & Success Stories", subtype: "Case Study" }),
-  row({ eventDate: "2026-08-18", title: "Acme Admin Sync - Server Move" }),
-  row({ eventDate: "2026-09-02", title: "Acme Training Plan - Core 1", type: "Entitlement Awareness & Promotion", subtype: "Training/Support Plans" }),
-  row({ eventDate: "2026-09-10", title: "Acme Sponsor Sync - Adoption" }),
+  withPerson({ eventDate: "2026-07-05", title: "Acme RF User Group - July", type: "User Groups", subtype: "User Group" }, "Avery Stone, lab manager,"),
+  withPerson({ eventDate: "2026-07-20", title: "Acme Admin Sync - Licensing" }, "Dana Whitfield, the admin,"),
+  withPerson({ eventDate: "2026-08-04", title: "Acme Case Study - SystemLink", type: "Value Realization & Success Stories", subtype: "Case Study" }, "Jordan Blake, engineering director,"),
+  withPerson({ eventDate: "2026-08-18", title: "Acme Admin Sync - Server Move" }, "Dana Whitfield"),
+  withPerson({ eventDate: "2026-09-02", title: "Acme Training Plan - Core 1", type: "Entitlement Awareness & Promotion", subtype: "Training/Support Plans" }, "Sam Porter"),
+  withPerson({ eventDate: "2026-09-10", title: "Acme Sponsor Sync - Adoption" }, "Jordan Blake"),
 ];
 
 describe("reviewActivityPortfolio", () => {
@@ -71,6 +76,44 @@ describe("reviewActivityPortfolio", () => {
   });
 
   it("handles an empty report", () => {
-    expect(reviewActivityPortfolio([])).toEqual({ findings: [], stats: { total: 0, internal: 0, customerFacing: 0, other: 0, byType: [] } });
+    expect(reviewActivityPortfolio([])).toEqual({ findings: [], stats: { total: 0, internal: 0, customerFacing: 0, other: 0, byType: [], stalePlanned: 0 } });
+  });
+});
+
+describe("status hygiene and stakeholder depth", () => {
+  const today = new Date("2026-09-17T12:00:00");
+  const withNames = (over = {}, name = "Dana Whitfield", role = "IT Admin Lead") =>
+    row({ comments: `Summary: ${name}, ${role}, raised it. Contribution: CSM advised. Outcomes: Done.`, ...over });
+
+  it("flags records left in Planned after their date", () => {
+    const rows = [row({ status: "Planned", eventDate: "2026-08-01" }), row({ title: "b", eventDate: "2026-08-02" })];
+    const { findings, stats } = reviewActivityPortfolio(rows, { today });
+    expect(findings.map((f) => f.code)).toContain("stale-planned");
+    expect(stats.stalePlanned).toBe(1);
+    // A future commitment is not stale.
+    expect(codes([row({ status: "Planned", eventDate: "2026-11-01" })], { today })).not.toContain("stale-planned");
+  });
+
+  it("flags an account resting on one contact, and one with none named", () => {
+    const oneContact = Array.from({ length: 5 }, (_, i) => withNames({ title: `Acme Sync ${i}`, eventDate: `2026-08-0${i + 1}` }));
+    expect(codes(oneContact, { today })).toContain("single-contact");
+
+    const twoContacts = [...oneContact.slice(0, 3), withNames({ title: "Acme Sponsor Sync", eventDate: "2026-08-06" }, "Priya Raghavan", "Engineering Director")];
+    expect(codes([...twoContacts, withNames({ title: "Acme UG", eventDate: "2026-08-07" }, "Avery Stone", "Lab Manager")], { today })).not.toContain("single-contact");
+
+    const anonymous = Array.from({ length: 5 }, (_, i) => row({ title: `Acme Sync ${i}`, eventDate: `2026-08-0${i + 1}`, comments: "Summary: Reviewed it. Contribution: CSM advised. Outcomes: Done." }));
+    expect(codes(anonymous, { today })).toContain("no-contacts");
+  });
+
+  it("flags a report logged entirely below sponsor level", () => {
+    const adminOnly = Array.from({ length: 5 }, (_, i) => withNames({ title: `Acme Admin Sync ${i}`, eventDate: `2026-08-0${i + 1}` }, `Contact ${i}`.replace(/\d/, "Person"), "IT Admin Lead"));
+    expect(codes(adminOnly, { today })).toContain("no-senior-stakeholder");
+
+    const withSponsor = [...adminOnly.slice(0, 4), withNames({ title: "Acme Sponsor Sync", eventDate: "2026-08-09" }, "Priya Raghavan", "Engineering Director")];
+    expect(codes(withSponsor, { today })).not.toContain("no-senior-stakeholder");
+  });
+
+  it("stays quiet about depth on a short report", () => {
+    expect(codes([withNames(), withNames({ title: "b", eventDate: "2026-08-13" })], { today })).not.toContain("single-contact");
   });
 });

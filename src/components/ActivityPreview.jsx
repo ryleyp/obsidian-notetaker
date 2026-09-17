@@ -7,6 +7,7 @@ import { rowsToMarkdown } from "@/lib/activityRows";
 const COMMENT_LIMIT = 800;
 
 const COLUMNS = [
+  { key: "status", label: "Status" },
   { key: "eventDate", label: "Event Date" },
   { key: "title", label: "Title" },
   { key: "type", label: "Type" },
@@ -20,7 +21,7 @@ export default function ActivityPreview({
   rows, rawText, streaming, onUpdateRow, onSave, saving, saved, savedPath, cost, sourceInfo,
   onVerify, onVerifyRow, verifying, verifyingRow, onFlagBleed, onToggleFiled, onRegenerateRow, regeneratingRow,
   onCheckClassifications, classifying, onApplySuggestion, onDismissSuggestion,
-  issueSummary, onFixIssues, portfolio,
+  issueSummary, onFixIssues, portfolio, statuses = [], openedReport,
 }) {
   const [viewMode, setViewMode] = useState("table");
   const [copiedKey, setCopiedKey] = useState(null);
@@ -220,11 +221,30 @@ export default function ActivityPreview({
                         const key = `${r}-${c.key}`;
                         const text = row[c.key] || "";
                         const isComment = c.key === "comments";
+                        const isStatus = c.key === "status";
                         const isTitle = c.key === "title";
                         const isSourceTitle = c.key === "sourceTitle";
                         const meta = isSourceTitle ? sourceMeta(row) : null;
                         const over = isComment && text.length > COMMENT_LIMIT;
                         const isEditing = editing === key;
+
+                        if (isStatus) {
+                          const value = text || "Completed";
+                          return (
+                            <td key={c.key} className="border border-gray-200 px-1 py-1.5 align-top">
+                              <select
+                                aria-label="Activity status"
+                                value={value}
+                                onChange={(e) => onUpdateRow(r, { status: e.target.value })}
+                                className={`w-full bg-transparent text-xs ${value === "Planned" ? "text-blue-700" : value === "Canceled" ? "text-gray-400" : "text-gray-700"}`}
+                              >
+                                {(statuses.length ? statuses : [value]).map((option) => (
+                                  <option key={option} value={option}>{option}</option>
+                                ))}
+                              </select>
+                            </td>
+                          );
+                        }
 
                         if (isComment && isEditing) {
                           return (

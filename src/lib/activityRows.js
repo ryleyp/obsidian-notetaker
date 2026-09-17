@@ -6,6 +6,11 @@ import { isCanonicalPair } from "./sfdcTaxonomy";
 // unreachable, so trimming stays the CSM's call.
 const MAX_COMMENT_CHARS = 4000;
 
+// A record is Completed unless it is a real future commitment (Planned) or
+// something that did not happen (Canceled). Notes describe meetings that
+// already occurred, so Completed is the default everywhere.
+export const STATUSES = ["Completed", "Planned", "Canceled"];
+
 // EA Activity structured rows: the synthesize API streams newline-delimited
 // JSON (one activity per line). Parsing is tolerant of partial trailing
 // lines (mid-stream), code fences, and stray commentary.
@@ -27,6 +32,7 @@ export function normalizeActivityRow(obj) {
     type,
     subtype,
     comments,
+    status: STATUSES.includes(obj.status) ? obj.status : "Completed",
     agreement: String(obj.agreement || "").trim(),
     sourceTitle: String(obj.sourceTitle || "").trim(),
     origin: obj.origin === "note" ? "note" : "generated",
@@ -87,9 +93,9 @@ export function sortRowsByDate(rows) {
 // in Obsidian ("[x]") and the next run of the same folder honors it.
 export function rowsToMarkdown(rows) {
   const lines = [
-    "| Filed | Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |",
-    "|-------|------------|-------|------|---------|-------|-------------|----------|",
-    ...rows.map((r) => `| ${r.filed ? "[x]" : "[ ]"} | ${esc(r.eventDate)} | ${esc(r.title)} | ${esc(r.type)} | ${esc(r.subtype)} | ${esc(r.agreement)} | ${esc(r.sourceTitle)} | ${esc(r.comments)} |`),
+    "| Filed | Status | Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |",
+    "|-------|--------|------------|-------|------|---------|-------|-------------|----------|",
+    ...rows.map((r) => `| ${r.filed ? "[x]" : "[ ]"} | ${esc(r.status || "Completed")} | ${esc(r.eventDate)} | ${esc(r.title)} | ${esc(r.type)} | ${esc(r.subtype)} | ${esc(r.agreement)} | ${esc(r.sourceTitle)} | ${esc(r.comments)} |`),
   ];
   return lines.join("\n");
 }
@@ -105,24 +111,74 @@ function splitTableRow(line) {
 // Reads a saved EA Activity Report table back into [{ eventDate, title,
 // filed }]. Tolerates the older table without a Filed column (every row
 // unfiled) and any column order, keyed off the header row.
-export function parseReportTable(markdown) {
+const TICKED = /^\[\s*[xX✓✔]\s*\]$|^(x|yes|✓|✔|☑|true)$/i;
+
+// Reads a saved EA Activity Report table into cells keyed by column name.
+// Tolerates any column order and the older tables without Filed or Status,
+// keyed off the header row.
+function readTable(markdown) {
   const lines = String(markdown || "").split(/\r?\n/).filter((l) => /^\s*\|/.test(l));
-  if (lines.length < 2) return [];
+  if (lines.length < 2) return null;
   const header = splitTableRow(lines[0]).map((h) => h.toLowerCase());
   const col = (name) => header.findIndex((h) => h === name);
-  const filedIdx = col("filed");
   const dateIdx = col("event date");
   const titleIdx = col("title");
-  if (dateIdx < 0 || titleIdx < 0) return [];
+  if (dateIdx < 0 || titleIdx < 0) return null;
 
-  return lines.slice(1)
+  const rows = lines.slice(1)
     .filter((l) => !/^\s*\|\s*-{3,}/.test(l))
     .map(splitTableRow)
-    .filter((cells) => cells.length > Math.max(dateIdx, titleIdx))
+    .filter((cells) => cells.length > Math.max(dateIdx, titleIdx));
+  return { col, dateIdx, titleIdx, rows };
+}
+
+export function parseReportTable(markdown) {
+  const table = readTable(markdown);
+  if (!table) return [];
+  const filedIdx = table.col("filed");
+  return table.rows
     .map((cells) => ({
-      eventDate: cells[dateIdx] || "",
-      title: cells[titleIdx] || "",
-      filed: filedIdx >= 0 ? /^\[\s*[xX✓✔]\s*\]$|^(x|yes|✓|✔|☑|true)$/i.test(cells[filedIdx] || "") : false,
+      eventDate: cells[table.dateIdx] || "",
+      title: cells[table.titleIdx] || "",
+      filed: filedIdx >= 0 ? TICKED.test(cells[filedIdx] || "") : false,
     }))
     .filter((r) => r.title);
+}
+
+// The whole saved report back as editable rows, so a report filed weeks ago
+// can be reopened and put through the same lint, verification, and
+// improvement passes as a fresh one.
+export function parseReportRows(markdown) {
+  const table = readTable(markdown);
+  if (!table) return [];
+  const idx = {
+    filed: table.col("filed"),
+    status: table.col("status"),
+    type: table.col("type"),
+    subtype: table.col("subtype"),
+    agreement: table.col("ea/ep"),
+    sourceTitle: table.col("source note"),
+    comments: table.col("comments"),
+  };
+  const cell = (cells, at) => (at >= 0 ? cells[at] || "" : "");
+
+  return table.rows
+    .map((cells) => {
+      const row = normalizeActivityRow({
+        eventDate: cells[table.dateIdx] || "",
+        title: cells[table.titleIdx] || "",
+        type: cell(cells, idx.type),
+        subtype: cell(cells, idx.subtype),
+        agreement: cell(cells, idx.agreement),
+        sourceTitle: cell(cells, idx.sourceTitle),
+        comments: cell(cells, idx.comments),
+        status: cell(cells, idx.status),
+        // A saved report's rows were already reviewed once; treat them as
+        // reviewed material rather than fresh model output.
+        origin: "note",
+      });
+      if (!row) return null;
+      return { ...row, filed: idx.filed >= 0 ? TICKED.test(cell(cells, idx.filed)) : false };
+    })
+    .filter((row) => row && row.title);
 }

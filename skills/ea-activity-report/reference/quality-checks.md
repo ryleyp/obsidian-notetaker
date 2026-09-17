@@ -34,6 +34,10 @@ Hard limits: comment **800 characters and 120 words**, title **200 characters**.
 | `no-participants` | Should fix | Nobody named and no role given. | Name the customer contact with their title when the sources give it. |
 | `weak-title` | Should fix | A title naming the engagement but not its purpose, or under four words. | Add the initiative, team, site, or product. |
 | `other-category` | Should fix | Type or Subtype filed as "Other". | Check whether a specific category fits. Repeated "Other" is a taxonomy gap worth raising. |
+| `stale-planned` | Must fix | A record still marked Planned after its date has passed. | Update it with what actually happened and mark it Completed, or cancel it with a reason. |
+| `planned-with-outcome` | Must fix | An outcome on a record for something that has not happened yet. | Remove the outcome until the engagement occurs, or correct the status. |
+| `canceled-no-reason` | Should fix | A canceled record with no reason recorded. | Say briefly why it did not happen — postponed, declined, rescheduled. |
+| `attendance-tbd` | Should fix | A past user group or demo still showing "Attendees: TBD". | Fill in the final count now that the event has happened. |
 
 These can be applied mechanically without changing meaning: `csm-name`, `citations`, `no-outcome`, `empty-next-steps`, `title-noise`.
 Everything else needs a judgement call — make it, or hand the record back with the

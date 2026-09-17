@@ -16,7 +16,7 @@ import { redactForbiddenTerms } from "@/lib/scrub";
 import { apiFetch } from "@/lib/apiClient";
 import { useReportWorkflow, TODAY } from "@/hooks/useReportWorkflow";
 import { ScanButton, CountsBadges, NoteList, GeneratePanel, PreflightPanel, OutputHeader, HistoryMenu, BleedWarning, StrictToggle } from "@/components/ReportSections";
-import { parseActivityRows, rowsToNDJSON, rowsToMarkdown, sortRowsByDate } from "@/lib/activityRows";
+import { parseActivityRows, rowsToNDJSON, rowsToMarkdown, sortRowsByDate, STATUSES } from "@/lib/activityRows";
 import { harvestNotes } from "@/lib/sfdcHarvest";
 import { fixActivityRow, lintActivityRow, lintSummary } from "@/lib/activityLint";
 import { reviewActivityPortfolio } from "@/lib/activityPortfolio";
@@ -109,6 +109,11 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   const [classifying, setClassifying] = useState(false);
   const [pendingClassifyCheck, setPendingClassifyCheck] = useState(false);
   const [reportFiled, setReportFiled] = useState(null); // { filename, count } from the folder's latest saved report
+  // Reports already saved in this folder, so one filed weeks ago can be
+  // reopened and run through the same checks as a fresh table.
+  const [savedReports, setSavedReports] = useState([]);
+  const [openingReport, setOpeningReport] = useState("");
+  const [openedReport, setOpenedReport] = useState(null);
   const manualEditRef = useRef({ timer: null, active: false });
 
   useEffect(() => () => clearTimeout(manualEditRef.current.timer), []);
@@ -157,6 +162,47 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
     })();
     return () => { canceled = true; };
   }, [settings.vaultPath, wf.selectedFolder]);
+
+  useEffect(() => {
+    if (!settings.vaultPath || wf.selectedFolder === undefined) return;
+    let canceled = false;
+    (async () => {
+      try {
+        const params = new URLSearchParams({ vaultPath: settings.vaultPath, folderPath: wf.selectedFolder || "" });
+        const res = await apiFetch(`/api/ea-reports?${params}`);
+        const data = await res.json();
+        if (!canceled) setSavedReports(res.ok ? data.reports || [] : []);
+      } catch {
+        if (!canceled) setSavedReports([]);
+      }
+    })();
+    return () => { canceled = true; };
+  }, [settings.vaultPath, wf.selectedFolder, wf.savedPath]);
+
+  // Load a saved report into the table. Everything downstream — lint, safe
+  // fixes, classification check, source verification, improvement, portfolio
+  // review — then works on it exactly as it does on a fresh run.
+  async function openSavedReport(report) {
+    if (openingReport) return;
+    setOpeningReport(report.file);
+    try {
+      const params = new URLSearchParams({ vaultPath: settings.vaultPath, folderPath: wf.selectedFolder || "", file: report.file });
+      const res = await apiFetch(`/api/ea-reports?${params}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not open that report");
+      setUndoStack([]);
+      setAlternativeRows(null);
+      setPendingImprovement(false);
+      setImprovementSession((session) => session + 1);
+      setFiledMap((prev) => (data.rows || []).reduce((map, row) => (row.filed ? markFiled(map, row, true) : map), prev));
+      wf.seedOutput(rowsToNDJSON(data.rows || []));
+      setOpenedReport({ filename: data.filename, count: (data.rows || []).length });
+    } catch (e) {
+      alert(`Could not open that report: ${e.message}`);
+    } finally {
+      setOpeningReport("");
+    }
+  }
 
   const accountName = detectAccount(wf.selectedFolder, settings.accounts).name;
   const account = (settings.accounts || []).find((a) => a.name === accountName) || null;
@@ -786,6 +832,41 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
         </div>
       )}
 
+      {savedReports.length > 0 && (
+        <details className="card p-4" open={!wf.output}>
+          <summary className="cursor-pointer text-sm font-semibold text-gray-900">
+            Reports already saved here
+            <span className="ml-2 font-normal text-xs text-gray-500">{savedReports.length} in this folder</span>
+          </summary>
+          <p className="text-xs text-gray-500 mt-2">
+            Open one to put it back in the table. Every check on this tab then applies to it — the postability lint and
+            safe fixes, the classification review, verification against the source notes, the improvement pass, and the
+            portfolio review. Save when you are done to write the improved version back.
+          </p>
+          <div className="mt-2 divide-y divide-gray-100 border border-gray-200 rounded-lg max-h-56 overflow-y-auto">
+            {savedReports.map((report) => (
+              <div key={report.file} className="flex items-center justify-between gap-3 p-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-gray-700 truncate">{report.filename}</p>
+                  <p className="text-[10px] text-gray-500">
+                    {report.rowCount} row{report.rowCount !== 1 ? "s" : ""}
+                    {report.filedCount ? ` · ${report.filedCount} filed` : " · none filed"}
+                    {report.folder ? ` · ${report.folder}` : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openSavedReport(report)}
+                  disabled={!!openingReport}
+                  className="btn-secondary text-xs px-3 py-1 whitespace-nowrap"
+                >
+                  {openingReport === report.file ? "Opening…" : "Open & review"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
       {(wf.output || wf.synthesizing) && (
         <div className="space-y-4">
           <OutputHeader
@@ -849,6 +930,11 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
                 <button onClick={() => setBleedRow(null)} className="btn-secondary text-xs px-3 py-1.5">Cancel</button>
               </div>
             </div>
+          )}
+          {wf.output && openedReport && (
+            <p className="text-xs text-gray-600 -mb-2">
+              Reviewing <code className="font-mono">{openedReport.filename}</code> — {openedReport.count} row{openedReport.count !== 1 ? "s" : ""} loaded from the saved report. Saving writes a new dated report; the original file is left alone.
+            </p>
           )}
           {wf.output && reportFiled && (
             <p className="text-xs text-gray-500 -mb-2">
@@ -917,6 +1003,8 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
               issueSummary={issueSummary}
               onFixIssues={fixSafeIssues}
               portfolio={portfolio}
+              statuses={STATUSES}
+              openedReport={openedReport}
             />
           )}
           {wf.synthesizing && !wf.output && (

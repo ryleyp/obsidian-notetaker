@@ -99,6 +99,15 @@ describe("fixActivityRow", () => {
 });
 
 describe("helpers", () => {
+  it("does not offer to fix a row already filed in Salesforce", () => {
+    const dirty = { ...good, comments: good.comments + " [T1]" };
+    expect(lintSummary([dirty]).fixable).toBe(1);
+    // Still reported, just not offered as a bulk fix.
+    const filed = lintSummary([{ ...dirty, filed: true }]);
+    expect(filed.fixable).toBe(0);
+    expect(filed.soft).toBe(1);
+  });
+
   it("summarises issues across rows", () => {
     const rows = [good, { ...good, comments: good.comments + " [T1]" }, { ...good, eventDate: "" }];
     expect(lintSummary(rows)).toEqual({ hard: 1, soft: 1, fixable: 1, rowsWithIssues: 2 });
@@ -156,5 +165,32 @@ describe("the reporting standard the account team reviews against", () => {
   it("asks whether \"Other\" was really the best category", () => {
     expect(codes({ ...good, type: "Other", subtype: "Other" })).toContain("other-category");
     expect(codes(good)).not.toContain("other-category");
+  });
+});
+
+describe("status accuracy", () => {
+  const today = new Date("2026-09-17T12:00:00");
+  const at = (row) => lintActivityRow(row, { today }).map((i) => i.code);
+
+  it("catches a record still planned after its date", () => {
+    expect(at({ ...good, status: "Planned", eventDate: "2026-08-12" })).toContain("stale-planned");
+    expect(at({ ...good, status: "Planned", eventDate: "2026-11-01", comments: "Summary: QBR with Dana Whitfield, IT Admin Lead, booked. Contribution: CSM coordinated the agenda. Outcomes: None stated. Next steps: None." })).not.toContain("stale-planned");
+    expect(at({ ...good, status: "Completed" })).not.toContain("stale-planned");
+  });
+
+  it("refuses an outcome on something that has not happened", () => {
+    expect(at({ ...good, status: "Planned", eventDate: "2026-11-01" })).toContain("planned-with-outcome");
+  });
+
+  it("wants a reason on a canceled record", () => {
+    expect(at({ ...good, status: "Canceled" })).toContain("canceled-no-reason");
+    expect(at({ ...good, status: "Canceled", comments: good.comments + " The session was postponed to October." })).not.toContain("canceled-no-reason");
+  });
+
+  it("wants the final attendance once an event has happened", () => {
+    const group = { ...good, type: "User Groups", subtype: "Demo Days", eventDate: "2026-08-12",
+      comments: "Summary: RF User Group — Region: AMER, Attendees: TBD. FAE demoed InstrumentStudio. Contribution: CSM coordinated the session. Outcomes: Exposure across the RF community." };
+    expect(at(group)).toContain("attendance-tbd");
+    expect(at({ ...group, eventDate: "2026-11-02", status: "Planned" })).not.toContain("attendance-tbd");
   });
 });

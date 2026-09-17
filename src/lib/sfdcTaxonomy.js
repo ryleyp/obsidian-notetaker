@@ -214,6 +214,13 @@ THE FOUR LABELLED PARTS — write each one, in this order, as plain sentences:
 - Outcomes: what was actually confirmed — decisions, findings, customer feedback, risks, blockers. Keep confirmed results separate from intended ones: "the customer named the pilot site" is an outcome; "the pilot should validate the deployment model" is expected impact and is labelled as expected. "Outcomes: None stated" when the sources confirm nothing.
 - Next steps: the CSM's own next actions with owner and date when stated, plus any dependency or unresolved question that materially affects progress. "Next steps: None" when there are none.
 
+STATUS, RECURRENCE, AND EVIDENCE
+- A record describes what actually happened. "Planned" is only for a real future commitment; never give a planned record attendance, outcomes, or customer feedback it cannot have yet. Once it happens, update the date, participants, category, result, and next steps, and mark it completed. Something that did not happen is canceled with a short reason — never left sitting in planned after the period closes.
+- Each occurrence of a recurring engagement is its own record with that occurrence's own participants, discussion, and outcome. Never keep one rolling record for a whole series.
+- A user group or event is updated with its actual final attendance once it has happened; "TBD" is honest beforehand and wrong afterwards.
+- Positive customer feedback is worth recording even with no numbers attached — keep the person's role, what they were reacting to, and the product or experience involved, so it can support a case study or account review later.
+- The source note is the record's evidence. Cite the note the activity came from so anyone reviewing it can get back to the decks, mail, and attendance behind it.
+
 HONESTY RULES
 - Tie an activity to adoption, proficiency, retention, expansion, or risk reduction only where the sources support that link. Never assert revenue causation — no "drove renewal", "generated expansion", "secured the deal" unless a source says exactly that.
 - Never state attendance, regions, outcomes, or titles the sources do not give. "TBD" is the honest answer for an unknown attendee count.
