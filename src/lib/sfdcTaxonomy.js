@@ -208,9 +208,8 @@ export function activityWritingRules() {
 - Internal-only work is reportable only when it produced a decision, a plan, an escalation path, an ownership change, or a customer-facing consequence.
 - An outcome is not an extra activity. Describe it inside the activity that produced it.
 
-THE FOUR LABELLED PARTS — write each one, in this order, as plain sentences:
-- Summary: who took part (customer contacts by name with title or role when the sources give it, NI colleagues by role), what customer need, initiative, risk, or account objective drove the engagement, and what was actually discussed or delivered.
-- Contribution: what the CSM personally did, opened with a real verb — ${CONTRIBUTION_VERBS.slice(0, 12).join(", ")}. "Attended", "joined", "was present" are not contributions. Never claim sole ownership of work the wider account team did: when the FAE or AM led, say so and state the CSM's own part. When the sources show no CSM contribution beyond being in the room, write "Contribution: None beyond attendance" rather than inventing one.
+THE THREE LABELLED PARTS — write each one, in this order, as plain sentences:
+- Summary: who took part (customer contacts by name with title or role when the sources give it, NI colleagues by role), what customer need, initiative, risk, or account objective drove the engagement, what was actually discussed or delivered, and what the CSM did about it. The CSM's own work belongs in this sentence, carried by a real verb — ${CONTRIBUTION_VERBS.slice(0, 12).join(", ")} — not as a separate labelled line. "Attended", "joined", and "was present" are not work: when the FAE or AM led, say so and state the CSM's own part; when the sources show the CSM did nothing beyond being in the room, describe the meeting and leave their part unmentioned rather than inventing one.
 - Outcomes: what was actually confirmed — decisions, findings, customer feedback, risks, blockers. Keep confirmed results separate from intended ones: "the customer named the pilot site" is an outcome; "the pilot should validate the deployment model" is expected impact and is labelled as expected. "Outcomes: None stated" when the sources confirm nothing.
 - Next steps: the CSM's own next actions with owner and date when stated, plus any dependency or unresolved question that materially affects progress. "Next steps: None" when there are none.
 

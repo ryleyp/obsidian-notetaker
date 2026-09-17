@@ -27,9 +27,8 @@ Hard limits: comment **800 characters and 120 words**, title **200 characters**.
 | `group-format` | Should fix | A Demo Days or User Group row without "Region: X, Attendees: #" and an outcome. | Add region and attendance (TBD is fine) and state the impact. |
 | `title-noise` | Should fix | A title carrying a leading date, a mail prefix (RE:/FW:/[EXTERNAL]), or a "(1)" duplicate suffix. | Strip them. Applied automatically. |
 | `missing-agreement` | Should fix | No EA/EP number on a row while the account has agreements on file. | Add the number the engagement relates to, or leave blank deliberately. |
-| `structure` | Should fix | Free prose with none of the four labels. | Rewrite as Summary / Contribution / Outcomes / Next steps. |
-| `no-contribution` | Should fix | No Contribution line — the record does not say what the CSM personally did. | Add it, opening with a real verb, or "None beyond attendance" when that is the truth. |
-| `weak-contribution` | Should fix | A Contribution line that does not open with a real verb. | Open with defined, coordinated, advised, resolved, escalated, mapped, validated, introduced, documented, or secured. |
+| `structure` | Should fix | Free prose with none of the three labels. | Rewrite as Summary / Outcomes / Next steps. |
+| `no-contribution` | Should fix | Nothing saying what the CSM did — no defined, coordinated, escalated, resolved, and so on. | Say it in the Summary, carried by a real verb. Leave it out when the CSM genuinely only attended. |
 | `revenue-claim` | Should fix | Revenue causation — drove renewal, generated expansion, closed the deal. | State what actually happened; claim revenue impact only when a source says it outright. |
 | `no-participants` | Should fix | Nobody named and no role given. | Name the customer contact with their title when the sources give it. |
 | `weak-title` | Should fix | A title naming the engagement but not its purpose, or under four words. | Add the initiative, team, site, or product. |

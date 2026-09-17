@@ -133,8 +133,7 @@ Create a Salesforce-ready activity entry for this email thread. Output exactly t
 **Reportable:** <Yes when this is an EA engagement worth logging; "No — reason" for internal chatter or threads with no outcome>
 
 **Summary/Notes:**
-Summary: <who was on the thread with roles, what drove it, what it covered>
-Contribution: <what the CSM personally did, opening with a real verb, or "None beyond correspondence">
+Summary: <who was on the thread with roles, what drove it, what it covered, and what the CSM did about it>
 Outcomes: <what was confirmed, or "None stated">
 Next steps: <the CSM's own 1-3 actions, or "None">
 
@@ -145,7 +144,7 @@ ${classificationGuidance()}
 
 ${activityWritingRules()}
 
-The Summary/Notes block is copied into Salesforce as written: all four labels (Summary, Contribution, Outcomes, Next steps); 120 words or fewer and 800 characters or fewer; past tense; no "I"/"we"/"our"; no citations, Markdown, or placeholders; refer to the CSM as "CSM", never by name; name customer contacts with their role when the thread states it; never write that the CSM observed or attended; no corporate filler (synergy, leverage, circle back, bandwidth, actionable, value-add); and do not invent outcomes, owners, numbers, or next steps.`;
+The Summary/Notes block is copied into Salesforce as written: all three labels (Summary, Outcomes, Next steps); 120 words or fewer and 800 characters or fewer; past tense; no "I"/"we"/"our"; no citations, Markdown, or placeholders; refer to the CSM as "CSM", never by name; name customer contacts with their role when the thread states it; never write that the CSM observed or attended; no corporate filler (synergy, leverage, circle back, bandwidth, actionable, value-add); and do not invent outcomes, owners, numbers, or next steps.`;
 }
 
 export async function createEmailThreadMessage(client, request) {

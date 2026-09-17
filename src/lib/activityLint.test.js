@@ -15,7 +15,7 @@ const good = {
   title: "Acme Aerospace EA Admin Sync - License Server Outage",
   type: "Strategic Relationship Management",
   subtype: "EA Admin Sync",
-  comments: "Summary: Dana Whitfield, IT Admin Lead, raised the license server outage blocking the Dallas lab. Contribution: CSM escalated to R&D and mapped the certificate dependency. Outcomes: Root cause was an expired certificate, renewed on the call. Next steps: CSM to send the rotation runbook.",
+  comments: "Summary: Dana Whitfield, IT Admin Lead, raised the license server outage blocking the Dallas lab; CSM escalated to R&D and mapped the certificate dependency. Outcomes: Root cause was an expired certificate, renewed on the call. Next steps: CSM to send the rotation runbook.",
   agreement: "EA 15552",
 };
 
@@ -75,9 +75,10 @@ describe("fixActivityRow", () => {
     const { row, applied } = fixActivityRow({
       ...good,
       title: "2026-08-12 - Email - RE: Acme EA Admin Sync (1)",
-      comments: "Summary: Ryley met Dana [T1]   about the cert. Contribution: CSM coordinated the fix. Outcomes: None stated. Next steps: None.",
+      comments: "Summary: Ryley met Dana [T1]   about the cert and coordinated the fix. Outcomes: None stated. Next steps: None.",
     }, { ownerNames: ["Ryley"] });
-    expect(row.comments).toBe("Summary: CSM met Dana about the cert. Contribution: CSM coordinated the fix.");
+    // With both empty fragments gone, a lone "Summary:" label labels nothing.
+    expect(row.comments).toBe("CSM met Dana about the cert and coordinated the fix.");
     expect(row.title).toBe("Acme EA Admin Sync");
     expect(applied).toEqual(expect.arrayContaining(["citations", "csm-name", "no-outcome", "title-noise"]));
   });
@@ -90,8 +91,8 @@ describe("fixActivityRow", () => {
   });
 
   it("keeps the labels when the outcome is real", () => {
-    const { row } = fixActivityRow({ ...good, comments: "Summary: Met Dana. Contribution: CSM advised on the cert. Outcomes: Cert renewed. Next steps: None." });
-    expect(row.comments).toBe("Summary: Met Dana. Contribution: CSM advised on the cert. Outcomes: Cert renewed.");
+    const { row } = fixActivityRow({ ...good, comments: "Summary: Met Dana and advised on the cert. Outcomes: Cert renewed. Next steps: None." });
+    expect(row.comments).toBe("Summary: Met Dana and advised on the cert. Outcomes: Cert renewed.");
   });
 
   it("reports no change for a clean row", () => {
@@ -128,22 +129,22 @@ describe("helpers", () => {
 });
 
 describe("the reporting standard the account team reviews against", () => {
-  it("wants the four labelled parts", () => {
+  it("wants the three labelled parts", () => {
     expect(codes({ ...good, comments: "Met Dana about the outage and fixed it." })).toContain("structure");
     expect(codes(good)).not.toContain("structure");
   });
 
-  it("wants the CSM's own contribution, named with a real verb", () => {
-    const noContribution = { ...good, comments: "Summary: Met Dana. Outcomes: Cert renewed. Next steps: None." };
-    expect(codes(noContribution)).toContain("no-contribution");
-
-    const weak = { ...good, comments: "Summary: Met Dana. Contribution: CSM was in the meeting. Outcomes: Cert renewed. Next steps: None." };
-    expect(codes(weak)).toContain("weak-contribution");
-
-    // An honest "none" is a valid contribution line, not a defect.
-    const honest = { ...good, comments: "Summary: FAE demoed to the RF team. Contribution: None beyond attendance. Outcomes: Exposure across the RF community. Next steps: None." };
-    expect(codes(honest)).not.toContain("weak-contribution");
+  it("nudges when nothing says what the CSM did", () => {
+    const silent = { ...good, comments: "Summary: Met Dana Whitfield, IT Admin Lead. Outcomes: Cert renewed. Next steps: None." };
+    expect(codes(silent)).toContain("no-contribution");
+    // The work belongs in the Summary now, not behind its own label.
     expect(codes(good)).not.toContain("no-contribution");
+  });
+
+  it("still reads an entry written while the format carried a Contribution label", () => {
+    const older = { ...good, comments: "Summary: Dana Whitfield, IT Admin Lead, raised the outage. Contribution: CSM escalated to R&D. Outcomes: Cert renewed. Next steps: None." };
+    expect(codes(older)).not.toContain("structure");
+    expect(codes(older)).not.toContain("no-contribution");
   });
 
   it("flags revenue causation the source almost never supports", () => {
@@ -152,7 +153,7 @@ describe("the reporting standard the account team reviews against", () => {
   });
 
   it("wants somebody named or given a role", () => {
-    const anonymous = { ...good, comments: "Summary: Reviewed the outage with the customer. Contribution: CSM escalated it. Outcomes: Resolved. Next steps: None." };
+    const anonymous = { ...good, comments: "Summary: Reviewed the outage with the customer and escalated it. Outcomes: Resolved. Next steps: None." };
     expect(codes(anonymous)).toContain("no-participants");
     expect(codes(good)).not.toContain("no-participants");
   });
@@ -175,7 +176,7 @@ describe("status accuracy", () => {
 
   it("catches a record still planned after its date", () => {
     expect(at({ ...good, status: "Planned", eventDate: "2026-08-12" })).toContain("stale-planned");
-    expect(at({ ...good, status: "Planned", eventDate: "2026-11-01", comments: "Summary: QBR with Dana Whitfield, IT Admin Lead, booked. Contribution: CSM coordinated the agenda. Outcomes: None stated. Next steps: None." })).not.toContain("stale-planned");
+    expect(at({ ...good, status: "Planned", eventDate: "2026-11-01", comments: "Summary: QBR with Dana Whitfield, IT Admin Lead, booked; CSM coordinated the agenda. Outcomes: None stated. Next steps: None." })).not.toContain("stale-planned");
     expect(at({ ...good, status: "Completed" })).not.toContain("stale-planned");
   });
 
@@ -190,7 +191,7 @@ describe("status accuracy", () => {
 
   it("wants the final attendance once an event has happened", () => {
     const group = { ...good, type: "User Groups", subtype: "Demo Days", eventDate: "2026-08-12",
-      comments: "Summary: RF User Group — Region: AMER, Attendees: TBD. FAE demoed InstrumentStudio. Contribution: CSM coordinated the session. Outcomes: Exposure across the RF community." };
+      comments: "Summary: RF User Group — Region: AMER, Attendees: TBD. FAE demoed InstrumentStudio; CSM coordinated the session. Outcomes: Exposure across the RF community." };
     expect(at(group)).toContain("attendance-tbd");
     expect(at({ ...group, eventDate: "2026-11-02", status: "Planned" })).not.toContain("attendance-tbd");
   });

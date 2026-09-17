@@ -32,11 +32,12 @@ const EMPTY_NEXT = /\s*Next steps?:\s*None\.?/i;
 const LONE_SUMMARY = /^Summary:\s*/i;
 const REDACTION = /█/;
 
-// The four labelled parts a postable entry carries.
+// The three labelled parts a postable entry carries. Entries written while
+// the format briefly carried a fourth "Contribution:" label are still read;
+// nothing asks for one any more.
 const HAS_SUMMARY = /\bSummary:/i;
-const HAS_CONTRIBUTION = /\bContribution:/i;
 const HAS_OUTCOMES = /\bOutcomes?:/i;
-const NO_CONTRIBUTION_STATED = /\bContribution:\s*(?:none\b|n\/a\b)/i;
+const HAS_NEXT_STEPS = /\bNext steps?:/i;
 const CONTRIBUTION_VERB = new RegExp(`\\b(?:${CONTRIBUTION_VERBS.join("|")})\\b`, "i");
 
 // Revenue causation is the claim reviewers push back on hardest, because the
@@ -170,12 +171,12 @@ export function lintActivityRow(row, { ownerNames = [], agreementsOnFile = false
     // An entry with no labels at all is free prose. One whose "Outcomes:
     // None stated" was stripped as Salesforce noise is not missing structure,
     // so only a complete absence of labels counts here.
-    if (!HAS_SUMMARY.test(body) && !HAS_CONTRIBUTION.test(body) && !HAS_OUTCOMES.test(body)) {
-      push("structure", "soft", "Entries carry labelled Summary, Contribution, Outcomes, and Next steps parts.");
-    } else if (!HAS_CONTRIBUTION.test(body)) {
-      push("no-contribution", "soft", "No Contribution line — the record does not say what the CSM personally did.");
-    } else if (!NO_CONTRIBUTION_STATED.test(body) && !CONTRIBUTION_VERB.test(body.split(/\bContribution:/i)[1] || "")) {
-      push("weak-contribution", "soft", "The Contribution line does not open with a real verb (defined, coordinated, escalated, resolved...).");
+    if (!HAS_SUMMARY.test(body) && !HAS_OUTCOMES.test(body) && !HAS_NEXT_STEPS.test(body)) {
+      push("structure", "soft", "Entries carry labelled Summary, Outcomes, and Next steps parts.");
+    } else if (!CONTRIBUTION_VERB.test(body)) {
+      // Not every record has CSM work in it — an FAE-led demo the CSM only
+      // sat in on is honestly written without one — so this stays a nudge.
+      push("no-contribution", "soft", "Nothing here says what the CSM did — add it to the Summary, or leave it out if they only attended.");
     }
     if (REVENUE_CLAIM.test(body)) {
       push("revenue-claim", "soft", "Claims revenue causation — reviewers reject this unless the source says it outright.");
@@ -292,9 +293,8 @@ export const LINT_RULES = [
   { code: "group-format", severity: "soft", catches: "A Demo Days or User Group row without \"Region: X, Attendees: #\" and an outcome.", fix: "Add region and attendance (TBD is fine) and state the impact." },
   { code: "title-noise", severity: "soft", catches: "A title carrying a leading date, a mail prefix (RE:/FW:/[EXTERNAL]), or a \"(1)\" duplicate suffix.", fix: "Strip them. Applied automatically.", fixable: true },
   { code: "missing-agreement", severity: "soft", catches: "No EA/EP number on a row while the account has agreements on file.", fix: "Add the number the engagement relates to, or leave blank deliberately." },
-  { code: "structure", severity: "soft", catches: "Free prose with none of the four labels.", fix: "Rewrite as Summary / Contribution / Outcomes / Next steps." },
-  { code: "no-contribution", severity: "soft", catches: "No Contribution line — the record does not say what the CSM personally did.", fix: "Add it, opening with a real verb, or \"None beyond attendance\" when that is the truth." },
-  { code: "weak-contribution", severity: "soft", catches: "A Contribution line that does not open with a real verb.", fix: "Open with defined, coordinated, advised, resolved, escalated, mapped, validated, introduced, documented, or secured." },
+  { code: "structure", severity: "soft", catches: "Free prose with none of the three labels.", fix: "Rewrite as Summary / Outcomes / Next steps." },
+  { code: "no-contribution", severity: "soft", catches: "Nothing saying what the CSM did — no defined, coordinated, escalated, resolved, and so on.", fix: "Say it in the Summary, carried by a real verb. Leave it out when the CSM genuinely only attended." },
   { code: "revenue-claim", severity: "soft", catches: "Revenue causation — drove renewal, generated expansion, closed the deal.", fix: "State what actually happened; claim revenue impact only when a source says it outright." },
   { code: "no-participants", severity: "soft", catches: "Nobody named and no role given.", fix: "Name the customer contact with their title when the sources give it." },
   { code: "weak-title", severity: "soft", catches: "A title naming the engagement but not its purpose, or under four words.", fix: "Add the initiative, team, site, or product." },

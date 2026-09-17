@@ -89,7 +89,7 @@ SUMMARY/NOTES RULES
 
 ${activityWritingRules()}
 
-- Exactly four labeled lines, in this order: Summary, Contribution, Outcomes, Next steps. No other headings or sections inside this block.
+- Exactly three labeled lines, in this order: Summary, Outcomes, Next steps. No other headings or sections inside this block.
 - HARD LIMIT: the entire Summary/Notes block — Summary + Outcomes + Next steps combined, including the labels — must be at most 120 words and 800 characters or fewer. This is a Salesforce field limit, not a target. Draft, count the words, then trim until it is 120 or fewer: cut the weakest detail, not the outcomes or next steps. Never exceed it.
 - This block is pasted into a plain-text SFDC Comment field, so keep each section as a labeled run of plain sentences ("Summary: ...", "Outcomes: ...", "Next steps: ...") — no bullets, no bold, no sub-lists inside it.
 - Past tense, no first person ("I"/"we"). Refer to the CSM as "CSM" — never by name — since this text is read by people who don't know who wrote it.
@@ -101,7 +101,7 @@ ${activityWritingRules()}
 - User Groups (Demo Days / User Group): the Summary line carries "Region: [X], Attendees: [# or TBD]" and the Outcomes line states the impact (adoption, expansion, risk reduction, customer momentum), matching the format in the taxonomy.
 - Outcomes: if the transcript has no clear outcome, write "Outcomes: None stated" — never invent one.
 - Next steps: only the CSM's own owned actions (skip customer/other-team to-dos unless they gate a CSM action), top 1-3, phrased as concrete actions. If none, write "Next steps: None".
-- Budget the 800 characters across all four labels. When it is tight, cut detail from Summary first — Contribution and Outcomes are the two parts a reviewer is actually looking for.
+- Budget the 800 characters across the three labels. When it is tight, cut background from Summary first — what the CSM did and what came of it are the parts a reviewer is actually looking for.
 - Do not invent attendees, regions, outcomes, or next steps that aren't supported by the transcript or the CSM's own context/notes.
 - Exclude raw internal complaints/blame, speculative pricing or forecast figures, and anything the account team wouldn't want visible in CRM.
 
@@ -113,8 +113,8 @@ POSTABILITY CHECK — the entry is copied into Salesforce exactly as written, so
 - No "CSM attended / observed / listened"
 - No corporate filler: synergy, leverage, circle back, bandwidth, actionable, value-add, touch base
 - Type and Subtype copied character-for-character from the list
-- All four labels present: Summary, Contribution, Outcomes, Next steps
-- The Contribution line opens with a real verb and is not "attended" or "was present"
+- All three labels present: Summary, Outcomes, Next steps
+- The Summary says what the CSM actually did, not only that a meeting happened
 - No revenue causation the sources do not state`;
 
 export function buildPrompt(
@@ -347,8 +347,7 @@ The no-length-limit instruction applies to Meeting Notes and NOT to this section
 **Reportable:** <Yes, or "No — reason">
 
 **Summary/Notes:**
-Summary: <who took part with roles, what drove the engagement, what was covered>
-Contribution: <what the CSM personally did, opening with a real verb, or "None beyond attendance">
+Summary: <who took part with roles, what drove the engagement, what was covered, and what the CSM did about it>
 Outcomes: <what was confirmed, or "None stated"; label anything expected as expected>
 Next steps: <the CSM's own 1-3 owned actions, or "None">
 ${SFDC_ACTIVITY_RULES}
