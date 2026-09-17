@@ -32,6 +32,10 @@ export default function AccountStatus({ settings, onSettingsClick }) {
     settings,
     storageKey: "report:account-status",
     saveTitle: () => `Account Status ${TODAY}`,
+    // The report covers a date range that can straddle October 1, so it is
+    // saved beside the account it reports on rather than filed under a
+    // fiscal year picked from today's date.
+    fiscalYearFolders: false,
     // Vault-wide all-time scan for files mentioning this account.
     loadExtras: async (acct) => {
       if (!acct.aliases?.length) return null;

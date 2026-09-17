@@ -47,6 +47,10 @@ export default function SystemLinkStatus({ settings, onSettingsClick }) {
     settings,
     storageKey: "report:sl-status",
     saveTitle: () => `SystemLink Status ${TODAY}`,
+    // The report covers a date range that can straddle October 1, so it is
+    // saved beside the account it reports on rather than filed under a
+    // fiscal year picked from today's date.
+    fiscalYearFolders: false,
     filterNotes: (note, acct) => noteMatchesSL(note, acct.aliases),
     synthesizeExtras: () => ({ productFocus: SL_PRODUCT }),
   });
