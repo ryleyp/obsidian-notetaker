@@ -49,7 +49,7 @@ test("improves reopened EA rows through ChatGPT and preserves Filed state when s
   await page.getByRole("button", { name: "Save to Obsidian", exact: true }).click();
   await expect(page.getByRole("button", { name: "Saved!", exact: true })).toBeVisible();
   const saved = requests.find((r) => r.name === "/api/save").body.notes;
-  expect(saved).toContain("| Filed | Event Date | Title | Type | Subtype | EA/EP | Comments |");
+  expect(saved).toContain("| Filed | Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |");
   expect(saved).toContain("| [x] | 2026-08-20 | Admin Sync Improved |");
   expect(saved).toContain("EA 123");
 });
@@ -76,7 +76,7 @@ test("generates a ChatGPT note and compares a source-backed Claude second opinio
   const requests = await setup(page);
   await page.getByPlaceholder("e.g. 2026-06-05 - Acme Kickoff").fill("Planning");
   await page.getByPlaceholder("Paste your meeting transcript here...").fill("Acme approved the licensing plan.");
-  await page.getByRole("button", { name: /Recommended GPT-5\.6 Terra/ }).click();
+  await page.getByRole("button", { name: /Balanced GPT-5\.6 Terra/ }).click();
   await page.getByRole("radio", { name: /Second opinion/ }).check();
   await page.getByRole("button", { name: "Generate Meeting Notes", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Executive Summary", exact: true })).toBeVisible();

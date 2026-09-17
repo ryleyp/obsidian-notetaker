@@ -44,7 +44,14 @@ export default function ActivityImprovementPanel({ rows, notes, settings, accoun
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Activity improvement failed");
-      setProposal({ changes: data.changes, message: data.message, snapshot: fingerprint, before: rows });
+      setProposal({
+        changes: data.changes,
+        message: data.message,
+        snapshot: fingerprint,
+        before: rows,
+        sourcesUsed: data.sourcesUsed,
+        sourcesDropped: data.sourcesDropped,
+      });
       if (data.usage) setCost(calcCost(data.usage, data.model));
     } catch (e) {
       if (e.name !== "AbortError") setError(e.message);
@@ -96,6 +103,13 @@ export default function ActivityImprovementPanel({ rows, notes, settings, accoun
         <textarea id="activity-improvement-guidance" className="input text-sm" rows={2} maxLength={4000} value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder="For example: emphasize concrete customer outcomes and keep comments under 500 characters." disabled={busy} />
       </details>
       {proposal && <div className="border border-blue-200 rounded-lg p-3 space-y-3">
+        {proposal.sourcesDropped > 0 && (
+          <p role="status" className="text-xs text-amber-700">
+            Only the {proposal.sourcesUsed} most recent of {proposal.sourcesUsed + proposal.sourcesDropped} notes fit in
+            this pass, so every row was improved but the oldest could not be checked against a source. Narrow the date
+            range for a fully source-checked pass.
+          </p>
+        )}
         <p className="text-sm whitespace-pre-wrap">{proposal.message}</p>
         <p className="text-sm font-semibold">{proposal.changes.length ? `Proposed edits to ${proposal.changes.length} activit${proposal.changes.length === 1 ? "y" : "ies"}` : "No edits proposed."}</p>
         <div className="max-h-96 overflow-auto space-y-4">

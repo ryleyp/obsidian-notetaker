@@ -4,6 +4,7 @@ import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { BATCH_TEMPORAL_RULE, TEMPORAL_ACCURACY_RULE, dateSortValue } from "@/lib/synthesisPolicy";
+import { buildHealthScorePrompt } from "@/lib/healthScore";
 import {
   budgetChars,
   contextLimit as contextTokens,
@@ -670,7 +671,7 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { notes, apiKey, openaiApiKey, model, today, replacements = [], corrections = [], productFocus, promptType, accountName, allAccounts = [], restoredIds = [], rangeStart, rangeEnd, resumeRows = [], exampleRows = [] } = body;
+    const { notes, apiKey, openaiApiKey, model, today, replacements = [], corrections = [], productFocus, promptType, accountName, allAccounts = [], restoredIds = [], rangeStart, rangeEnd, resumeRows = [], exampleRows = [], previousDeckText = "", previousDeckName = "", reviewTranscriptFilename = "" } = body;
 
     if (!notes || notes.length === 0) {
       return new Response(JSON.stringify({ error: "No notes provided" }), { status: 400, headers: { "Content-Type": "application/json" } });
@@ -696,6 +697,12 @@ export async function POST(request) {
       subtype: String(r?.subtype || ""),
       comments: sanitizeField(r?.comments).slice(0, 800),
     }));
+
+    const sanitizedPriorDeck = scrubWithExceptions([{
+      filename: previousDeckName || "prior-scorecard.pdf",
+      title: previousDeckName || "Prior scorecard",
+      content: applyReplacements(applyCorrections(String(previousDeckText || "").slice(0, 80_000), corrections), replacements),
+    }], accountName, allAccounts, []).at(0)?.content || "";
 
 
     const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
@@ -728,6 +735,8 @@ export async function POST(request) {
         try {
           const systemPrompt = promptType === "csm-activity"
             ? "You are an expert at synthesizing meeting notes into structured activity reports. Respond with only newline-delimited JSON objects — no preamble, no Markdown, no code fences."
+            : promptType === "health-score"
+            ? "You create evidence-based Customer Success health scorecards for leadership. Keep every claim scoped to the selected account and respond with only the requested Markdown document."
             : "You are an expert at synthesizing dated meeting notes into clear, actionable executive summaries. Newer dated sources override older dated sources when they conflict, resolve, or update a fact. Respond with only the Markdown document — no preamble.";
           const messageStream = client.messages.stream({
             model: selectedModel,
@@ -737,6 +746,18 @@ export async function POST(request) {
               role: "user",
               content: promptType === "csm-activity"
                 ? buildCSMActivityPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], accountName, allAccounts, { start: rangeStart, end: rangeEnd }, sanitizedResumeRows, sanitizedExampleRows)
+                : promptType === "health-score"
+                ? buildHealthScorePrompt({
+                    notes: taggedNotes,
+                    today: today || new Date().toISOString().split("T")[0],
+                    accountName,
+                    allAccounts,
+                    previousDeckText: sanitizedPriorDeck,
+                    previousDeckName: sanitizeField(previousDeckName),
+                    reviewTranscriptFilename: sanitizeField(reviewTranscriptFilename),
+                    rangeStart,
+                    rangeEnd,
+                  })
                 : productFocus
                 ? buildProductPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], productFocus, accountName, allAccounts)
                 : buildSynthesisPrompt(taggedNotes, today || new Date().toISOString().split("T")[0], accountName, allAccounts),

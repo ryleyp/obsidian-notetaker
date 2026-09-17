@@ -96,10 +96,10 @@ export function StrictToggle({ strict, setStrict, disabled }) {
 
 // The section shown after a successful scan, before pre-flight:
 // scrub panel, model picker, error, and the big generate button.
-export function GeneratePanel({ scrub, model, setModel, synthError, onGenerate, synthesizing, buttonLabel }) {
+export function GeneratePanel({ scrub, model, setModel, synthError, onGenerate, synthesizing, buttonLabel, showScrub = true }) {
   return (
     <div className="mt-5 pt-5 border-t border-gray-100">
-      <ScrubPanel {...scrub} idPrefix="pre-" className="mb-4" />
+      {showScrub && <ScrubPanel {...scrub} idPrefix="pre-" className="mb-4" />}
       <div className="flex items-center gap-3 mb-4">
         <span className="text-xs text-gray-500 font-medium">Model</span>
         <ModelPicker model={model} setModel={setModel} />
@@ -118,7 +118,7 @@ export function GeneratePanel({ scrub, model, setModel, synthError, onGenerate, 
 }
 
 // Pre-flight confirm: token/cost estimate, compact model picker, scrub, confirm.
-export function PreflightPanel({ intro, notes, loadCounts, model, setModel, scrub, onCancel, onConfirm, synthesizing, confirmLabel }) {
+export function PreflightPanel({ intro, notes, loadCounts, model, setModel, scrub, onCancel, onConfirm, synthesizing, confirmLabel, showScrub = true }) {
   const est = estimateUsage(notes, model);
   const limit = contextLimit(model);
   const warnAt = limit - 20_000;
@@ -152,7 +152,7 @@ export function PreflightPanel({ intro, notes, loadCounts, model, setModel, scru
           Sanitized note content will be sent to {providerLabel(model)}. Names in your glossary are replaced before sending.
         </p>
       </div>
-      <ScrubPanel {...scrub} idPrefix="" className="mt-3" />
+      {showScrub && <ScrubPanel {...scrub} idPrefix="" className="mt-3" />}
       <div className="flex gap-3 mt-3">
         <button onClick={onCancel} className="btn-secondary flex-1">Cancel</button>
         <button onClick={onConfirm} disabled={synthesizing} className="btn-primary flex-1 py-3">

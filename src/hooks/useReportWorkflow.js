@@ -32,13 +32,15 @@ export function useReportWorkflow({
   buildNotesParams,
   synthesizeExtras,
   loadExtras,
+  strictFolderOnlyDefault = false,
+  allowExternalSources = true,
 }) {
   const [selectedFolder, setSelectedFolder] = useState("");
   const [rawNotes, setRawNotes] = useState(null);
   const [loadedNotes, setLoadedNotes] = useState(null);
   const [excludedFiles, setExcludedFiles] = useState(new Set());
   const [noteRisks, setNoteRisks] = useState({}); // filename -> dominant other account
-  const [strictFolderOnly, setStrictFolderOnly] = useState(false);
+  const [strictFolderOnly, setStrictFolderOnly] = useState(strictFolderOnlyDefault);
   const [loadCounts, setLoadCounts] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -80,6 +82,7 @@ export function useReportWorkflow({
     try {
       const s = JSON.parse(localStorage.getItem(storageKey) || "null");
       if (s) {
+        if (typeof s.selectedFolder === "string") setSelectedFolder(s.selectedFolder);
         if (s.output) {
           setOutput(s.output);
           rawRef.current = s.output;
@@ -104,11 +107,11 @@ export function useReportWorkflow({
     if (!hydrated.current || synthesizing) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify({
-        output, model, saved, savedPath, synthCost, partial,
+        selectedFolder, output, model, saved, savedPath, synthCost, partial,
         restoredIds: [...restoredIds],
       }));
     } catch {}
-  }, [output, model, saved, savedPath, synthCost, partial, restoredIds, synthesizing, storageKey]);
+  }, [selectedFolder, output, model, saved, savedPath, synthCost, partial, restoredIds, synthesizing, storageKey]);
 
   function acctCtx() {
     return detectAccount(selectedFolder, settings.accounts);
@@ -163,8 +166,8 @@ export function useReportWorkflow({
       if (selectedFolder) params.set("folderPath", selectedFolder);
       // Strict mode: skip cross-folder search entirely — the account's own
       // folder is the only source, eliminating multi-account note risk.
-      if (!strictFolderOnly && acct.aliases?.length) params.set("accountAliases", acct.aliases.join(","));
-      if (settings.transcriptsPath && acct.archiveFolder) {
+      if (allowExternalSources && !strictFolderOnly && acct.aliases?.length) params.set("accountAliases", acct.aliases.join(","));
+      if (allowExternalSources && settings.transcriptsPath && acct.archiveFolder) {
         params.set("transcriptsPath", settings.transcriptsPath);
         params.set("transcriptFolder", acct.archiveFolder);
       }
@@ -392,7 +395,7 @@ export function useReportWorkflow({
     if (!content || !settings.vaultPath) return;
     setSaving(true);
     try {
-      const title = typeof saveTitle === "function" ? saveTitle() : saveTitle;
+      const title = typeof saveTitle === "function" ? saveTitle(acctCtx()) : saveTitle;
       const res = await apiFetch("/api/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

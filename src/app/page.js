@@ -13,6 +13,7 @@ import AccountStatus from "@/components/AccountStatus";
 import SystemLinkStatus from "@/components/SystemLinkStatus";
 import CSMActivityReport from "@/components/CSMActivityReport";
 import GoalReview from "@/components/GoalReview";
+import HealthScore from "@/components/HealthScore";
 import StakeholderMap from "@/components/StakeholderMap";
 import SanitizeReview from "@/components/SanitizeReview";
 import SpeakerReview from "@/components/SpeakerReview";
@@ -240,6 +241,11 @@ export default function Home() {
             onAccountsUpdate={updateAccounts}
             onSettingsClick={() => setShowSettings(true)}
           />
+        )}
+
+        {/* ── Customer Health Score mode ── */}
+        {mode === "health-score" && (
+          <HealthScore settings={settings} onSettingsClick={() => setShowSettings(true)} />
         )}
 
         {/* ── New Note mode ── */}

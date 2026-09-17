@@ -20,8 +20,8 @@ export default function Header({ onSettingsClick, isSettingsOpen, mode, onModeCh
 
   return (
     <header className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-14">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+        <div className="flex items-center justify-between min-h-14 py-2 gap-2">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-8 h-8 rounded-lg text-white" style={{ backgroundColor: "#BE5103" }}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -33,7 +33,7 @@ export default function Header({ onSettingsClick, isSettingsOpen, mode, onModeCh
 
           <div className="flex items-center gap-2">
             {/* Mode toggle */}
-            <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+            <div className="flex flex-wrap justify-end rounded-lg border border-gray-200 bg-gray-50 p-0.5">
               <button
                 onClick={() => onModeChange("new")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
@@ -103,6 +103,16 @@ export default function Header({ onSettingsClick, isSettingsOpen, mode, onModeCh
                 }`}
               >
                 Goals
+              </button>
+              <button
+                onClick={() => onModeChange("health-score")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  mode === "health-score"
+                    ? "bg-white text-obsidian-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Health Score
               </button>
             </div>
 

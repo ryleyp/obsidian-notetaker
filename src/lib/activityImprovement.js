@@ -43,3 +43,31 @@ export function applyImprovement(rows, changes) {
     };
   });
 }
+
+// Fit the source notes into what is left of the reviewing model's context.
+//
+// The current table and the CSM's guidance are what is being improved, so
+// they must reach the model whole; the sources are evidence, and the newest
+// ones are the evidence that matters for a report of recent activity. So the
+// oldest notes give way first, and the run continues with a count of what was
+// left out rather than refusing outright.
+export function fitSourcesToBudget(sources = [], budgetChars = 0) {
+  if (budgetChars <= 0) return { kept: [], dropped: sources.length };
+
+  const newestFirst = [...sources].sort((a, b) => String(b?.date || "").localeCompare(String(a?.date || "")));
+  const kept = [];
+  // The two enclosing brackets, plus one comma between each pair of entries.
+  let used = 2;
+  for (const source of newestFirst) {
+    const cost = JSON.stringify(source).length + (kept.length ? 1 : 0);
+    if (used + cost > budgetChars) break;
+    used += cost;
+    kept.push(source);
+  }
+
+  return {
+    // Back to the order the caller supplied, so the prompt reads as before.
+    kept: sources.filter((source) => kept.includes(source)),
+    dropped: sources.length - kept.length,
+  };
+}

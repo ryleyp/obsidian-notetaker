@@ -6,7 +6,7 @@ import { apiFetch, approveLocalPaths } from "@/lib/apiClient";
 
 const folderCache = new Map();
 
-export default function FolderSelector({ vaultPath, selectedFolder, onSelect, onSettingsClick, stepNumber = 3 }) {
+export default function FolderSelector({ vaultPath, selectedFolder, onSelect, onSettingsClick, stepNumber = 3, title = "Destination Folder", description = "Pick where to save the note in your vault" }) {
   const [folders, setFolders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -62,8 +62,8 @@ export default function FolderSelector({ vaultPath, selectedFolder, onSelect, on
         <div className="flex items-center gap-3">
           <StepBadge n={stepNumber} />
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Destination Folder</h2>
-            <p className="text-xs text-gray-500">Pick where to save the note in your vault</p>
+            <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+            <p className="text-xs text-gray-500">{description}</p>
           </div>
         </div>
 
