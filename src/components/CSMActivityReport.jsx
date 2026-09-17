@@ -126,6 +126,9 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
     settings,
     storageKey: "report:ea-activity",
     saveTitle: () => `EA Activity Report ${TODAY}`,
+    // The report belongs beside the account it reports on, not inside one of
+    // that account's fiscal-year folders: its range can span two of them.
+    fiscalYearFolders: false,
     buildNotesParams: (params) => {
       params.set("startDate", rangeStart);
       params.set("endDate", rangeEnd);

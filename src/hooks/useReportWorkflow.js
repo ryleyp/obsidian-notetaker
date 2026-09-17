@@ -34,6 +34,11 @@ export function useReportWorkflow({
   loadExtras,
   strictFolderOnlyDefault = false,
   allowExternalSources = true,
+  // A report covers a date range, not a single day, and a range can straddle
+  // October 1 — so filing one under a fiscal year chosen from today's date
+  // puts it in the wrong year as often as the right one. Tabs whose output is
+  // a period report turn this off and save into the folder being reported on.
+  fiscalYearFolders = true,
 }) {
   const [selectedFolder, setSelectedFolder] = useState("");
   const [rawNotes, setRawNotes] = useState(null);
@@ -404,7 +409,7 @@ export function useReportWorkflow({
           vaultPath: settings.vaultPath,
           folderPath: selectedFolder,
           meetingTitle: title,
-          fiscalYearFolders: settings.fiscalYearFolders !== false,
+          fiscalYearFolders: fiscalYearFolders && settings.fiscalYearFolders !== false,
         }),
       });
       const data = await res.json();

@@ -67,6 +67,26 @@ describe("/api/save fiscal-year filing", () => {
     expect(rollup.savedPath).toMatch(/^Acme[/\\]FY\d{4}[/\\]Customer Facts\.md$/);
   });
 
+  it("keeps a dated period report in the selected folder when filing is off for it", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    fs.mkdirSync(path.join(vault, "Acme"), { recursive: true });
+    allowDirectory(vault, "Vault path");
+
+    // A report's title carries a date, so without this the fiscal-year router
+    // would file it under one year even though its range can span two.
+    const data = await (await postSave({
+      notes: "# EA Activity Report 2026-09-17",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "EA Activity Report 2026-09-17",
+      fiscalYearFolders: false,
+    })).json();
+
+    expect(data.savedPath).toBe(path.join("Acme", "EA Activity Report 2026-09-17.md"));
+    expect(fs.existsSync(path.join(vault, "Acme", "FY2026"))).toBe(false);
+  });
+
   it("keeps an email thread in the folder it already lives in across a year boundary", async () => {
     const root = makeTmp();
     const vault = path.join(root, "vault");
