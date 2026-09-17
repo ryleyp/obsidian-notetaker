@@ -28,7 +28,7 @@ const FORBIDDEN_B64 = [
 
 const FORBIDDEN = FORBIDDEN_B64.map((b) => Buffer.from(b, "base64").toString("utf-8"));
 
-const SCAN_ROOTS = ["src", "tests", "docs", "scripts", ".github"];
+const SCAN_ROOTS = ["src", "tests", "docs", "scripts", "skills", ".github"];
 // Every tracked text file at the repository root, not a hand-maintained list —
 // the first version of this test missed HANDOFF.md and the EA_*.txt reference
 // docs precisely because they were not enumerated.

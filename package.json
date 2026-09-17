@@ -8,7 +8,8 @@
     "start": "next start --hostname 127.0.0.1",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:smoke": "playwright test"
+    "test:smoke": "playwright test",
+    "skill": "UPDATE_SKILL=1 vitest run src/lib/skillDocs.test.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.110.0",

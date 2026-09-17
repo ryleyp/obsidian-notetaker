@@ -227,3 +227,33 @@ export function lintSummary(rows = [], options = {}) {
 export function describeIssues(issues = []) {
   return issues.map((issue) => `${issue.severity === "hard" ? "MUST FIX" : "should fix"}: ${issue.message}`).join(" ");
 }
+
+// Every rule the linter can raise, in one place, so the skill's reference
+// document and the app describe exactly the same checks. A test asserts that
+// every code pushed above appears here, so the two cannot drift.
+export const LINT_RULES = [
+  { code: "date", severity: "hard", catches: "An event date that is not YYYY-MM-DD.", fix: "Use the date of the meeting or thread, from the note title." },
+  { code: "taxonomy", severity: "hard", catches: "A Type/Subtype pair that is not an exact match in the taxonomy.", fix: "Copy both values character-for-character from the taxonomy." },
+  { code: "empty-comment", severity: "hard", catches: "No comment at all.", fix: "Write the four labelled parts." },
+  { code: "redacted", severity: "hard", catches: "A redaction mark, meaning another account's name was scrubbed out of this text.", fix: "Rewrite the sentence without the other account, or drop the row." },
+  { code: "over-limit", severity: "hard", catches: "A comment over 800 characters or 120 words — Salesforce will not accept it.", fix: "Cut detail from Summary first; never cut Contribution or Outcomes." },
+  { code: "placeholder", severity: "hard", catches: "A template placeholder that was never filled in, such as [Name] or <region>.", fix: "Fill it in from the sources, or remove the clause. \"TBD\" is honest for an unknown attendee count." },
+  { code: "csm-name", severity: "hard", catches: "The CSM's own name in text other people read.", fix: "Say \"CSM\". Applied automatically.", fixable: true },
+  { code: "first-person", severity: "hard", catches: "\"I\", \"we\", \"our\", \"my\" — activity records are written in the third person.", fix: "Rewrite in past tense with \"CSM\" as the subject." },
+  { code: "title-length", severity: "hard", catches: "A title over 200 characters.", fix: "Shorten to the engagement and its purpose." },
+  { code: "citations", severity: "soft", catches: "Source markers like [T1] or [N2], which mean nothing outside the note app.", fix: "Strip them. Applied automatically.", fixable: true },
+  { code: "passive-attendance", severity: "soft", catches: "\"CSM attended / observed / listened / was present\".", fix: "Describe the meeting and say who led it; leave the CSM's presence unmentioned unless they contributed." },
+  { code: "jargon", severity: "soft", catches: "Corporate filler: synergy, leverage, circle back, bandwidth, actionable, value-add, touch base.", fix: "Say the plain thing instead." },
+  { code: "no-outcome", severity: "soft", catches: "\"Outcomes: None stated\" — honest in the note, noise in Salesforce.", fix: "Drop the fragment, or state what was actually confirmed. Removal applied automatically.", fixable: true },
+  { code: "empty-next-steps", severity: "soft", catches: "\"Next steps: None\".", fix: "Drop the fragment, or name the next action. Removal applied automatically.", fixable: true },
+  { code: "group-format", severity: "soft", catches: "A Demo Days or User Group row without \"Region: X, Attendees: #\" and an outcome.", fix: "Add region and attendance (TBD is fine) and state the impact." },
+  { code: "title-noise", severity: "soft", catches: "A title carrying a leading date, a mail prefix (RE:/FW:/[EXTERNAL]), or a \"(1)\" duplicate suffix.", fix: "Strip them. Applied automatically.", fixable: true },
+  { code: "missing-agreement", severity: "soft", catches: "No EA/EP number on a row while the account has agreements on file.", fix: "Add the number the engagement relates to, or leave blank deliberately." },
+  { code: "structure", severity: "soft", catches: "Free prose with none of the four labels.", fix: "Rewrite as Summary / Contribution / Outcomes / Next steps." },
+  { code: "no-contribution", severity: "soft", catches: "No Contribution line — the record does not say what the CSM personally did.", fix: "Add it, opening with a real verb, or \"None beyond attendance\" when that is the truth." },
+  { code: "weak-contribution", severity: "soft", catches: "A Contribution line that does not open with a real verb.", fix: "Open with defined, coordinated, advised, resolved, escalated, mapped, validated, introduced, documented, or secured." },
+  { code: "revenue-claim", severity: "soft", catches: "Revenue causation — drove renewal, generated expansion, closed the deal.", fix: "State what actually happened; claim revenue impact only when a source says it outright." },
+  { code: "no-participants", severity: "soft", catches: "Nobody named and no role given.", fix: "Name the customer contact with their title when the sources give it." },
+  { code: "weak-title", severity: "soft", catches: "A title naming the engagement but not its purpose, or under four words.", fix: "Add the initiative, team, site, or product." },
+  { code: "other-category", severity: "soft", catches: "Type or Subtype filed as \"Other\".", fix: "Check whether a specific category fits. Repeated \"Other\" is a taxonomy gap worth raising." },
+];

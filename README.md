@@ -165,6 +165,23 @@ internal mix, over-concentration in one category, repeated `Other`, same-day dup
 inconsistent EA/EP identifiers, invalid classifications, and long stretches with nothing
 logged. It costs nothing to run and updates as you edit rows.
 
+### The EA Activity skill
+
+`skills/ea-activity-report/` is the same reporting standard packaged as a Claude Code skill,
+for the work that happens outside the app — a record written from a pasted transcript, a
+rewrite of a comment that reads badly, a review of what is already in Salesforce.
+
+Install it by linking it into your skills directory, so regenerating it here updates it there:
+
+```bash
+ln -s "$PWD/skills/ea-activity-report" ~/.claude/skills/ea-activity-report
+```
+
+Its two reference documents — the taxonomy and the quality checks — are generated from
+`src/lib/sfdcTaxonomy.js` and `src/lib/activityLint.js` by `npm run skill`. Never hand-edit
+them: `npm test` fails when they drift from the app's own definitions, which is what keeps
+the skill and the app from quietly enforcing two different standards.
+
 ### Upgrade an old meeting note
 
 1. Paste the old meeting transcript and select its customer folder.
