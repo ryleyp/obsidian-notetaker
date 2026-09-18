@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import { formatCost } from "@/lib/models";
 import { extractReferencedSourceIds, sourceExcerpt, stripCitationMarkers } from "@/lib/sourceBundle";
 import { fixNoteEntry, lintNoteEntry } from "@/lib/sfdcHarvest";
+import { detectHealthSession, lintHealthNote } from "@/lib/healthSession";
 
 // One-click revision instructions for the regenerate panel. Each fills the
 // instruction box so the CSM can tweak before submitting.
@@ -87,6 +88,8 @@ export default function NotesPreview({
   followUpSavedPath,
   followUpSaveError,
   ownerNames = [],
+  ownerPronouns = "",
+  otherAccounts = [],
 }) {
   const [viewMode, setViewMode] = useState("preview");
   const [regenerationInstruction, setRegenerationInstruction] = useState("");
@@ -104,6 +107,18 @@ export default function NotesPreview({
   // The SFDC entry is the part of this note that gets pasted somewhere
   // else verbatim, so it is checked here, before the note is saved.
   const entryCheck = useMemo(() => (streaming ? null : lintNoteEntry(notes, { ownerNames })), [notes, streaming, ownerNames]);
+
+  // A scorecard session's note is read again months later, by the scorecard
+  // build rather than by a person, so the things that make it unusable then
+  // (a missing pillar, a merged speaker, an unsourced usage figure) are
+  // checked here while the transcript is still open.
+  const healthCheck = useMemo(() => {
+    if (streaming || !notes) return null;
+    const heading = notes.match(/^#\s+(.+)$/m)?.[1] || "";
+    const session = detectHealthSession({ title: heading, transcript: notes });
+    if (!session.isHealthSession) return null;
+    return { session, issues: lintHealthNote(notes, { type: session.type, ownerNames, ownerPronouns, otherAccounts }) };
+  }, [notes, streaming, ownerNames, ownerPronouns, otherAccounts]);
 
   function fixEntry() {
     if (!editable) return;
@@ -337,6 +352,27 @@ export default function NotesPreview({
                   {followUpDraft}
                 </pre>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {healthCheck && (
+        <div className={`px-6 py-3 border-t text-xs ${healthCheck.issues.length ? (healthCheck.issues.some((i) => i.severity === "hard") ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200") : "bg-green-50 border-green-200"}`}>
+          {healthCheck.issues.length === 0 ? (
+            <p className="text-green-800"><strong>Scorecard session note complete</strong> — ratings, ownership, and follow-ups are all captured for the next scorecard build.</p>
+          ) : (
+            <div className="space-y-1">
+              <p className={healthCheck.issues.some((i) => i.severity === "hard") ? "text-red-800" : "text-amber-800"}>
+                <strong>Scorecard session check:</strong> {healthCheck.issues.length} thing{healthCheck.issues.length !== 1 ? "s" : ""} the quarterly scorecard will need and this note does not have yet.
+              </p>
+              <ul className="list-disc pl-5 space-y-0.5">
+                {healthCheck.issues.map((issue) => (
+                  <li key={issue.code} className={issue.severity === "hard" ? "text-red-700" : "text-amber-700"}>
+                    <span className="font-medium">{issue.severity === "hard" ? "Must fix" : "Should fix"}:</span> {issue.message}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

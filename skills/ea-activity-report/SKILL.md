@@ -1,6 +1,6 @@
 ---
 name: ea-activity-report
-description: Write, classify, review, and clean up NI Software EA engagement activity records for Salesforce from meeting notes, transcripts, voice memos, or email threads. Use whenever the user asks for an EA activity report, SFDC activity entries, activity logging or logging catch-up, quarter-end activity hygiene, help picking a Type/Subtype, a rewrite of an activity comment that is too long or reads badly, or a portfolio review of what has been logged for an account — even if they do not say "EA" or name Salesforce.
+description: Write, classify, review, and clean up NI Software EA engagement activity records for Salesforce from meeting notes, transcripts, voice memos, or email threads. Use whenever the user asks for an EA activity report, SFDC activity entries, activity logging or logging catch-up, quarter-end activity hygiene, help picking a Type/Subtype, a rewrite of an activity comment that is too long or reads badly, or a portfolio review of what has been logged for an account — even if they do not say "EA" or name Salesforce. Also use it for notes from a customer health scorecard session, which carry their own sections and checks.
 ---
 
 # EA engagement activity reporting
@@ -15,6 +15,9 @@ The authoritative taxonomy and the full quality checklist live in this skill:
   classifying anything.** Copy Type and Subtype character-for-character.
 - `reference/quality-checks.md` — every check a record must pass, what each one catches,
   and how to resolve it.
+- `reference/health-sessions.md` — the extra sections a health scorecard session's note
+  carries, and the checks on them. **Read it whenever the source notes are from a health
+  review, an account-manager pre-sync, scorecard coaching, or a portfolio roll-up.**
 
 Both are generated from the notetaker app's own source, so they always match what the app
 enforces. If the taxonomy looks wrong, fix `src/lib/sfdcTaxonomy.js` in
@@ -121,6 +124,28 @@ When looking at a set of records rather than one, also report the shape of the p
 
 Never manufacture category variety for appearance, and never recommend more engagement
 unless the account's needs, lifecycle stage, or a documented coverage gap calls for it.
+
+## Health scorecard sessions
+
+A meeting about account health itself (a leadership health review, a pre-sync with the
+account manager, scorecard coaching, a portfolio roll-up) produces two separate things, and
+mixing them is the usual failure:
+
+- **The note** carries extra sections: the colour of every pillar with who set it and why,
+  feedback on the deck kept apart from facts about the account, the questions leadership
+  asked, every usage figure with its source, what the CSM led as against relayed, the
+  commitments due at the next review, the support asks, and any other customer raised as a
+  precedent. `reference/health-sessions.md` has each section in full, plus the checks a
+  saved note has to pass. The quarterly scorecard is built from these sections months later,
+  so a colour or a commitment that is not written down is gone.
+- **The activity record** follows the ordinary rules. These sessions are internal work, so
+  they are reportable only when they produced a decision, an escalation, or an ownership
+  change, and a manager one-to-one about the scorecard is not reportable at all. Never put
+  ratings, coaching, or reviewer names in a Salesforce comment.
+
+Two things go wrong often enough to check for by name: a session's own colours recorded as
+narrative instead of per pillar, and another account's precedent filed as a fact about this
+one.
 
 ## The app that already does this
 

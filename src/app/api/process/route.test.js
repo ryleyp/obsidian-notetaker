@@ -202,3 +202,50 @@ describe("buildPrompt SFDC entry postability", () => {
     expect(prompt).toContain("Region: [X], Attendees: [# or TBD]");
   });
 });
+
+describe("buildPrompt health scorecard sessions", () => {
+  it("adds the scorecard layer for a health review, between Meeting Notes and the callouts", () => {
+    const prompt = buildPrompt("We set adoption to yellow and agreed the pilot commitment.", "Acme CS Health Review");
+
+    expect(prompt).toContain("## Health Ratings Captured");
+    expect(prompt).toContain("## Scorecard Feedback");
+    expect(prompt).toContain("## Led Versus Relayed");
+    expect(prompt).toContain("## Commitments For Next Review");
+    expect(prompt.indexOf("## Meeting Notes")).toBeLessThan(prompt.indexOf("## Health Ratings Captured"));
+    expect(prompt.indexOf("## Health Ratings Captured")).toBeLessThan(
+      prompt.indexOf("## Things NI SW Customer Success Should Take Note Of")
+    );
+  });
+
+  it("leaves an ordinary meeting note untouched", () => {
+    const prompt = buildPrompt("Jordan discussed the Dallas lab rollout.", "Planning Sync");
+    expect(prompt).not.toContain("## Health Ratings Captured");
+    expect(prompt).not.toContain("Scorecard Feedback");
+  });
+
+  it("detects the session from the CSM's own context when the title says nothing", () => {
+    const prompt = buildPrompt(
+      "Jordan walked through the numbers.",
+      "Catch up",
+      [],
+      "Scorecard review with leadership: overall health and the adoption rating."
+    );
+    expect(prompt).toContain("## Health Ratings Captured");
+  });
+
+  it("tailors the sections to the kind of session", () => {
+    const coaching = buildPrompt("We reworded the adoption cell.", "1x1 - scorecard feedback");
+    expect(coaching).toContain("## Scorecard Feedback");
+    expect(coaching).not.toContain("## Leadership Questions Asked");
+  });
+
+  it("states the CSM's pronouns when they are configured", () => {
+    const prompt = buildPrompt("Jordan discussed the rollout.", "Planning Sync", [], "", {
+      ownerNames: ["Ryley"],
+      ownerPronouns: "she/her",
+    });
+    expect(prompt).toContain("The CSM's pronouns are she/her");
+    expect(buildPrompt("Jordan discussed the rollout.", "Planning Sync", [], "", { ownerNames: ["Ryley"] }))
+      .not.toContain("pronouns are");
+  });
+});

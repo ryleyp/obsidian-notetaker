@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Header from "@/components/Header";
 import SettingsPanel from "@/components/SettingsPanel";
 import MeetingDetails from "@/components/MeetingDetails";
@@ -22,6 +22,7 @@ import RunModePicker from "@/components/RunModePicker";
 import NoteComparisonPanel from "@/components/NoteComparisonPanel";
 import DraftRestoreList from "@/components/DraftRestoreList";
 import { looksSpeakerLabeled } from "@/lib/speakers";
+import { detectAccount } from "@/lib/accounts";
 import { defaultReviewModel, estimateUsage, FAST_MODEL, modelDisplayName, resolveAutoModel } from "@/lib/models";
 import { useAppSettings } from "@/hooks/useAppSettings";
 import { useSpeakerDetection } from "@/hooks/useSpeakerDetection";
@@ -90,6 +91,17 @@ export default function Home() {
   });
 
   const saving = useNoteSaving({ settings, meeting });
+
+  // Every configured account except the one this note is about. A scorecard
+  // session note that names another customer outside its cross-account
+  // section is how one account's facts end up in another account's deck.
+  const otherAccountNames = useMemo(() => {
+    const configured = settings.accounts || [];
+    const selected = detectAccount(selectedFolder, configured).name;
+    return configured
+      .map((account) => account?.name)
+      .filter((name) => name && name !== "Internal" && name !== selected);
+  }, [settings.accounts, selectedFolder]);
 
   const generation = useNoteGeneration({ settings, model, meeting });
 
@@ -291,6 +303,8 @@ export default function Home() {
                 updatedExisting={saving.updatedExisting}
                 backupPath={saving.backupPath}
                 ownerNames={settings.ownerNames || []}
+                ownerPronouns={settings.ownerPronouns || ""}
+                otherAccounts={otherAccountNames}
                 updatingExisting={!!existingNote}
                 cost={generation.noteCost}
                 sourceBundle={generation.sourceBundle}

@@ -1,10 +1,6 @@
-const PILLARS = [
-  "Proficiency & Self Service",
-  "Adoption",
-  "Sponsors & End Users",
-  "Expansion",
-  "Renewal",
-];
+// The pillars, the colour words and the note layer all come from one module,
+// so a scorecard cannot end up rating pillars the notes never captured.
+import { HEALTH_COLOURS, HEALTH_PILLARS as PILLARS, HEALTH_TRENDS } from "./healthSession";
 
 function otherAccountRules(accountName, allAccounts) {
   const others = (allAccounts || []).filter(
@@ -59,6 +55,10 @@ EVIDENCE RULES:
 - Rate Adoption from supplied usage evidence when it exists. If it does not, mark the rating provisional and name the missing evidence.
 - Newer dated evidence overrides older evidence. Keep material conflicts unresolved and label them for verification.
 - Treat the prior deck and review transcript as continuity sources. Verify current claims against dated folder notes.
+- Where a note carries a "Health Ratings Captured" table, those are the colours that were actually stated in that session, with who set them and whether they moved. Treat a row marked Proposed or Disputed as not yet agreed, and a row marked "Not discussed" as no evidence rather than a Green.
+- Where a note carries "Scorecard Feedback", that is coaching about the deck. Apply it to how this scorecard is written; never report it as a fact about the account.
+- Where a note separates work the CSM led from work relayed from the account team, keep that separation in the assessment. Claiming the account team's work is as wrong as relaying it with no attribution.
+- Name the source and its blind spot whenever usage is cited, and say from when. When two sources disagree on direction, give both and say which has been steadier.
 
 RATING RUBRIC:
 - Proficiency & Self Service: Green means formal plans, named owners, and customer-led enablement across active areas. Yellow means partial plans or NI remains the forcing function. Red means no plan, no owner, or enablement capacity is going unused.
@@ -66,7 +66,8 @@ RATING RUBRIC:
 - Sponsors & End Users: Green means direct, multi-threaded Customer Success relationships. Yellow means a key relationship or site is single-threaded or indirect. Red means no direct sponsor relationship in a major area.
 - Expansion: Green means named, funded software opportunities are moving. Yellow means opportunities depend on product, IT, budget, or one contact. Red means expansion is blocked or has reached a ceiling.
 - Renewal: Green means renewed or more than 12 months out with onboarding established. Yellow means inside 12 months or under migration, downsell, or pricing pressure. Red means the renewal is at risk.
-- Overall health uses judgment but cannot be better than a Red pillar. Use Green, Yellow, Red, or Unknown.
+- Overall health uses judgment but cannot be better than a Red pillar. Use ${HEALTH_COLOURS.join(", ")}.
+- Trend is one of ${HEALTH_TRENDS.join(", ")}. Flat is a measurement, not a hedge: say what the data shows and from when.
 
 WRITING RULES:
 - Write for sales and Customer Success leadership in direct, professional language.
@@ -90,7 +91,7 @@ Return Markdown only, using exactly this structure:
 [Current foundation, growth signal, why health is not higher, and what Customer Success is driving.]
 
 **Overall Health:** [Green / Yellow / Red / Unknown]  
-**Trend Since Last Review:** [Improving / Flat / Declining / Unknown]  
+**Trend Since Last Review:** [${HEALTH_TRENDS.join(" / ")}]  
 **Confidence:** [High / Medium / Low, with one-sentence reason]
 
 ## Health Scorecard
@@ -99,10 +100,13 @@ Return Markdown only, using exactly this structure:
 | --- | --- | --- | --- |
 ${PILLARS.map((pillar) => `| ${pillar} | [Evidence-based assessment and what would change the rating] | [Green / Yellow / Red / Unknown] | [Outcome-focused action, owner or dependency when known] |`).join("\n")}
 
-## Changes Since Last Review
+## Since Last Review
 
-- [Prior rating, commitment, or claim] → [current evidence-based status and dated source]
+- **[Prior commitment]** → [Done / In progress / Blocked / Dropped, with the dated evidence]
+- [Prior rating or claim] → [current evidence-based status and dated source]
 - If no prior scorecard was supplied, write: Prior scorecard not provided; continuity could not be assessed.
+
+Leadership opens these reviews on the previous quarter's commitments, so this section comes before the detail and states each one's status plainly.
 
 ## Priority Commitments
 

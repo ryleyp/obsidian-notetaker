@@ -38,6 +38,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
     aiPrivacyScan: settings.aiPrivacyScan !== false,
     fiscalYearFolders: settings.fiscalYearFolders !== false,
     ownerNamesText: (settings.ownerNames || []).join(", "),
+    ownerPronouns: settings.ownerPronouns || "",
     // Goals are edited as pasted text and parsed on save, so a review
     // document can be dropped in whole.
     goalsText: goalsToText(settings.goals || []),
@@ -435,6 +436,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       replacements: form.replacements,
       corrections: form.corrections,
       ownerNames: form.ownerNamesText.split(",").map((n) => n.trim()).filter(Boolean),
+      ownerPronouns: form.ownerPronouns.trim(),
       accounts: serializeAccounts(),
       goals: parseGoalsText(form.goalsText),
     });
@@ -494,6 +496,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           replacements: Array.isArray(cfg.replacements) ? cfg.replacements : f.replacements,
           corrections: Array.isArray(cfg.corrections) ? cfg.corrections : f.corrections,
           ownerNamesText: Array.isArray(cfg.ownerNames) ? cfg.ownerNames.join(", ") : f.ownerNamesText,
+          ownerPronouns: typeof cfg.ownerPronouns === "string" ? cfg.ownerPronouns : f.ownerPronouns,
           goalsText: Array.isArray(cfg.goals) ? goalsToText(cfg.goals) : f.goalsText,
           accounts: Array.isArray(cfg.accounts) && cfg.accounts.length
             ? cfg.accounts.map(accountToFormRow)
@@ -852,6 +855,20 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
             placeholder="e.g. Jordan, Jordy"
             value={form.ownerNamesText}
             onChange={(e) => handleChange("ownerNamesText", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="label">Your pronouns <span className="font-normal text-gray-400">(optional)</span></label>
+          <p className="text-xs text-gray-500 mb-2">
+            Used when a note refers to you. A transcript rarely states this, so without it a note can guess wrong and the mistake then travels into everything built from that note.
+          </p>
+          <input
+            type="text"
+            className="input"
+            placeholder="e.g. she/her"
+            value={form.ownerPronouns}
+            onChange={(e) => handleChange("ownerPronouns", e.target.value)}
           />
         </div>
 

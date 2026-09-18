@@ -19,6 +19,15 @@ describe("mergeReplacements", () => {
 });
 
 describe("mergeFileConfigIntoSettings", () => {
+  it("takes the owner's names and pronouns from the config file, and keeps the local ones when it has none", () => {
+    const settings = { replacements: [], corrections: [], accounts: [], ownerNames: ["Jordan"], ownerPronouns: "she/her" };
+
+    expect(mergeFileConfigIntoSettings(settings, { ownerNames: ["Avery"], ownerPronouns: "they/them" }))
+      .toMatchObject({ ownerNames: ["Avery"], ownerPronouns: "they/them" });
+    expect(mergeFileConfigIntoSettings(settings, { corrections: [] }))
+      .toMatchObject({ ownerNames: ["Jordan"], ownerPronouns: "she/her" });
+  });
+
   it("does not erase browser-saved common corrections when file config is empty", () => {
     const settings = {
       replacements: [],

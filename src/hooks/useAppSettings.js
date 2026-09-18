@@ -24,6 +24,7 @@ export const EMPTY_SETTINGS = {
   corrections: [],
   accounts: DEFAULT_ACCOUNTS,
   ownerNames: [],
+  ownerPronouns: "",
 };
 
 // Settings live in two places, deliberately:
@@ -55,6 +56,7 @@ export function useAppSettings({ onSettingsSaved } = {}) {
             accounts: s.accounts || DEFAULT_ACCOUNTS,
             corrections: s.corrections || [],
             ownerNames: s.ownerNames || [],
+            ownerPronouns: s.ownerPronouns || "",
             goals: s.goals || [],
           },
           glossary: {

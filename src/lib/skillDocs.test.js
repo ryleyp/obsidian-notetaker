@@ -3,6 +3,7 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 import { SKILL_FILES } from "./skillDocs";
 import { LINT_RULES } from "./activityLint";
+import { HEALTH_LINT_RULES } from "./healthSession";
 
 const SKILL_DIR = path.resolve(process.cwd(), "skills", "ea-activity-report");
 const UPDATE = process.env.UPDATE_SKILL === "1";
@@ -22,6 +23,15 @@ describe("EA Activity skill reference documents", () => {
 
     expect(fs.existsSync(filePath), `${relativePath} is missing — run \`npm run skill\``).toBe(true);
     expect(fs.readFileSync(filePath, "utf-8"), `${relativePath} is stale — run \`npm run skill\``).toBe(expected);
+  });
+
+  it("documents every health-session check the linter can actually raise", () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), "src", "lib", "healthSession.js"), "utf-8");
+    const raised = new Set([...source.matchAll(/push\("([a-z-]+)"/g)].map((m) => m[1]));
+    const documented = new Set(HEALTH_LINT_RULES.map((rule) => rule.code));
+
+    expect([...raised].filter((code) => !documented.has(code))).toEqual([]);
+    expect([...documented].filter((code) => !raised.has(code))).toEqual([]);
   });
 
   it("documents every check the linter can actually raise", () => {

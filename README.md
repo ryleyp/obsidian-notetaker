@@ -177,10 +177,27 @@ Install it by linking it into your skills directory, so regenerating it here upd
 ln -s "$PWD/skills/ea-activity-report" ~/.claude/skills/ea-activity-report
 ```
 
-Its two reference documents — the taxonomy and the quality checks — are generated from
-`src/lib/sfdcTaxonomy.js` and `src/lib/activityLint.js` by `npm run skill`. Never hand-edit
-them: `npm test` fails when they drift from the app's own definitions, which is what keeps
-the skill and the app from quietly enforcing two different standards.
+Its three reference documents — the taxonomy, the quality checks, and the health scorecard
+session layer — are generated from `src/lib/sfdcTaxonomy.js`, `src/lib/activityLint.js`, and
+`src/lib/healthSession.js` by `npm run skill`. Never hand-edit them: `npm test` fails when
+they drift from the app's own definitions, which is what keeps the skill and the app from
+quietly enforcing two different standards.
+
+### Health scorecard sessions
+
+A meeting about account health itself — a leadership review, a pre-sync with the account
+manager, scorecard coaching, a portfolio roll-up — is detected from the title, your context
+notes, and the transcript, and the note gains sections the ordinary format has no room for:
+every pillar's colour with who set it and whether it moved, feedback on the deck kept apart
+from facts about the account, the questions leadership asked, each usage figure with the
+source it came from, what you led as against what you are relaying, the commitments due at
+the next review, the support asks, and any other customer raised as a precedent.
+
+The quarterly scorecard is built from those sections months later, so the note preview runs
+a second check over them: a pillar with no row, a colour with no reason, a merged speaker, a
+pronoun that contradicts the pronouns in Settings, an unrestored `PERSON_2`, a usage claim
+with no source, a commitment with no completion test, another account's name outside the
+cross-account section.
 
 ### Upgrade an old meeting note
 

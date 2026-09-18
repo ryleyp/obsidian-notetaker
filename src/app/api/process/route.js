@@ -6,6 +6,7 @@ import { maxOutputTokens } from "@/lib/models";
 import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 import { activityWritingRules, classificationGuidance, taxonomyForReportPrompt } from "@/lib/sfdcTaxonomy";
 import { GOAL_SECTION_HEADING, NO_CONTRIBUTIONS, formatGoalsForPrompt } from "@/lib/goals";
+import { detectHealthSession, healthSessionPrompt } from "@/lib/healthSession";
 
 const SYSTEM_PROMPT = `You are an expert meeting notes specialist working for a Customer Success Manager (CSM) at NI (National Instruments). The person who recorded this meeting is that CSM — their job is driving adoption, expansion, and renewal of NI products at large customer accounts.
 
@@ -122,7 +123,7 @@ export function buildPrompt(
   meetingTitle,
   suggestedAgreements = [],
   meetingContext = "",
-  { sourceBundle, accounts = [], followUp, ownerNames = [], goals = [] } = {}
+  { sourceBundle, accounts = [], followUp, ownerNames = [], ownerPronouns = "", goals = [] } = {}
 ) {
   const title = meetingTitle || "Meeting Notes";
   const sources = sourceBundle || buildSourceBundle({ transcript, rawNotes: meetingContext });
@@ -142,6 +143,11 @@ MULTIPLE TRANSCRIPTS OF THE SAME MEETING:
 - If the sources directly contradict each other on a material fact and context cannot resolve it, call out the discrepancy as unresolved instead of silently choosing one.
 `
     : "";
+
+  // A scorecard session carries an extra layer of sections; an ordinary
+  // meeting gets an empty string here and the standard note.
+  const healthSession = detectHealthSession({ title, transcript: transcriptEvidence, context: meetingContext });
+  const healthSessionBlock = healthSessionPrompt(healthSession);
 
   const isMigration = (sources.existingNoteSources || []).length > 0;
 
@@ -207,9 +213,12 @@ Rules for this section:
   // Who the recording CSM is, so their first-person commitments get a real,
   // filterable owner instead of "me" or a speaker label.
   const csmNames = (ownerNames || []).map((n) => String(n || "").trim()).filter(Boolean);
+  const pronounRule = String(ownerPronouns || "").trim()
+    ? ` The CSM's pronouns are ${String(ownerPronouns).trim()}: use those, or no pronoun at all, whenever the note refers to them.`
+    : "";
   const csmIdentityBlock = csmNames.length
     ? `
-THE CSM (NOTE OWNER): The CSM saving this note is known as: ${csmNames.join(", ")}. The CSM is NOT necessarily a speaker — in many meetings they attend silently and only record. Never assume a first-person statement ("I'll send that over", "let me check") came from the CSM.
+THE CSM (NOTE OWNER): The CSM saving this note is known as: ${csmNames.join(", ")}.${pronounRule} The CSM is NOT necessarily a speaker — in many meetings they attend silently and only record. Never assume a first-person statement ("I'll send that over", "let me check") came from the CSM.
 - Attribute a commitment to "${csmNames[0]}" ONLY when the evidence shows the CSM said it: the CSM's context/notes state who led the meeting or what their role was (authoritative — see the CONTEXT section), the speaker label is the CSM's name (or one of the names above), the CSM is addressed by name right before replying, or the dialogue otherwise makes the speaker unambiguous. In that case write "${csmNames[0]}" as the owner — never "me", "we", or "I".
 - When a first-person commitment comes from an unidentified or generically labeled speaker, keep that speaker's label as the owner (e.g. "Speaker 2") — do not reassign it to the CSM.
 - For items owned by NI Customer Success as a team rather than the CSM personally, write "**Owner:** CS/CSM team".
@@ -297,7 +306,9 @@ Provide complete, consolidated bulleted notes covering everything of substance i
 
 Skip entirely: filler, verbatim repetition, small talk, personal updates or check-ins, and sentiment or mood commentary. When in doubt about whether a factual detail belongs, include it — but include it once, tersely. Do not editorialize or invent anything absent from the sources.
 
----
+${healthSessionBlock ? `${healthSessionBlock}
+
+` : ""}---
 
 ## Things NI SW Customer Success Should Take Note Of
 
@@ -371,6 +382,7 @@ export async function POST(request) {
       accounts = [],
       followUp,
       ownerNames = [],
+      ownerPronouns = "",
       goals = [],
     } = body;
 
@@ -393,6 +405,7 @@ export async function POST(request) {
           sourceBundle,
           followUp,
           ownerNames,
+          ownerPronouns,
           goals,
         }),
       }],

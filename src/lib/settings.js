@@ -39,6 +39,8 @@ export function mergeFileConfigIntoSettings(settings, config) {
       Array.isArray(config.corrections) ? config.corrections : []
     ),
     accounts: config.accounts?.length ? config.accounts : settings.accounts,
+    ownerNames: config.ownerNames?.length ? config.ownerNames : settings.ownerNames,
+    ownerPronouns: config.ownerPronouns || settings.ownerPronouns,
     goals: config.goals?.length ? config.goals : settings.goals,
   };
 }
