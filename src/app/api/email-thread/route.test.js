@@ -20,6 +20,7 @@ describe("buildEmailThreadPrompt", () => {
     expect(prompt).toContain("## Customer Success Callouts");
     expect(prompt).toContain("## Source Email Content");
     expect(prompt).toContain("## SFDC Activity Entry");
+    expect(prompt).toContain("**Recommended Title:**");
     expect(prompt).toContain("120 words or fewer and 800 characters or fewer");
     expect(prompt).toContain("**Type: Strategic Relationship Management**");
     expect(prompt).toContain("Cite every factual bullet or factual paragraph");

@@ -26,7 +26,13 @@ export function parseImprovement(text, rows) {
       throw new Error("The model returned an activity outside the Salesforce limits or taxonomy. Please try again.");
     }
     return { index: change.index, ...patch };
-  }).filter((change) => IMPROVEMENT_FIELDS.some((field) => change[field] !== rows[change.index][field]));
+  }).filter((change) => IMPROVEMENT_FIELDS.some((field) => {
+    const row = rows[change.index];
+    // A proposed title that merely repeats the row's improved title (or its
+    // source name when there is no improved title yet) is not a change.
+    if (field === "title") return change.title !== row.title && change.title !== (row.improvedTitle || "");
+    return change[field] !== row[field];
+  }));
   return { message: result.message.trim(), changes };
 }
 

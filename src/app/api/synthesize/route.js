@@ -467,12 +467,13 @@ ${exampleRows.map((r) => JSON.stringify({ title: r.title, type: r.type, subtype:
 ` : ""}
 OUTPUT FORMAT — output ONLY newline-delimited JSON (NDJSON): exactly one JSON object per line, one line per activity. No Markdown, no code fences, no intro or commentary, no blank lines between objects. Each line has exactly these keys:
 
-{"eventDate":"YYYY-MM-DD","title":"...","type":"...","subtype":"...","comments":"...","sourceTitle":"...","review":false,"reviewReason":""}
+{"eventDate":"YYYY-MM-DD","title":"...","improvedTitle":"...","type":"...","subtype":"...","comments":"...","sourceTitle":"...","review":false,"reviewReason":""}
 
 Field rules:
 - **eventDate**: the date of the note this activity came from (YYYY-MM-DD, taken from the ### heading of the source)
 - **sourceTitle**: the exact title of the source note this activity came from, copied verbatim from its ### heading (the part after the date). Every row MUST cite its source, and no two rows may cite the same source note.
-- **title**: names the engagement AND its purpose, in the style of these real examples — "Beacon Systems RF User Group - March 2026", "CSM / FAE Cardinal Account Interlock", "NI Connect Promotional Email", "Acme Aerospace Proficiency Plan - LabVIEW Core Training Scheduling". "Engineering sponsor sync on adoption blockers and rollout timing" beats "Sponsor sync"
+- **title**: the engagement as the source names it — the note heading without its date, minus any "Email - " or "RE:" prefix and "(1)" suffix, or the meeting's own name when the note states one. This is the label the CSM recognizes the meeting by; do not rewrite or embellish it.
+- **improvedTitle**: the Salesforce-ready title that will actually be filed. Name the engagement AND its purpose, in the style of these real examples — "Beacon Systems RF User Group - March 2026", "CSM / FAE Cardinal Account Interlock", "NI Connect Promotional Email", "Acme Aerospace Proficiency Plan - LabVIEW Core Training Scheduling". "Engineering sponsor sync on adoption blockers and rollout timing" beats "Sponsor sync". Never blank; at most 200 characters.
 - **type** and **subtype**: must exactly match one option from the taxonomy below
 - **comments**: three labelled parts on one line, in this order and exactly these labels — "Summary: ... Outcomes: ... Next steps: ..." — matching the entries the CSM already writes in their notes, so harvested and generated rows read identically in the table. The Summary carries what the CSM did; it is not a separate labelled line. HARD LIMIT 800 characters for the whole thing: this is pasted directly into the SFDC Comment field and an over-limit comment cannot be filed. Draft it, count the characters, then trim — cut background from Summary first, never what the CSM did or what came of it. Past tense, no first person.
 - **review**: set to true ONLY when you are genuinely unsure of the type/subtype classification (e.g. a session that could be either Demo Days or User Group), with a short reviewReason explaining the ambiguity. When confident, use false and an empty reviewReason.

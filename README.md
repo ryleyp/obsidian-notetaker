@@ -125,7 +125,8 @@ that archive file instead of creating a numbered copy.
 ### EA Activity entries
 
 Every generated note ends with an SFDC Activity Entry — the part that gets pasted into
-Salesforce verbatim. It carries a Salesforce-style **Activity Title**, the Type/Subtype
+Salesforce verbatim. It carries a Salesforce-ready **Recommended Title** (what the EA
+Activity report shows as Improved Title), the Type/Subtype
 pair, EA/EP numbers, a **Reportable** verdict, and a Summary/Notes block in four labelled
 parts:
 

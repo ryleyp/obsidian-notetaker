@@ -37,9 +37,12 @@ A Markdown table with one row per reportable activity:
 - Status          — Completed (default), Planned, or Canceled
 - Event Date      — the date in the source note's title; it overrides any
                     date the AI picked out of the meeting text
-- Improved Title  — Salesforce-ready title proposed by the improvement pass
-                    (blank until it runs); the original stays in Title
-- Title           — short descriptive name matching SFDC style
+- Improved Title  — the Salesforce-ready title that gets filed: generated
+                    with the report, taken from the note's Recommended
+                    Title for harvested entries, and filled in automatically
+                    for any row that still lacks one
+- Title           — the engagement as the source names it (meeting or note
+                    title), kept beside the improved title
 - Type            — one of 6 EA Engagement Types (see taxonomy below)
 - Subtype         — specific subtype within that Type
 - EA/EP           — agreement number(s) the activity relates to

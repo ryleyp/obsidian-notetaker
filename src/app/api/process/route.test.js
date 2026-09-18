@@ -185,9 +185,10 @@ describe("buildPrompt goal contributions", () => {
 describe("buildPrompt SFDC entry postability", () => {
   it("asks for a Salesforce title and a reportable verdict, and classifies with the full guidance", () => {
     const prompt = buildPrompt("Jordan discussed the rollout.", "Planning Sync");
-    expect(prompt).toContain("**Activity Title:**");
+    expect(prompt).toContain("**Recommended Title:** <Salesforce-ready title, per the RECOMMENDED TITLE rules>");
+    expect(prompt).not.toContain("**Activity Title:**");
+    expect(prompt).toContain("RECOMMENDED TITLE\n- The Salesforce-ready title that will actually be filed");
     expect(prompt).toContain("**Reportable:**");
-    expect(prompt).toContain("ACTIVITY TITLE");
     expect(prompt).toContain("CLASSIFICATION PROCESS");
     expect(prompt).toContain("IMPORTANT DEFINITION — EA Admin");
     // The real filed examples travel with the taxonomy now.

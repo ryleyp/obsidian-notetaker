@@ -133,6 +133,9 @@ export function lintActivityRow(row, { ownerNames = [], agreementsOnFile = false
   const issues = [];
   const push = (code, severity, message, fixable = false) => issues.push({ code, severity, message, fixable });
   const title = String(row?.title || "");
+  // The improved title is what gets pasted into Salesforce when there is
+  // one; the title beside it is the engagement as the source named it.
+  const filedTitle = String(row?.improvedTitle || "").trim() || title;
   const comment = String(row?.comments || "");
   const body = collapse(comment);
   const type = String(row?.type || "");
@@ -161,7 +164,7 @@ export function lintActivityRow(row, { ownerNames = [], agreementsOnFile = false
   if (type === "User Groups" && ["Demo Days", "User Group"].includes(subtype) && !(/\bRegion:/i.test(comment) && /\b(?:Attendees|Participants):/i.test(comment))) {
     push("group-format", "soft", "User group rows carry \"Region: X, Attendees: #\" (TBD is fine) and an Outcome.");
   }
-  if (title.length > TITLE_CHAR_LIMIT) push("title-length", "hard", `Title is ${title.length} characters; the limit is ${TITLE_CHAR_LIMIT}.`);
+  if (filedTitle.length > TITLE_CHAR_LIMIT) push("title-length", "hard", `Title is ${filedTitle.length} characters; the limit is ${TITLE_CHAR_LIMIT}.`);
   else if (cleanActivityTitle(title) !== collapse(title)) push("title-noise", "soft", "Title carries a date, mail prefix, or duplicate suffix.", true);
   if (agreementsOnFile && !String(row?.agreement || "").trim()) push("missing-agreement", "soft", "No EA/EP number, but this account has agreements on file.");
 
@@ -185,8 +188,8 @@ export function lintActivityRow(row, { ownerNames = [], agreementsOnFile = false
       push("no-participants", "soft", "Nobody is named or given a role — a reader cannot tell who was involved.");
     }
   }
-  const titleWords = wordCount(title);
-  if (title && (titleWords < 4 || TITLE_GENERIC.test(collapse(title)))) {
+  const titleWords = wordCount(filedTitle);
+  if (filedTitle && (titleWords < 4 || TITLE_GENERIC.test(collapse(filedTitle)))) {
     push("weak-title", "soft", "Title names the engagement but not its purpose — add the initiative, team, site, or product.");
   }
   if (type === "Other" || subtype === "Other") {

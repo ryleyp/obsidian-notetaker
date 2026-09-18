@@ -126,7 +126,8 @@ Summarize the thread chronologically, newest-to-oldest if the source makes that 
 
 Create a Salesforce-ready activity entry for this email thread. Output exactly this shape inside this section:
 
-**Activity Title:** <a short Salesforce engagement title in the style of the examples — account, what it was, month or product when useful; never the subject line, no "RE:"/"FW:", no dates>
+**Recommended Title:** <a short Salesforce-ready engagement title in the style of the examples — account, what it was and why, month or product when useful; never the subject line, no "RE:"/"FW:", no dates, at most 200 characters>
+
 **Type:** <one approved type below>
 **Subtype:** <a subtype listed under that type>
 **EA/EP Number(s):** <a number explicitly present in the sources, or "None on file">

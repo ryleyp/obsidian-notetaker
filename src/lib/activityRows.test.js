@@ -156,8 +156,8 @@ describe("Filed column round trip", () => {
     ]);
     expect(md.split("\n")[0]).toBe("| Filed | Status | Event Date | Improved Title | Title | Type | Subtype | EA/EP | Source Note | Comments |");
     expect(parseReportTable(md)).toEqual([
-      { eventDate: "2026-04-12", title: "EA Admin Sync", filed: true },
-      { eventDate: "2026-04-13", title: "Second | pipe", filed: false },
+      { eventDate: "2026-04-12", title: "EA Admin Sync", improvedTitle: "", sourceTitle: "Q2 Admin Sync", filed: true },
+      { eventDate: "2026-04-13", title: "Second | pipe", improvedTitle: "", sourceTitle: "Q2 Admin Sync", filed: false },
     ]);
   });
 
@@ -167,7 +167,7 @@ describe("Filed column round trip", () => {
       "|------------|-------|------|---------|-------|----------|",
       "| 2026-04-12 | Old Row | T | S |  | c |",
     ].join("\n");
-    expect(parseReportTable(old)).toEqual([{ eventDate: "2026-04-12", title: "Old Row", filed: false }]);
+    expect(parseReportTable(old)).toEqual([{ eventDate: "2026-04-12", title: "Old Row", improvedTitle: "", sourceTitle: "", filed: false }]);
 
     const edited = [
       "| Filed | Event Date | Title | Type | Subtype | EA/EP | Comments |",
@@ -177,6 +177,13 @@ describe("Filed column round trip", () => {
       "| [ ] | 2026-04-14 | Open | T | S |  | c |",
     ].join("\n");
     expect(parseReportTable(edited).map((r) => r.filed)).toEqual([true, true, false]);
+  });
+});
+
+describe("parseReportTable source and improved title", () => {
+  it("reads the source note and improved title back so filed matching can use them", () => {
+    const [row] = parseReportTable(rowsToMarkdown([{ ...ROW, filed: true, improvedTitle: "Q2 Licensing Governance Sync" }]));
+    expect(row).toMatchObject({ eventDate: "2026-04-12", title: "EA Admin Sync", improvedTitle: "Q2 Licensing Governance Sync", sourceTitle: "Q2 Admin Sync", filed: true });
   });
 });
 

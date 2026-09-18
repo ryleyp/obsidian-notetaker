@@ -18,6 +18,14 @@ describe("applying activity refinements", () => {
 });
 
 describe("improved titles stay beside the original", () => {
+  it("drops a proposal whose title only repeats the row's improved title", () => {
+    const rows = [{ title: "Acme Dallas Visit", improvedTitle: "Acme Aerospace Dallas Lab Visit - SystemLink Review", type: "Strategic Relationship Management", subtype: "EA Admin Sync", comments: "Summary: x." }];
+    const same = JSON.stringify({ message: "ok", changes: [{ index: 0, title: "Acme Aerospace Dallas Lab Visit - SystemLink Review", type: "Strategic Relationship Management", subtype: "EA Admin Sync", comments: "Summary: x." }] });
+    expect(parseImprovement(same, rows).changes).toEqual([]);
+    const better = JSON.stringify({ message: "ok", changes: [{ index: 0, title: "Acme Aerospace Dallas Lab Visit - SystemLink Rack Review", type: "Strategic Relationship Management", subtype: "EA Admin Sync", comments: "Summary: x." }] });
+    expect(parseImprovement(better, rows).changes).toHaveLength(1);
+  });
+
   it("does not record an improvedTitle when the proposal keeps the same title", () => {
     const next = applyImprovement([row], [{ index: 0, ...row, comments: "Tighter." }]);
     expect(next[0].title).toBe("Admin Sync");

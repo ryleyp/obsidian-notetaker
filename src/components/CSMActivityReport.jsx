@@ -17,6 +17,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { useReportWorkflow, TODAY } from "@/hooks/useReportWorkflow";
 import { ScanButton, CountsBadges, NoteList, GeneratePanel, PreflightPanel, OutputHeader, HistoryMenu, BleedWarning, StrictToggle } from "@/components/ReportSections";
 import { eventDateFromNote, parseActivityRows, rowsToNDJSON, rowsToMarkdown, sortRowsByDate, STATUSES } from "@/lib/activityRows";
+import { applyImprovedTitles, rowsNeedingTitles } from "@/lib/titlePass";
 import { harvestNotes } from "@/lib/sfdcHarvest";
 import { duplicateSourceNotes, fixActivityRow, lintActivityRow, lintSummary } from "@/lib/activityLint";
 import { reviewActivityPortfolio } from "@/lib/activityPortfolio";
@@ -108,6 +109,11 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   const [includeInternal, setIncludeInternal] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [pendingClassifyCheck, setPendingClassifyCheck] = useState(false);
+  // Rows without a Salesforce-ready title — harvested entries and reopened
+  // reports from before the column existed — get one written after the
+  // table settles, so the Improved Title column is never left blank.
+  const [pendingTitles, setPendingTitles] = useState(false);
+  const [titling, setTitling] = useState(false);
   const [reportFiled, setReportFiled] = useState(null); // { filename, count } from the folder's latest saved report
   // Reports already saved in this folder, so one filed weeks ago can be
   // reopened and run through the same checks as a fresh table.
@@ -200,6 +206,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
       setFiledMap((prev) => (data.rows || []).reduce((map, row) => (row.filed ? markFiled(map, row, true) : map), prev));
       wf.seedOutput(rowsToNDJSON(data.rows || []));
       setOpenedReport({ filename: data.filename, count: (data.rows || []).length });
+      setPendingTitles(true);
     } catch (e) {
       alert(`Could not open that report: ${e.message}`);
     } finally {
@@ -388,8 +395,11 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
     if (remaining.length) await wf.handleSynthesize({ append: harvested.length > 0, notes: remaining });
     // The classification check needs the rows React derives from the new
     // output, so it runs from an effect once the state has settled.
+    // Second opinion proposes titles itself; every other mode fills the
+    // harvested rows' improved titles directly.
     if (runMode === "second-opinion") setPendingImprovement(true);
-    else if (runMode === "compare") setPendingAlternative(true);
+    else setPendingTitles(true);
+    if (runMode === "compare") setPendingAlternative(true);
     else if (runMode === "flagged") { setPendingClassifyCheck(true); setPendingFlaggedReview(true); }
   }
 
@@ -458,11 +468,54 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   }
 
   useEffect(() => {
-    if (!pendingClassifyCheck || wf.synthesizing) return;
+    // The title pass commits rows too; let it finish before the
+    // classification check takes its own snapshot of the table.
+    if (!pendingClassifyCheck || wf.synthesizing || pendingTitles || titling) return;
     setPendingClassifyCheck(false);
     if (rows.length) checkClassifications();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingClassifyCheck, wf.synthesizing, rows.length]);
+  }, [pendingClassifyCheck, wf.synthesizing, pendingTitles, titling, rows.length]);
+
+  useEffect(() => {
+    if (!pendingTitles || wf.synthesizing) return;
+    setPendingTitles(false);
+    if (rowsNeedingTitles(rows).length) fillImprovedTitles();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingTitles, wf.synthesizing, rows.length]);
+
+  // Writes a Salesforce-ready title into every row that has none. Titles
+  // only — the row's own title and every other field stay as they are.
+  async function fillImprovedTitles(overrideModel = reviewModel) {
+    const targets = rowsNeedingTitles(rows);
+    if (!targets.length || titling) return;
+    setTitling(true);
+    try {
+      const res = await apiFetch("/api/improve-titles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rows: targets.map(({ row, index }) => ({ index, title: row.title, type: row.type, subtype: row.subtype, comments: row.comments, sourceTitle: row.sourceTitle })),
+          accountName,
+          allAccounts: settings.accounts || [],
+          replacements: settings.replacements || [],
+          corrections: settings.corrections || [],
+          model: overrideModel,
+          apiKey: settings.apiKey || undefined,
+          openaiApiKey: settings.openaiApiKey || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Title pass failed");
+      const titled = applyImprovedTitles(rows, data.titles || []);
+      if (titled.some((row, i) => row !== rows[i])) commitRows(titled, `${providerLabel(overrideModel)} improved titles`, overrideModel);
+    } catch (e) {
+      // No API key or a transient failure: the table is complete without
+      // improved titles, so don't interrupt the CSM.
+      console.warn("Improved titles skipped:", e.message);
+    } finally {
+      setTitling(false);
+    }
+  }
 
   // Second opinion on every row's Type/Subtype from the detailed taxonomy.
   // Produces suggestions the CSM applies or dismisses — never silent edits.
@@ -652,7 +705,7 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
   }
 
   useEffect(() => {
-    if (!pendingFlaggedReview || pendingClassifyCheck || classifying || wf.synthesizing) return;
+    if (!pendingFlaggedReview || pendingClassifyCheck || classifying || wf.synthesizing || pendingTitles || titling) return;
     setPendingFlaggedReview(false);
     const flagged = rows.map((row, index) => row.review || row.suggestedType ? index : -1).filter((index) => index >= 0);
     if (flagged.length) handleVerify(flagged, reviewModel);
@@ -942,6 +995,11 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
           {wf.output && openedReport && (
             <p className="text-xs text-gray-600 -mb-2">
               Reviewing <code className="font-mono">{openedReport.filename}</code> — {openedReport.count} row{openedReport.count !== 1 ? "s" : ""} loaded from the saved report. Saving writes a new dated report; the original file is left alone.
+            </p>
+          )}
+          {wf.output && titling && (
+            <p role="status" className="text-xs text-gray-500 -mb-2">
+              Writing Salesforce-ready titles for the rows without one…
             </p>
           )}
           {wf.output && reportFiled && (

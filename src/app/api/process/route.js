@@ -77,10 +77,10 @@ ${classificationGuidance()}
 - Prefer "Account Planning" or "Other" for NI-internal work, with an outcome-focused description.
 - If the meeting spans onboarding and training, classify by account stage — new/ramping accounts default to Onboarding & Kick-Off.
 
-ACTIVITY TITLE
-- A short Salesforce engagement title naming the engagement AND its purpose, in the style of the examples above: "Beacon Systems RF User Group - March 2026", "CSM / FAE Cardinal Account Interlock", "Acme Aerospace Proficiency Plan - LabVIEW Core Training Scheduling".
+RECOMMENDED TITLE
+- The Salesforce-ready title that will actually be filed: a short engagement title naming the engagement AND its purpose, in the style of the examples above: "Beacon Systems RF User Group - March 2026", "CSM / FAE Cardinal Account Interlock", "Acme Aerospace Proficiency Plan - LabVIEW Core Training Scheduling", "Acme Space User Group Debrief and DC Power Session Selection".
 - Purpose is what makes a title useful: "Engineering sponsor sync on adoption blockers and Q3 rollout timing" beats "User group sponsor sync". Name the initiative, customer team, site, or product when it helps someone find this record later.
-- Not the file name, not an email subject line: no dates at the front, no "RE:"/"FW:", no "Email -".
+- Not the file name, not an email subject line: no dates at the front, no "RE:"/"FW:", no "Email -". At most 200 characters; never blank.
 
 REPORTABLE
 - "Yes" when this is an EA engagement the account team would log in Salesforce: customer-facing work, or NI-internal work that produced a concrete decision or outcome.
@@ -351,7 +351,8 @@ A Salesforce-ready activity entry for this meeting, following the rules below. O
 
 The no-length-limit instruction applies to Meeting Notes and NOT to this section. This section is pasted into a Salesforce field: the Summary/Notes block (Summary + Outcomes + Next steps, including the labels) must be 120 words or fewer and 800 characters or fewer. Write the block, count the words, and trim until it fits before you output it. Detail that does not fit belongs in Meeting Notes above, not here.
 
-**Activity Title:** <Salesforce engagement title, per the ACTIVITY TITLE rules>
+**Recommended Title:** <Salesforce-ready title, per the RECOMMENDED TITLE rules>
+
 **Type:** <one approved type>
 **Subtype:** <matching subtype from that type's list>
 **EA/EP Number(s):** <relevant number(s) from the list below, or "None on file">

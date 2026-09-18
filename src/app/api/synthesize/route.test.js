@@ -55,4 +55,11 @@ describe("EA Activity report synthesis", () => {
     expect(prompt).toContain("POSTABILITY CHECK");
     expect(prompt).toContain("manager 1:1s, team or staff meetings");
   });
+
+  it("asks for the source's own name in title and a Salesforce-ready improvedTitle", async () => {
+    const prompt = await promptFrom(await post({ promptType: "csm-activity" }));
+    expect(prompt).toContain('"improvedTitle":"..."');
+    expect(prompt).toContain("the engagement as the source names it");
+    expect(prompt).toContain("the Salesforce-ready title that will actually be filed");
+  });
 });

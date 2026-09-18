@@ -84,9 +84,11 @@ export function harvestSfdcRow(note, { ownerNames = [], agreementsOnFile = false
   const rawComments = summaryBlock(section);
   if (!rawComments.trim()) return null;
 
-  // The entry's own title, written in Salesforce style at note time, beats
-  // whatever the file happened to be called.
+  // Title is the engagement as the note names it. Older entries wrote that
+  // as "Activity Title"; current ones carry only a Recommended Title — the
+  // Salesforce-ready one — so the note's own title fills Title instead.
   const activityTitle = field(section, "Activity Title");
+  const recommendedTitle = field(section, "Recommended Title");
   const { reportable, reason: reportableReason } = reportableField(section);
 
   // Safe hygiene only: the CSM's name to "CSM", markers out, empty labelled
@@ -99,6 +101,7 @@ export function harvestSfdcRow(note, { ownerNames = [], agreementsOnFile = false
   const row = {
     eventDate: note.date || "",
     title: fixed.title,
+    improvedTitle: cleanActivityTitle(recommendedTitle).slice(0, 200),
     type,
     subtype,
     comments: fixed.comments,
@@ -166,7 +169,7 @@ export function lintNoteEntry(content, { ownerNames = [], agreementsOnFile = fal
   const rawType = field(section, "Type");
   const row = {
     eventDate: String(content || "").match(/(\d{4}-\d{2}-\d{2})/)?.[1] || "",
-    title: field(section, "Activity Title") || "Activity",
+    title: field(section, "Recommended Title") || field(section, "Activity Title") || "Activity",
     type: normalizeSfdcType(rawType),
     subtype: normalizeSfdcSubtype(rawType, field(section, "Subtype")),
     comments: summaryBlock(section),

@@ -147,10 +147,15 @@ export function parseReportTable(markdown) {
   const table = readTable(markdown);
   if (!table) return [];
   const filedIdx = table.col("filed");
+  const improvedIdx = table.col("improved title");
+  const sourceIdx = table.col("source note");
+  const cell = (cells, at) => (at >= 0 ? cells[at] || "" : "");
   return table.rows
     .map((cells) => ({
       eventDate: cells[table.dateIdx] || "",
       title: cells[table.titleIdx] || "",
+      improvedTitle: cell(cells, improvedIdx),
+      sourceTitle: cell(cells, sourceIdx),
       filed: filedIdx >= 0 ? TICKED.test(cells[filedIdx] || "") : false,
     }))
     .filter((r) => r.title);

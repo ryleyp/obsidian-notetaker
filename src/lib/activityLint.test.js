@@ -162,6 +162,10 @@ describe("the reporting standard the account team reviews against", () => {
     expect(codes({ ...good, title: "Sponsor sync" })).toContain("weak-title");
     expect(codes({ ...good, title: "Sync" })).toContain("weak-title");
     expect(codes(good)).not.toContain("weak-title");
+    // The improved title is what gets filed, so it is what the check reads.
+    expect(codes({ ...good, title: "Sponsor sync", improvedTitle: "Engineering sponsor sync on adoption blockers and rollout timing" })).not.toContain("weak-title");
+    expect(codes({ ...good, improvedTitle: "Sync" })).toContain("weak-title");
+    expect(codes({ ...good, improvedTitle: "t".repeat(201) })).toContain("title-length");
   });
 
   it("asks whether \"Other\" was really the best category", () => {

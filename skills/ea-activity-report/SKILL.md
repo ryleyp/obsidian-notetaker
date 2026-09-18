@@ -61,9 +61,12 @@ reference files.
 
 ## Writing one record
 
-**Activity Title** — names the engagement *and its purpose*. "Engineering sponsor sync on
-adoption blockers and Q3 rollout timing" beats "Sponsor sync". Never a file name or a mail
-subject: no leading date, no `RE:`/`FW:`, no `Email -`.
+**Recommended Title** — the Salesforce-ready title that actually gets filed. Names the
+engagement *and its purpose*: "Engineering sponsor sync on adoption blockers and Q3 rollout
+timing" beats "Sponsor sync"; "Acme Space User Group Debrief and DC Power Session Selection"
+is the shape. Never a file name or a mail subject: no leading date, no `RE:`/`FW:`, no
+`Email -`. At most 200 characters, never blank. In a report table this is the Improved Title
+column; the meeting's own name sits beside it as Title.
 
 **Comment** — four labelled parts, in this order, as plain sentences on one line:
 
@@ -84,7 +87,8 @@ Contribution and Outcomes are what a reviewer is looking for.
 Default to the SFDC-ready block, one per activity:
 
 ```
-**Activity Title:** ...
+**Recommended Title:** ...
+
 **Type:** ...
 **Subtype:** ...
 **EA/EP Number(s):** ... (or "None on file")
@@ -99,11 +103,11 @@ Next steps: ...
 ```
 
 When the user asks for a table, or for several activities across a range, emit one row per
-activity with: Event Date, Improved Title, Activity Title, Type, Subtype, EA/EP, Source Note, Comment.
+activity with: Event Date, Improved Title, Title, Type, Subtype, EA/EP, Source Note, Comment.
 Event Date is the date in the source note's title, never a date mentioned inside the meeting.
-Improved Title is your clearer, Salesforce-ready rewrite when the current title reads like a
-file name or email subject; leave it blank when the title is already good, and never drop the
-original. Keep rows newest first and cite the source note for every row.
+Title is the engagement as the source names it; Improved Title is the Salesforce-ready
+title (the note's Recommended Title when it has one, otherwise write it) — fill it for every row
+and never drop the original. Keep rows newest first and cite the source note for every row.
 
 After the records, list: any facts that need human confirmation, and any row where the
 classification was a genuine toss-up, with the two candidates and why.

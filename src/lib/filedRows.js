@@ -6,8 +6,24 @@
 const STORAGE_KEY = "sfdc:filed-rows";
 const CAP = 400;
 
+const norm = (s) => String(s || "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+
 export function filedRowKey(row) {
-  return `${row?.eventDate || ""}|${String(row?.title || "").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase()}`;
+  return `${row?.eventDate || ""}|${norm(row?.title)}`;
+}
+
+// One note is one activity, so the same source on the same day is the same
+// record even when a later run titled it differently. This is what lets a
+// tick survive regeneration, where titles never come back word for word.
+function sourceKey(row) {
+  const source = norm(row?.sourceTitle);
+  return source ? `${row?.eventDate || ""}|${source}` : "";
+}
+
+function titleKeys(row) {
+  const keys = [filedRowKey(row)];
+  if (norm(row?.improvedTitle)) keys.push(`${row?.eventDate || ""}|${norm(row.improvedTitle)}`);
+  return keys;
 }
 
 export function loadFiledRows() {
@@ -31,21 +47,30 @@ function persist(map) {
 
 export function markFiled(map, row, filed) {
   const next = { ...map };
-  const key = filedRowKey(row);
   if (filed) {
-    next[key] = {
+    next[filedRowKey(row)] = {
       ts: Date.now(),
-      row: { eventDate: row.eventDate, title: row.title, type: row.type, subtype: row.subtype, comments: row.comments },
+      row: {
+        eventDate: row.eventDate, title: row.title, improvedTitle: row.improvedTitle || "", type: row.type, subtype: row.subtype,
+        comments: row.comments, sourceTitle: row.sourceTitle || "",
+      },
     };
   } else {
-    delete next[key];
+    // Unticking has to remove the entry however it matched — by either
+    // title or by the source note — or the row springs back as filed.
+    const source = sourceKey(row);
+    for (const key of Object.keys(next)) {
+      if (titleKeys(row).includes(key) || (source && sourceKey(next[key]?.row) === source)) delete next[key];
+    }
   }
   persist(next);
   return next;
 }
 
 export function isFiled(map, row) {
-  return !!map[filedRowKey(row)];
+  if (titleKeys(row).some((key) => map[key])) return true;
+  const source = sourceKey(row);
+  return !!source && Object.values(map).some((entry) => sourceKey(entry?.row) === source);
 }
 
 // Most recently filed rows, newest first, for use as prompt examples.

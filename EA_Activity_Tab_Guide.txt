@@ -112,10 +112,14 @@ A table with one row per reportable activity:
   - Status           Completed (default), Planned, or Canceled
   - Event Date       the date in the source note's title, which always wins
                      over any date the AI picked out of the meeting text
-  - Improved Title   the Salesforce-ready title proposed by the improvement
-                     pass; blank until that pass runs. The original stays
-                     in Title so nothing is lost
-  - Title            short name for the activity (SFDC-style)
+  - Improved Title   the Salesforce-ready title that gets filed. Generated
+                     rows get one with the report; harvested entries carry
+                     the note's Recommended Title, and any row still
+                     missing one (older notes, reopened reports) is filled
+                     in automatically after the table loads
+  - Title            the engagement as the source names it (the meeting or
+                     note title); kept beside the improved title so nothing
+                     is lost
   - Type             one of the 6 SFDC EA Engagement Types
   - Subtype          specific subtype within that Type
   - EA/EP            the agreement number(s) the activity relates to
