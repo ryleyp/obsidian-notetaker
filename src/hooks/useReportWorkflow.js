@@ -107,9 +107,16 @@ export function useReportWorkflow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist whenever the durable bits change (not mid-stream).
+  // Persist whenever the durable bits change (not mid-stream). The first
+  // run after hydration still sees the initial empty state — the restored
+  // values land on the next render — so writing then would clobber the
+  // stored report with blanks. Under React's development double-mount that
+  // blank is what the second restore reads, and the report vanishes on
+  // every reload.
+  const skipFirstPersist = useRef(true);
   useEffect(() => {
     if (!hydrated.current || synthesizing) return;
+    if (skipFirstPersist.current) { skipFirstPersist.current = false; return; }
     try {
       localStorage.setItem(storageKey, JSON.stringify({
         selectedFolder, output, model, saved, savedPath, synthCost, partial,

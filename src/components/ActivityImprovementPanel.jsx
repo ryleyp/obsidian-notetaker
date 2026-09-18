@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/apiClient";
 import { calcCost, formatCost, providerLabel } from "@/lib/models";
-import { IMPROVEMENT_FIELDS } from "@/lib/activityImprovement";
+import { IMPROVEMENT_FIELDS, applyImprovement, improvementFingerprint, pendingFields } from "@/lib/activityImprovement";
 import { describeIssues } from "@/lib/activityLint";
 
 export default function ActivityImprovementPanel({ rows, notes, settings, accountName, restoredIds, model, disabled, onApply, autoRun, onAutoRun }) {
@@ -15,7 +15,7 @@ export default function ActivityImprovementPanel({ rows, notes, settings, accoun
   const [cost, setCost] = useState(null);
   const controller = useRef(null);
   const unmountTimer = useRef(null);
-  const fingerprint = JSON.stringify(rows);
+  const fingerprint = improvementFingerprint(rows);
   const stale = proposal && proposal.snapshot !== fingerprint;
 
   // React development mode intentionally mounts, cleans up, then mounts an
@@ -83,9 +83,11 @@ export default function ActivityImprovementPanel({ rows, notes, settings, accoun
     const selected = fields ? { index: change.index, ...Object.fromEntries(IMPROVEMENT_FIELDS.map((field) => [field, fields.includes(field) ? change[field] : proposal.before[change.index][field]])) } : change;
     onApply([selected]);
     setProposal((current) => {
-      const before = current.before.map((row, index) => index === change.index ? { ...row, ...selected } : row);
-      const keepChange = fields && IMPROVEMENT_FIELDS.some((field) => change[field] !== before[change.index][field]);
-      return { ...current, changes: current.changes.filter((item) => item.index !== change.index || keepChange), snapshot: JSON.stringify(before), before };
+      // Mirror exactly what the table did, so the snapshot still matches and
+      // the rest of the proposal stays usable instead of going stale.
+      const before = applyImprovement(current.before, [selected]);
+      const keepChange = fields && pendingFields(change, before[change.index]).length > 0;
+      return { ...current, changes: current.changes.filter((item) => item.index !== change.index || keepChange), snapshot: improvementFingerprint(before), before };
     });
     setStatus(fields ? "Field applied to the table." : "Activity applied to the table.");
   }
@@ -116,7 +118,7 @@ export default function ActivityImprovementPanel({ rows, notes, settings, accoun
         <div className="max-h-96 overflow-auto space-y-4">
           {proposal.changes.map((change) => <div key={change.index} className="space-y-1 text-xs border-b border-gray-100 pb-3">
             <div className="flex justify-between gap-2"><p className="font-semibold">Activity {change.index + 1}: {proposal.before[change.index].title}</p><button type="button" className="btn-secondary text-xs" onClick={() => applyChange(change)}>Apply activity</button></div>
-            {IMPROVEMENT_FIELDS.filter((field) => change[field] !== proposal.before[change.index][field]).map((field) => <div key={field}>
+            {pendingFields(change, proposal.before[change.index]).map((field) => <div key={field}>
               <div className="flex justify-between gap-2"><p className="font-medium capitalize">{field}</p><button type="button" className="underline text-obsidian-700" onClick={() => applyChange(change, [field])}>Apply field</button></div>
               <p className="text-gray-500 whitespace-pre-wrap">Before: {proposal.before[change.index][field]}</p>
               <p className="text-blue-900 whitespace-pre-wrap">After: {change[field]}</p>

@@ -99,8 +99,11 @@ Next steps: ...
 ```
 
 When the user asks for a table, or for several activities across a range, emit one row per
-activity with: Event Date, Activity Title, Type, Subtype, EA/EP, Source Note, Comment.
-Keep rows newest first and cite the source note for every row.
+activity with: Event Date, Improved Title, Activity Title, Type, Subtype, EA/EP, Source Note, Comment.
+Event Date is the date in the source note's title, never a date mentioned inside the meeting.
+Improved Title is your clearer, Salesforce-ready rewrite when the current title reads like a
+file name or email subject; leave it blank when the title is already good, and never drop the
+original. Keep rows newest first and cite the source note for every row.
 
 After the records, list: any facts that need human confirmation, and any row where the
 classification was a genuine toss-up, with the two candidates and why.

@@ -9,6 +9,7 @@ const COMMENT_LIMIT = 800;
 const COLUMNS = [
   { key: "status", label: "Status" },
   { key: "eventDate", label: "Event Date" },
+  { key: "improvedTitle", label: "Improved Title" },
   { key: "title", label: "Title" },
   { key: "type", label: "Type" },
   { key: "subtype", label: "Subtype" },

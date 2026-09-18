@@ -16,7 +16,7 @@ import { redactForbiddenTerms } from "@/lib/scrub";
 import { apiFetch } from "@/lib/apiClient";
 import { useReportWorkflow, TODAY } from "@/hooks/useReportWorkflow";
 import { ScanButton, CountsBadges, NoteList, GeneratePanel, PreflightPanel, OutputHeader, HistoryMenu, BleedWarning, StrictToggle } from "@/components/ReportSections";
-import { parseActivityRows, rowsToNDJSON, rowsToMarkdown, sortRowsByDate, STATUSES } from "@/lib/activityRows";
+import { eventDateFromNote, parseActivityRows, rowsToNDJSON, rowsToMarkdown, sortRowsByDate, STATUSES } from "@/lib/activityRows";
 import { harvestNotes } from "@/lib/sfdcHarvest";
 import { duplicateSourceNotes, fixActivityRow, lintActivityRow, lintSummary } from "@/lib/activityLint";
 import { reviewActivityPortfolio } from "@/lib/activityPortfolio";
@@ -255,12 +255,13 @@ export default function CSMActivityReport({ settings, onSettingsClick, onAccount
     // defect every row involved should show.
     const duplicateSources = duplicateSourceNotes(parsed);
     return parsed.map((row) => {
+      const note = findSourceNote(row);
       let agreement = row.agreement;
-      if (!agreement && row.origin !== "note" && account) {
-        const note = findSourceNote(row);
-        if (note) agreement = suggestAgreements(note.content || "", account).map((g) => `${g.type} ${g.number}`).join(", ");
+      if (!agreement && row.origin !== "note" && account && note) {
+        agreement = suggestAgreements(note.content || "", account).map((g) => `${g.type} ${g.number}`).join(", ");
       }
-      const decorated = { ...row, agreement, filed: isFiled(filedMap, row) };
+      const eventDate = eventDateFromNote(row, note);
+      const decorated = { ...row, eventDate, agreement, filed: isFiled(filedMap, { ...row, eventDate }) };
       return { ...decorated, lint: lintActivityRow(decorated, { ownerNames: settings.ownerNames || [], agreementsOnFile, duplicateSources }) };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

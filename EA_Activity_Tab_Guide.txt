@@ -105,14 +105,21 @@ WHAT YOU GET
 ------------
 A table with one row per reportable activity:
 
-  | Account | Event Date | Engagement Title | Type | Subtype | Comments |
+  | Filed | Status | Event Date | Improved Title | Title | Type | Subtype | EA/EP | Source Note | Comments |
 
-  - Account          the account name from the folder you selected
-  - Event Date       the meeting date, pulled from the note heading
-  - Engagement Title short name for the activity (SFDC-style)
+  - Filed            [x] once the activity is logged in Salesforce; the next
+                     run of the same folder honors it
+  - Status           Completed (default), Planned, or Canceled
+  - Event Date       the date in the source note's title, which always wins
+                     over any date the AI picked out of the meeting text
+  - Improved Title   the Salesforce-ready title proposed by the improvement
+                     pass; blank until that pass runs. The original stays
+                     in Title so nothing is lost
+  - Title            short name for the activity (SFDC-style)
   - Type             one of the 6 SFDC EA Engagement Types
   - Subtype          specific subtype within that Type
   - EA/EP            the agreement number(s) the activity relates to
+  - Source Note      the note or voice memo the row came from
   - Comments         up to 800 characters (the Salesforce field limit), in
                      the same plain voice as the SFDC entries in your notes
 

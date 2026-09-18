@@ -30,18 +30,37 @@ export function parseImprovement(text, rows) {
   return { message: result.message.trim(), changes };
 }
 
+// A proposed title lands in improvedTitle and the original title stays, so
+// the report carries both; the other fields replace the row's own.
 export function applyImprovement(rows, changes) {
   const byIndex = new Map(changes.map((change) => [change.index, change]));
   return rows.map((row, index) => {
     const change = byIndex.get(index);
     if (!change) return row;
-    const patch = Object.fromEntries(IMPROVEMENT_FIELDS.map((field) => [field, change[field]]));
+    const patch = Object.fromEntries(IMPROVEMENT_FIELDS.filter((field) => field !== "title").map((field) => [field, change[field]]));
+    const improvedTitle = change.title && change.title !== row.title ? change.title : row.improvedTitle || "";
     return {
-      ...row, ...patch, origin: "generated", review: true,
+      ...row, ...patch, improvedTitle, origin: "generated", review: true,
       reviewReason: "AI improvement applied — review before filing.",
       verify: "", verifyReason: "", suggestedType: "", suggestedSubtype: "", suggestReason: "",
     };
   });
+}
+
+// Which of a proposal's fields a row has not taken yet. A title counts as
+// taken once it sits in improvedTitle, since applying never overwrites title.
+export function pendingFields(change, row) {
+  return IMPROVEMENT_FIELDS.filter((field) => {
+    if (field === "title") return change.title !== row?.title && change.title !== row?.improvedTitle;
+    return change[field] !== row?.[field];
+  });
+}
+
+// Only the fields a proposal can change decide whether it has gone stale.
+// Toggling Filed, recomputed lint, or a matched agreement number must not
+// invalidate a review the CSM is still working through.
+export function improvementFingerprint(rows) {
+  return JSON.stringify((rows || []).map((row) => [...IMPROVEMENT_FIELDS, "improvedTitle"].map((field) => row?.[field] ?? "")));
 }
 
 // Fit the source notes into what is left of the reviewing model's context.

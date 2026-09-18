@@ -29,6 +29,9 @@ export function normalizeActivityRow(obj) {
   const row = {
     eventDate,
     title,
+    // The reviewer's proposed title, kept beside the original rather than
+    // replacing it, so the report shows both.
+    improvedTitle: String(obj.improvedTitle || "").trim().slice(0, 200),
     type,
     subtype,
     comments,
@@ -74,6 +77,14 @@ export function rowsToNDJSON(rows) {
 
 const esc = (s) => (s || "").replace(/\|/g, "\\|").replace(/\r?\n/g, " ").trim();
 
+// The activity date is the date in the source note's title. The model is
+// told to copy it, but can drift to a date mentioned inside the meeting, so
+// the note wins whenever it carries one.
+export function eventDateFromNote(row, note) {
+  const noteDate = String(note?.date || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(noteDate) ? noteDate : row?.eventDate || "";
+}
+
 // Newest first; rows without a date sink to the bottom. Stable for ties so
 // Claude's emission order survives within a day.
 export function sortRowsByDate(rows) {
@@ -93,9 +104,9 @@ export function sortRowsByDate(rows) {
 // in Obsidian ("[x]") and the next run of the same folder honors it.
 export function rowsToMarkdown(rows) {
   const lines = [
-    "| Filed | Status | Event Date | Title | Type | Subtype | EA/EP | Source Note | Comments |",
-    "|-------|--------|------------|-------|------|---------|-------|-------------|----------|",
-    ...rows.map((r) => `| ${r.filed ? "[x]" : "[ ]"} | ${esc(r.status || "Completed")} | ${esc(r.eventDate)} | ${esc(r.title)} | ${esc(r.type)} | ${esc(r.subtype)} | ${esc(r.agreement)} | ${esc(r.sourceTitle)} | ${esc(r.comments)} |`),
+    "| Filed | Status | Event Date | Improved Title | Title | Type | Subtype | EA/EP | Source Note | Comments |",
+    "|-------|--------|------------|----------------|-------|------|---------|-------|-------------|----------|",
+    ...rows.map((r) => `| ${r.filed ? "[x]" : "[ ]"} | ${esc(r.status || "Completed")} | ${esc(r.eventDate)} | ${esc(r.improvedTitle)} | ${esc(r.title)} | ${esc(r.type)} | ${esc(r.subtype)} | ${esc(r.agreement)} | ${esc(r.sourceTitle)} | ${esc(r.comments)} |`),
   ];
   return lines.join("\n");
 }
@@ -154,6 +165,7 @@ export function parseReportRows(markdown) {
   const idx = {
     filed: table.col("filed"),
     status: table.col("status"),
+    improvedTitle: table.col("improved title"),
     type: table.col("type"),
     subtype: table.col("subtype"),
     agreement: table.col("ea/ep"),
@@ -167,6 +179,7 @@ export function parseReportRows(markdown) {
       const row = normalizeActivityRow({
         eventDate: cells[table.dateIdx] || "",
         title: cells[table.titleIdx] || "",
+        improvedTitle: cell(cells, idx.improvedTitle),
         type: cell(cells, idx.type),
         subtype: cell(cells, idx.subtype),
         agreement: cell(cells, idx.agreement),

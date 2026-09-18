@@ -31,14 +31,19 @@ WHAT IT OUTPUTS
 ---------------
 A Markdown table with one row per reportable activity:
 
-  | Account | Event Date | Engagement Title | Type | Subtype | Comments |
+  | Filed | Status | Event Date | Improved Title | Title | Type | Subtype | EA/EP | Source Note | Comments |
 
-- Account         — the account name (from the folder you selected)
-- Event Date      — pulled from the ### YYYY-MM-DD heading of the source note
-- Engagement Title — short descriptive name matching SFDC style
+- Filed           — [x] once logged in Salesforce; honored on the next run
+- Status          — Completed (default), Planned, or Canceled
+- Event Date      — the date in the source note's title; it overrides any
+                    date the AI picked out of the meeting text
+- Improved Title  — Salesforce-ready title proposed by the improvement pass
+                    (blank until it runs); the original stays in Title
+- Title           — short descriptive name matching SFDC style
 - Type            — one of 6 EA Engagement Types (see taxonomy below)
 - Subtype         — specific subtype within that Type
 - EA/EP           — agreement number(s) the activity relates to
+- Source Note     — the note or voice memo the row came from
 - Comments        — up to 800 characters (Salesforce limit); same plain voice
                     as the SFDC Activity Entry in each note
 
