@@ -16,13 +16,32 @@ export function createModelClient({ model, apiKey, openaiApiKey, signal, task = 
     } };
   }
 
+  // Callers write Anthropic-shaped content (text and base64 image blocks);
+  // the Responses API wants input_text / input_image. Plain-string content
+  // passes through untouched, so every existing text-only call is unchanged.
+  function toResponsesInput(messages) {
+    return (messages || []).map((message) => {
+      if (!Array.isArray(message.content)) return message;
+      return {
+        ...message,
+        content: message.content.map((block) => {
+          if (block.type === "text") return { type: "input_text", text: block.text };
+          if (block.type === "image" && block.source?.type === "base64") {
+            return { type: "input_image", image_url: `data:${block.source.media_type};base64,${block.source.data}`, detail: "high" };
+          }
+          return block;
+        }),
+      };
+    });
+  }
+
   async function send(params, stream) {
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(600000)]) : AbortSignal.timeout(600000),
       body: JSON.stringify({ model: resolvedModel, instructions: params.system || undefined,
-        input: params.messages, max_output_tokens: params.max_tokens, stream, store: false,
+        input: toResponsesInput(params.messages), max_output_tokens: params.max_tokens, stream, store: false,
         text: params.response_format ? { format: params.response_format } : undefined }),
     });
     if (!response.ok) {

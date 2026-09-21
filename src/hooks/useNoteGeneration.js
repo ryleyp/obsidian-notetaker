@@ -208,7 +208,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
     setAlternative(null);
     setAlternativeError(null);
     setRevisionHistory([]);
-    const { transcript, extendedTranscript, meetingTitle, meetingContext, selectedFolder, existingNote } = meeting;
+    const { transcript, extendedTranscript, meetingTitle, meetingContext, selectedFolder, existingNote, slides = [] } = meeting;
     const sanitize = sanitizer(replacements);
 
     const sanitizedTranscript = sanitize(transcript);
@@ -216,11 +216,20 @@ export function useNoteGeneration({ settings, model, meeting }) {
     const sanitizedTitle = sanitize(meetingTitle);
     const sanitizedContext = sanitize(meetingContext);
     const sanitizedExistingNote = sanitize(existingNote?.content || "");
+    // Every slide keeps its position so [S#] matches the thumbnail the CSM
+    // sees; one that was not read contributes no text and leaves a gap. The
+    // text is pseudonymized here exactly like a transcript, and the images
+    // themselves never go to this call.
+    const sanitizedSlides = slides.map((slide) => ({
+      name: slide.name,
+      text: slide.status === "done" ? sanitize(slide.text || "") : "",
+    }));
 
     const promptSourceBundle = buildSourceBundle({
       transcript: sanitizedTranscript,
       extendedTranscript: sanitizedExtendedTranscript,
       rawNotes: sanitizedContext,
+      slides: sanitizedSlides,
       existingNote: sanitizedExistingNote,
     });
     const displaySourceBundle = replacements.length

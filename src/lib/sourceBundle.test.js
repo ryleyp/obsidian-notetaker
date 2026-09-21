@@ -67,3 +67,29 @@ describe("stripCitationMarkers", () => {
     expect(stripCitationMarkers("")).toBe("");
   });
 });
+
+describe("slide sources", () => {
+  it("makes one [S#] source per slide, in order, never chunked, and skips unread ones", () => {
+    const bundle = buildSourceBundle({
+      transcript: "Jordan walked through the roadmap.",
+      slides: [
+        { name: "01.png", text: "# FY27 Roadmap\n\n" + "- item\n".repeat(400) },
+        { name: "02.png", text: "" },
+        { name: "03.png", text: "| Site | Seats |\n|---|---|\n| Dallas | 40 |" },
+      ],
+    });
+    // Slide 2 was unreadable: it leaves a gap, so [S3] still means slide 3.
+    expect(bundle.slideSources.map((s) => s.id)).toEqual(["S1", "S3"]);
+    expect(bundle.slideSources[0].label).toBe("Slide 1 — 01.png");
+    expect(bundle.slideSources[1].label).toBe("Slide 3 — 03.png");
+    // A long slide stays one source; a citation to S1 means slide 1.
+    expect(bundle.slideSources[0].content.split("\n").length).toBeGreaterThan(300);
+    expect(formatSourceBundleForPrompt(bundle)).toContain("[S1] Slide 1 — 01.png");
+    expect(bundle.allSources.map((s) => s.id)).toEqual(["T1", "S1", "S3"]);
+  });
+
+  it("strips and extracts [S#] markers like the others", () => {
+    expect(stripCitationMarkers("Seats: 40 [S2] [T1].")).toBe("Seats: 40.");
+    expect(extractReferencedSourceIds("x [O1] [S2] [N1] [S1]")).toEqual(["N1", "S1", "S2", "O1"]);
+  });
+});

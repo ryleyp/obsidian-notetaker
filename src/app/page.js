@@ -47,6 +47,8 @@ export default function Home() {
   const [transcript, setTranscript] = useState("");
   const [extendedTranscript, setExtendedTranscript] = useState("");
   const [meetingContext, setMeetingContext] = useState("");
+  // Slide screenshots, each already read into text by the vision pass.
+  const [slides, setSlides] = useState([]);
   const [selectedFolder, setSelectedFolder] = useState("");
   const [updateExisting, setUpdateExisting] = useState(false);
   const [existingNote, setExistingNote] = useState(null);
@@ -65,6 +67,7 @@ export default function Home() {
     extendedTranscript,
     meetingTitle,
     meetingContext,
+    slides,
     selectedFolder,
     existingNote,
     followUp: {
@@ -167,6 +170,7 @@ export default function Home() {
     setTranscript("");
     setExtendedTranscript("");
     setMeetingContext("");
+    setSlides([]);
     setMeetingTitle("");
     setIncludeFollowUp(false);
     setFollowUpAudience("customer");
@@ -187,7 +191,7 @@ export default function Home() {
   // Reads from the model spec, so a model that is no longer offered in the
   // picker still shows its own name rather than defaulting to "Claude".
   const modelLabel = modelDisplayName(model);
-  const noteEstimateSources = [{ title: meetingTitle, content: [transcript, extendedTranscript, meetingContext, existingNote?.content].filter(Boolean).join("\n\n") }];
+  const noteEstimateSources = [{ title: meetingTitle, content: [transcript, extendedTranscript, meetingContext, ...slides.map((slide) => slide.text), existingNote?.content].filter(Boolean).join("\n\n") }];
   const estimatedNoteCost = estimateUsage(noteEstimateSources, resolvedNoteModel).cost;
   const estimatedAlternateNoteCost = estimateUsage(noteEstimateSources, reviewModel).cost;
   const canProcess = transcript.trim().length > 0
@@ -338,6 +342,10 @@ export default function Home() {
                 setTranscript={setTranscript}
                 extendedTranscript={extendedTranscript}
                 setExtendedTranscript={setExtendedTranscript}
+                slides={slides}
+                setSlides={setSlides}
+                settings={settings}
+                model={model}
                 onTitleSuggest={(suggested, options = {}) => {
                   if (options.replace || !meetingTitle) setMeetingTitle(suggested);
                 }}

@@ -250,3 +250,21 @@ describe("buildPrompt health scorecard sessions", () => {
       .not.toContain("pronouns are");
   });
 });
+
+describe("buildPrompt slide sources", () => {
+  it("explains [S#] blocks and how they rank against the transcript, only when slides exist", () => {
+    const sourceBundle = buildSourceBundle({
+      transcript: "Jordan said roughly forty seats.",
+      slides: [{ name: "seats.png", text: "| Site | Seats |\n|---|---|\n| Dallas | 42 |" }],
+    });
+    const prompt = buildPrompt("Jordan said roughly forty seats.", "Roadmap Review", [], "", { sourceBundle });
+    expect(prompt).toContain("SLIDES SHOWN IN THE MEETING");
+    expect(prompt).toContain("[S1] Slide 1 — seats.png");
+    expect(prompt).toContain("Use [S#] for anything taken from a slide");
+    expect(prompt).toContain("slides are authoritative for exact numbers and spellings");
+    expect(prompt).toContain("Do not reproduce a whole deck");
+
+    const plain = buildPrompt("Jordan said roughly forty seats.", "Roadmap Review");
+    expect(plain).not.toContain("SLIDES SHOWN IN THE MEETING");
+  });
+});

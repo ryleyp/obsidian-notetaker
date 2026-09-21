@@ -92,6 +92,26 @@ You can also draft or redraft a follow-up after generating notes and save it man
 
 The file is saved as `YYYY-MM-DD - Meeting Title.md` in your chosen folder.
 
+### Slides shown in the meeting
+
+Screenshot the deck and drop the images into the **Slides shown in the meeting** panel under
+the transcript. Each slide is read once, into text, by your selected model — title, every
+bullet, tables as tables, and the numbers printed on charts, verbatim, never summarised — and
+from then on it is an ordinary source: pseudonymized like a transcript, cited in the note as
+`[S#]` (numbered by position in the deck), shown in the source panel, and saved under
+**Slides shown** in the transcript archive. The images themselves are sent exactly once and
+never again, so regenerating, second opinions, and comparisons stay cheap and consistent.
+
+The notes treat what was *shown* as a source beside what was *said*: figures, product names,
+and roadmap items that appear only on a slide go into the Meeting Notes even if nobody read
+them aloud, the slide is authoritative for exact numbers and spellings, and the transcript for
+what was decided. A slide that was shown but never discussed and carries nothing
+account-relevant gets no mention.
+
+Screenshots are resized to 1600px on the longest edge before upload, up to 24 per meeting.
+One thing privacy replacements cannot do is edit pixels: the picture goes to the model as it
+is, so crop anything that must not leave your machine before dropping it in.
+
 ### Fiscal-year folders
 
 With **File notes by fiscal year** on (Settings), a note saved into an account folder

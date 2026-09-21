@@ -227,6 +227,22 @@ THE CSM (NOTE OWNER): The CSM saving this note is known as: ${csmNames.join(", "
 `
     : "";
 
+  // Slides the CSM screenshotted, already read into text by the vision pass.
+  // What was SHOWN sits beside what was SAID: the deck is the authority on
+  // figures and product names, the transcript on what people actually did
+  // with them.
+  const hasSlides = (sources.slideSources || []).length > 0;
+  const slidesGuidance = hasSlides
+    ? `
+SLIDES SHOWN IN THE MEETING: source blocks labelled [S#] are transcriptions of slides presented during this meeting, one block per slide, in the order shown.
+- Treat them as a source in their own right. Figures, product names, version numbers, dates, table values, and roadmap items that appear only on a slide belong in the Meeting Notes, cited [S#], even if nobody read them aloud.
+- The slides are authoritative for exact numbers and spellings; the transcript is authoritative for what was said, decided, questioned, or committed to. When the transcript garbles a figure or product name that a slide shows clearly, use the slide's version and cite both.
+- Do not reproduce a whole deck. A slide that was shown but never discussed and carries nothing account-relevant gets no mention. A slide that was discussed gets its substance folded into the topic thread it belongs to, not a separate "Slide 4" bullet.
+- Callouts from slides count: a named customer contact, site, or program on a slide goes into User-Level or Site-Level Callouts like any other mention, cited [S#].
+- Never invent what a slide says beyond its transcription, and treat "[unreadable]" as unknown, not as blank.
+`
+    : "";
+
   const speakerGuidance = looksSpeakerLabeled(transcriptEvidence)
     ? `
 This transcript has been segmented by speaker — each turn is preceded by a label like **Name:** or **Speaker 1:**. Use these labels to attribute statements, decisions, questions, and commitments to the correct person throughout your notes (e.g. "David raised concerns about..." or "Speaker 2 confirmed..."). Do not blend or merge different speakers' statements together. When listing action item owners, use the specific speaker who committed to the item rather than a generic "team," unless it is genuinely a group commitment. The labels are a best-effort inference from conversational patterns, not verified — if a label is a generic "Speaker N" (no real name was available), it's fine to refer to that person by that label in your notes.
@@ -254,7 +270,7 @@ Lead with thanks and the meeting outcome. Include only supported follow-ups, ask
   return `Please analyze this meeting transcript and create detailed meeting notes.
 
 Meeting Title: ${title}
-${csmIdentityBlock}${speakerGuidance}${multiTranscriptGuidance}${contextBlock}
+${csmIdentityBlock}${speakerGuidance}${multiTranscriptGuidance}${slidesGuidance}${contextBlock}
 ---
 SOURCE BLOCKS:
 ${sourceBlock}
@@ -268,6 +284,7 @@ SOURCE CITATION RULES
 - Add citations to every factual bullet or factual paragraph outside the SFDC Activity Entry, using markers like [T1] or [N1].
 - Put citations at the end of the sentence or bullet they support.
 - Use [N#] for claims that come from the CSM's raw notes/context and [T#] for transcript claims.
+- Use [S#] for anything taken from a slide shown in the meeting.
 - Use [O#] for details preserved from the existing meeting note during a migration.
 - If a point is synthesized from multiple sources, cite each relevant source, e.g. [T2] [N1].
 - Do not put citation markers inside the SFDC Activity Entry because it is copied into Salesforce.

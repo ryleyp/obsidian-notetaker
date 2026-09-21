@@ -18,6 +18,24 @@ const client = () => createModelClient({ model: params.model, apiKey: "claude-ke
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("OpenAI provider adapter", () => {
+  it("maps Anthropic-shaped image and text blocks to Responses input parts", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(completed("# Slide")));
+    vi.stubGlobal("fetch", fetchMock);
+    await client().messages.create({
+      ...params,
+      messages: [{ role: "user", content: [
+        { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "QUJD" } },
+        { type: "text", text: "Transcribe it." },
+      ] }],
+    });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.input[0].content).toEqual([
+      { type: "input_image", image_url: "data:image/jpeg;base64,QUJD", detail: "high" },
+      { type: "input_text", text: "Transcribe it." },
+    ]);
+  });
+
+
   it("resolves finalMessage for callers that never iterate the stream", async () => {
     // The email-thread note only wants the finished message, the way
     // Anthropic's stream allows; the adapter must drain itself.

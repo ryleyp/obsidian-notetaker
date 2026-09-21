@@ -4,12 +4,17 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { StepBadge } from "@/components/MeetingDetails";
 import { apiFetch } from "@/lib/apiClient";
 import { titleFromTranscriptFilename } from "@/lib/transcriptFiles";
+import SlideUpload from "@/components/SlideUpload";
 
 export default function TranscriptInput({
   transcript,
   setTranscript,
   extendedTranscript,
   setExtendedTranscript,
+  slides = [],
+  setSlides,
+  settings,
+  model,
   onTitleSuggest,
 }) {
   const [isDragging, setIsDragging] = useState(false);
@@ -486,6 +491,10 @@ export default function TranscriptInput({
             Clear all
           </button>
         </div>
+      )}
+
+      {setSlides && settings && (
+        <SlideUpload slides={slides} setSlides={setSlides} settings={settings} model={model} />
       )}
     </div>
   );

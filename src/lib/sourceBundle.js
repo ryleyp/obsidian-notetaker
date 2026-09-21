@@ -86,23 +86,40 @@ export function formatTranscriptArchive(transcript, extendedTranscript = "") {
   return `## Primary transcript\n\n${primary}\n\n---\n\n## Extended transcript\n\n${extended}`;
 }
 
+// One source per slide, never chunked, numbered by position in the deck: a
+// citation like [S3] must point at the third slide the CSM uploaded, not at
+// the third chunk of text — and not at the third *readable* slide, so an
+// unreadable one leaves a gap in the numbering rather than shifting it.
+function makeSlideSources(slides) {
+  return (slides || [])
+    .map((slide, index) => ({
+      id: `S${index + 1}`,
+      label: `Slide ${index + 1}${slide?.name ? ` — ${slide.name}` : ""}`,
+      content: cleanText(slide?.text || ""),
+    }))
+    .filter((source) => source.content);
+}
+
 export function buildSourceBundle({
   transcript = "",
   extendedTranscript = "",
   rawNotes = "",
   emailThread = "",
   existingNote = "",
+  slides = [],
 } = {}) {
   const transcriptSources = makeTranscriptSources(transcript, extendedTranscript);
   const rawNoteSources = makeSourceBlocks(rawNotes, { prefix: "N", label: "Raw notes" });
+  const slideSources = makeSlideSources(slides);
   const emailSources = makeSourceBlocks(emailThread, { prefix: "E", label: "Email thread" });
   const existingNoteSources = makeSourceBlocks(existingNote, { prefix: "O", label: "Existing meeting note" });
   return {
     transcriptSources,
     rawNoteSources,
+    slideSources,
     emailSources,
     existingNoteSources,
-    allSources: [...transcriptSources, ...rawNoteSources, ...emailSources, ...existingNoteSources],
+    allSources: [...transcriptSources, ...rawNoteSources, ...slideSources, ...emailSources, ...existingNoteSources],
   };
 }
 
@@ -119,36 +136,38 @@ export function mapSourceBundle(sourceBundle, mapper) {
   const mapOne = (source) => ({ ...source, content: mapper(source.content) });
   const transcriptSources = (sourceBundle?.transcriptSources || []).map(mapOne);
   const rawNoteSources = (sourceBundle?.rawNoteSources || []).map(mapOne);
+  const slideSources = (sourceBundle?.slideSources || []).map(mapOne);
   const emailSources = (sourceBundle?.emailSources || []).map(mapOne);
   const existingNoteSources = (sourceBundle?.existingNoteSources || []).map(mapOne);
   return {
     transcriptSources,
     rawNoteSources,
+    slideSources,
     emailSources,
     existingNoteSources,
-    allSources: [...transcriptSources, ...rawNoteSources, ...emailSources, ...existingNoteSources],
+    allSources: [...transcriptSources, ...rawNoteSources, ...slideSources, ...emailSources, ...existingNoteSources],
   };
 }
 
-// Removes [T1]/[N2]/[E1]/[O1] source markers. Citations exist for the
+// Removes [T1]/[N2]/[S1]/[E1]/[O1] source markers. Citations exist for the
 // in-app source panel while a note is being reviewed; once it leaves the
 // app (saved to the vault, copied out) they are dead references and noise.
 export function stripCitationMarkers(markdown) {
   return String(markdown || "")
-    .replace(/[ \t]*\[[TNEO]\d+\](?:[ \t]*\[[TNEO]\d+\])*/g, "")
+    .replace(/[ \t]*\[[TNSEO]\d+\](?:[ \t]*\[[TNSEO]\d+\])*/g, "")
     .replace(/[ \t]+$/gm, "");
 }
 
 export function extractReferencedSourceIds(markdown) {
   const found = new Set();
-  const regex = /\[([TNEO]\d+)\]/g;
+  const regex = /\[([TNSEO]\d+)\]/g;
   let match;
   while ((match = regex.exec(markdown || ""))) {
     found.add(match[1]);
   }
 
   return [...found].sort((a, b) => {
-    const priority = { T: 0, N: 1, E: 2, O: 3 };
+    const priority = { T: 0, N: 1, S: 2, E: 3, O: 4 };
     const prefixCompare = (priority[a[0]] ?? 9) - (priority[b[0]] ?? 9);
     if (prefixCompare !== 0) return prefixCompare;
     return Number(a.slice(1)) - Number(b.slice(1));

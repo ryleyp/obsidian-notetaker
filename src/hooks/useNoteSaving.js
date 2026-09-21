@@ -5,6 +5,7 @@ import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/
 import { detectAccount, matchVaultFolder } from "@/lib/accounts";
 import { apiFetch } from "@/lib/apiClient";
 import { formatTranscriptArchive } from "@/lib/sourceBundle";
+import { formatSlidesForArchive } from "@/lib/slides";
 import { extractItems } from "@/lib/todoItems";
 import { noteDateFromTitle, pushTodoistTasks, todoistConfigured, todoistLabelForNote, todoistTaskFromItemLine } from "@/lib/todoist";
 
@@ -169,9 +170,12 @@ export function useNoteSaving({ settings, meeting }) {
   }
 
   async function saveTranscript(replacements) {
-    const { transcript, extendedTranscript, meetingTitle } = meeting;
+    const { transcript, extendedTranscript, meetingTitle, slides = [] } = meeting;
     if (!transcript.trim() || !settings.vaultPath) return;
-    const archiveTranscript = formatTranscriptArchive(transcript, extendedTranscript);
+    const slideArchive = formatSlidesForArchive(slides.map((slide) => (slide.status === "done" ? slide : { ...slide, text: "" })));
+    const archiveTranscript = slideArchive
+      ? `${formatTranscriptArchive(transcript, extendedTranscript)}\n\n---\n\n## Slides shown\n\n${slideArchive}`
+      : formatTranscriptArchive(transcript, extendedTranscript);
     const withCorrections = applyCorrections(archiveTranscript, settings.corrections || []);
     const corrected = replacements.length
       ? reverseReplacements(applyReplacements(withCorrections, replacements), replacements)
