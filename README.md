@@ -94,8 +94,9 @@ The file is saved as `YYYY-MM-DD - Meeting Title.md` in your chosen folder.
 
 ### Slides shown in the meeting
 
-Screenshot the deck and drop the images into the **Slides shown in the meeting** panel under
-the transcript. Each slide is read once, into text, by your selected model — title, every
+Screenshot the deck — or export it as a PDF — and drop it into the **Slides shown in the
+meeting** panel under the transcript. A PDF is rendered page by page in the browser, so every
+page becomes a slide exactly as a screenshot would. Each slide is read once, into text, by your selected model — title, every
 bullet, tables as tables, and the numbers printed on charts, verbatim, never summarised — and
 from then on it is an ordinary source: pseudonymized like a transcript, cited in the note as
 `[S#]` (numbered by position in the deck), shown in the source panel, and saved under
@@ -108,7 +109,8 @@ them aloud, the slide is authoritative for exact numbers and spellings, and the 
 what was decided. A slide that was shown but never discussed and carries nothing
 account-relevant gets no mention.
 
-Screenshots are resized to 1600px on the longest edge before upload, up to 24 per meeting.
+Screenshots and PDF pages are resized to 1600px on the longest edge before upload, up to 24
+slides per meeting across both.
 One thing privacy replacements cannot do is edit pixels: the picture goes to the model as it
 is, so crop anything that must not leave your machine before dropping it in.
 

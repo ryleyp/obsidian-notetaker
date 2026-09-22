@@ -49,3 +49,6 @@ next-env.d.ts
 notetaker-settings-*.json
 notetaker-config.json
 notetaker-glossary.json
+
+# Copied from node_modules on install (scripts/copy-pdf-worker.mjs)
+public/pdf.worker.min.mjs

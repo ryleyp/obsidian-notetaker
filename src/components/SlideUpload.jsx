@@ -5,6 +5,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { calcCost, formatCost, providerLabel, resolveAutoModel } from "@/lib/models";
 import { MAX_SLIDES } from "@/lib/slides";
 import { prepareSlideImage } from "@/lib/slideImages";
+import { isPdfFile, pdfToSlides } from "@/lib/slidePdf";
 
 // Screenshots of the deck shown in a meeting. Each one is read into text the
 // moment it lands, so by the time the CSM presses Generate the slides are
@@ -15,6 +16,7 @@ export default function SlideUpload({ slides, setSlides, settings, model }) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
   const [cost, setCost] = useState(null);
+  const [rendering, setRendering] = useState(""); // "deck.pdf · page 3 of 12" while a PDF is being drawn
   const inputRef = useRef(null);
   const busy = slides.some((slide) => slide.status === "reading");
   const resolvedModel = resolveAutoModel(model, { apiKey: settings.apiKey, openaiApiKey: settings.openaiApiKey });
@@ -51,23 +53,40 @@ export default function SlideUpload({ slides, setSlides, settings, model }) {
     }
   }
 
+  // Screenshots and PDFs mix freely; a PDF expands into one slide per page
+  // and counts page by page against the per-meeting cap.
   async function addFiles(fileList) {
     setError("");
     const files = [...(fileList || [])];
     if (!files.length) return;
-    const room = MAX_SLIDES - slides.length;
+    let room = MAX_SLIDES - slides.length;
     if (room <= 0) { setError(`At most ${MAX_SLIDES} slides per meeting.`); return; }
-    const accepted = files.slice(0, room);
-    if (accepted.length < files.length) setError(`Only ${room} more slide${room !== 1 ? "s" : ""} fit — ${files.length - room} left out.`);
 
     const prepared = [];
-    for (const file of accepted) {
+    const problems = [];
+    for (const file of files) {
+      if (room <= 0) { problems.push(`${file.name} left out — the ${MAX_SLIDES}-slide limit is reached.`); continue; }
       try {
-        prepared.push(await prepareSlideImage(file));
+        if (isPdfFile(file)) {
+          setRendering(`${file.name} · rendering…`);
+          const { slides: pages, skippedPages } = await pdfToSlides(file, {
+            maxPages: room,
+            onProgress: ({ done, of }) => setRendering(`${file.name} · page ${done} of ${of}`),
+          });
+          prepared.push(...pages);
+          room -= pages.length;
+          if (skippedPages > 0) problems.push(`${file.name}: only the first ${pages.length} of ${pages.length + skippedPages} pages fit under the ${MAX_SLIDES}-slide limit.`);
+        } else {
+          prepared.push(await prepareSlideImage(file));
+          room -= 1;
+        }
       } catch (e) {
-        setError((previous) => [previous, e.message].filter(Boolean).join(" "));
+        problems.push(e.message);
+      } finally {
+        setRendering("");
       }
     }
+    if (problems.length) setError(problems.join(" "));
     if (!prepared.length) return;
     setSlides((current) => [...current, ...prepared]);
     await readSlides(prepared);
@@ -97,8 +116,8 @@ export default function SlideUpload({ slides, setSlides, settings, model }) {
         <div>
           <p className="text-sm font-medium text-gray-800">Slides shown in the meeting <span className="font-normal text-gray-400">(optional)</span></p>
           <p className="text-xs text-gray-500 mt-0.5">
-            Screenshot the deck and drop the images here. Each slide is read into text by {providerLabel(resolvedModel)} and becomes a source the
-            notes can cite as [S#] — figures and product names on a slide count even when nobody read them aloud.
+            Drop screenshots, or the whole deck exported as a PDF — every page becomes a slide. Each one is read into text by {providerLabel(resolvedModel)}
+            and becomes a source the notes can cite as [S#] — figures and product names on a slide count even when nobody read them aloud.
           </p>
         </div>
         {cost && <span className="text-xs text-gray-400 font-mono whitespace-nowrap">{formatCost(cost)}</span>}
@@ -116,13 +135,13 @@ export default function SlideUpload({ slides, setSlides, settings, model }) {
         <input
           ref={inputRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
+          accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pdf"
           multiple
           className="hidden"
           onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
         />
-        <p className="text-sm text-gray-600">Drop slide screenshots here, or click to choose</p>
-        <p className="text-[11px] text-gray-400 mt-1">PNG, JPEG, WebP · resized to 1600px before upload · up to {MAX_SLIDES} per meeting</p>
+        <p className="text-sm text-gray-600">{rendering || "Drop slide screenshots or a PDF of the deck here, or click to choose"}</p>
+        <p className="text-[11px] text-gray-400 mt-1">PNG, JPEG, WebP, PDF · pages and screenshots resized to 1600px before upload · up to {MAX_SLIDES} slides per meeting</p>
       </div>
 
       <p className="text-[11px] text-amber-700">

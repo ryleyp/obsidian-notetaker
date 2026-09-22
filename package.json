@@ -9,12 +9,14 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:smoke": "playwright test",
-    "skill": "UPDATE_SKILL=1 vitest run src/lib/skillDocs.test.js"
+    "skill": "UPDATE_SKILL=1 vitest run src/lib/skillDocs.test.js",
+    "postinstall": "node scripts/copy-pdf-worker.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.110.0",
     "next": "16.2.10",
     "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^6.3.289",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-markdown": "10.1.0",
