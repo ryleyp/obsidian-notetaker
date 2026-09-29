@@ -11,6 +11,7 @@ import {
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { stripCitationMarkers } from "@/lib/sourceBundle";
+import { emailThreadKey } from "@/lib/emailThreads";
 import { resolveFiscalYearDir } from "@/lib/fiscalYearPaths";
 import { folderMarkdownFiles } from "@/lib/vaultScan";
 
@@ -20,16 +21,11 @@ import { folderMarkdownFiles } from "@/lib/vaultScan";
 // instead of forking a second copy in the new year.
 
 
-function normalizedEmailThreadTitle(value) {
-  // Reply prefixes stack up ("RE: RE: FW: subject"); strip them before
-  // sanitizing so every reply matches the thread's original note.
-  const withoutReplyPrefixes = String(value || "").replace(/^(\s*(re|fw|fwd|aw)\s*:\s*)+/i, "");
-  return sanitizeFilename(withoutReplyPrefixes)
-    .normalize("NFKC")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
+// Reply prefixes and gateway markers stack up ("FW: [EXTERNAL] RE: subject")
+// and none of them makes it a different conversation. emailThreadKey peels
+// them all; a tag the sender chose, like [NI INTERNAL], is kept and does
+// split the thread.
+const normalizedEmailThreadTitle = (value) => emailThreadKey(value);
 
 function normalizedFileContent(value) {
   return String(value || "").replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").trimEnd();

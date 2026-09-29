@@ -87,6 +87,45 @@ describe("/api/save fiscal-year filing", () => {
     expect(fs.existsSync(path.join(vault, "Acme", "FY2026"))).toBe(false);
   });
 
+  it("updates one thread however the subject is dressed, and splits a tagged one", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const acct = path.join(vault, "Acme");
+    fs.mkdirSync(acct, { recursive: true });
+    allowDirectory(vault, "Vault path");
+    fs.writeFileSync(path.join(acct, "2026-09-01 - Email - Q3 license server migration.md"), "# first");
+
+    const reply = (upsertEmailThreadTitle, meetingTitle) => postSave({
+      notes: `# ${meetingTitle}`,
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle,
+      upsertEmailThreadTitle,
+      fiscalYearFolders: false,
+    }).then((r) => r.json());
+
+    // Every one of these is the same conversation, so each updates in place.
+    for (const subject of [
+      "RE: Q3 license server migration",
+      "[EXTERNAL] Q3 license server migration",
+      "FW: [EXT] Re: Q3 license server migration",
+      "CAUTION: EXTERNAL Q3 license server migration",
+    ]) {
+      const data = await reply(subject, "2026-09-02 - Email - Q3 license server migration");
+      expect(data.updated, subject).toBe(true);
+      expect(data.matchedByTitle, subject).toBe(true);
+    }
+
+    // One note, renamed to the newest date — not five.
+    const emails = fs.readdirSync(acct).filter((name) => name.includes("Email -"));
+    expect(emails).toEqual(["2026-09-02 - Email - Q3 license server migration.md"]);
+
+    // A tag the sender chose is a different conversation, so it starts its own.
+    const tagged = await reply("[NI INTERNAL] Q3 license server migration", "2026-09-03 - Email - [NI INTERNAL] Q3 license server migration");
+    expect(tagged.updated).toBe(false);
+    expect(fs.readdirSync(acct).filter((name) => name.includes("Email -"))).toHaveLength(2);
+  });
+
   it("keeps an email thread in the folder it already lives in across a year boundary", async () => {
     const root = makeTmp();
     const vault = path.join(root, "vault");

@@ -18,6 +18,7 @@ import { aliasesFromReplacements, extractEmailEntities, mergeSensitiveEntities }
 import { buildSourceBundle, mapSourceBundle } from "@/lib/sourceBundle";
 import { latestEmailResponseDate } from "@/lib/emailDates";
 import { apiFetch } from "@/lib/apiClient";
+import { stripThreadNoise } from "@/lib/emailThreads";
 import { FAST_MODEL, calcCost, formatCost } from "@/lib/models";
 import { accountForEmailDomains, detectAccount, folderForAccount, matchVaultFolder } from "@/lib/accounts";
 import { completeTodoistTasks, pushTodoistTasks, todoistConfigured, todoistLabelForNote } from "@/lib/todoist";
@@ -39,9 +40,10 @@ function filenameTitle(threadDate, threadTitle) {
 function inferTitleFromThread(text) {
   const subject = text.match(/^subject:\s*(.+)$/im)?.[1]?.trim();
   if (!subject) return "";
-  // Clients stack "RE: RE: FW:" prefixes with every reply; strip them all so
-  // every paste of the same thread infers the same title.
-  return subject.replace(/^(\s*(re|fw|fwd|aw)\s*:\s*)+/i, "").trim();
+  // Clients stack "RE: RE: FW:" and gateways prepend "[EXTERNAL]"; strip them
+  // all so every paste of the same thread infers the same title — and the
+  // file it saves to is named for the conversation, not its dressing.
+  return stripThreadNoise(subject);
 }
 
 export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsClick }) {

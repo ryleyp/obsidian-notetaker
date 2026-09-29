@@ -11,6 +11,7 @@
 // as written; "soft" means it will read badly to whoever opens the record.
 
 import { CONTRIBUTION_VERBS, isCanonicalPair } from "./sfdcTaxonomy";
+import { stripThreadNoise } from "./emailThreads";
 
 export const COMMENT_CHAR_LIMIT = 800;
 export const COMMENT_WORD_LIMIT = 120;
@@ -95,17 +96,17 @@ function mentionsOwner(text, ownerNames = []) {
 
 // Filename → SFDC engagement title: drop the "Email - " marker, mail-client
 // prefixes ("[EXTERNAL] RE- ", "FW:", "Declined- "), a leading date, and a
-// "(1)" duplicate-file suffix.
+// "(1)" duplicate-file suffix. Shares stripThreadNoise with the thread
+// matcher so a title and its thread's identity are peeled the same way.
+const CALENDAR_PREFIX = /^\s*(?:declined|accepted|tentative|canceled|cancelled)\s*(?::+\s*|[-–—]\s+)/i;
+
 export function cleanActivityTitle(title) {
   let out = String(title || "")
     .replace(/^\d{4}-\d{2}-\d{2}\s*-?\s*/, "")
     .replace(/^Email\s*-\s*/i, "");
-  // Markers and reply prefixes interleave ("FW: [EXTERNAL] Re- ..."), so
-  // peel them until nothing changes.
-  for (;;) {
-    const next = out
-      .replace(/^\s*\[(external|ext)\]\s*/i, "")
-      .replace(/^\s*(re|fw|fwd|aw|declined|accepted|tentative|canceled|cancelled)\s*[-:–]\s*/i, "");
+  // Calendar verbs and mail markers interleave, so peel until nothing changes.
+  for (let guard = 0; guard < 20; guard += 1) {
+    const next = stripThreadNoise(out).replace(CALENDAR_PREFIX, "");
     if (next === out) break;
     out = next;
   }

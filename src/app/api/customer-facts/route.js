@@ -7,6 +7,7 @@ import { assertTrustedRequest } from "@/lib/requestSafety";
 import { buildCustomerFactsRollup, CUSTOMER_FACTS_FILENAME } from "@/lib/customerFacts";
 import { resolveFiscalYearDir } from "@/lib/fiscalYearPaths";
 import { folderMarkdownFiles } from "@/lib/vaultScan";
+import { emailThreadKey } from "@/lib/emailThreads";
 
 // Every meeting in the account, including the fiscal-year subfolders it is
 // filed into — the rollup covers the relationship, not one year.
@@ -31,7 +32,9 @@ function readMarkdownNotes(vaultRoot, targetDir) {
       output.push(note);
       continue;
     }
-    const key = emailTitle.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+    // Same thread key the save path uses, so "RE:" and "[EXTERNAL]" copies of
+    // one thread collapse to its newest note instead of each adding callouts.
+    const key = emailThreadKey(emailTitle);
     const current = newestEmailByTitle.get(key);
     if (!current || note.modified > current.modified) newestEmailByTitle.set(key, note);
   }
