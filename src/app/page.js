@@ -307,6 +307,9 @@ export default function Home() {
                 updatedExisting={saving.updatedExisting}
                 backupPath={saving.backupPath}
                 ownerNames={settings.ownerNames || []}
+                todoistCompletions={saving.todoistCompletions}
+                onCloseTodoistTasks={saving.closeTodoistCompletions}
+                closingTodoist={saving.closingTodoist}
                 ownerPronouns={settings.ownerPronouns || ""}
                 otherAccounts={otherAccountNames}
                 updatingExisting={!!existingNote}

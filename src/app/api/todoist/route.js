@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertTrustedRequest } from "@/lib/requestSafety";
-import { createTodoistTaskWithDueFallback } from "@/lib/todoistApi";
+import { createTodoistTaskWithDueFallback, listProjectTaskContents } from "@/lib/todoistApi";
+import { dropTasksAlreadyInProject } from "@/lib/todoistReconcile";
 
 // Relays task creation to Todoist so the browser never talks to Todoist
 // directly (CORS) and the token stays out of page-visible network calls to
@@ -25,10 +26,24 @@ export async function POST(request) {
       return NextResponse.json({ error: "Too many tasks in one request" }, { status: 400 });
     }
 
+    // Every save used to push every action item, so re-saving a note — or a
+    // follow-up meeting carrying an open item forward — filed the same task
+    // again. Skip what the project already has before creating anything.
+    let toCreate = tasks;
+    let skipped = [];
+    try {
+      const existing = await listProjectTaskContents(apiToken.trim(), projectId.trim());
+      ({ tasks: toCreate, skipped } = dropTasksAlreadyInProject(tasks, existing));
+    } catch (err) {
+      // Listing is a convenience; a push that cannot check still goes through
+      // rather than losing the CSM's action items.
+      console.warn("Todoist duplicate check skipped:", err?.message);
+    }
+
     const created = [];
     const failed = [];
 
-    for (const task of tasks) {
+    for (const task of toCreate) {
       const content = String(task?.content || "").trim();
       if (!content) continue;
       const payload = {
@@ -49,7 +64,7 @@ export async function POST(request) {
       }
     }
 
-    return NextResponse.json({ created, failed, count: created.length });
+    return NextResponse.json({ created, failed, count: created.length, skipped: skipped.length });
   } catch (error) {
     console.error("Todoist push error:", error);
     return NextResponse.json(

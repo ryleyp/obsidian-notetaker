@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { formatTranscriptArchive } from "@/lib/sourceBundle";
 import { formatSlidesForArchive } from "@/lib/slides";
 import { extractItems } from "@/lib/todoItems";
-import { noteDateFromTitle, pushTodoistTasks, todoistConfigured, todoistLabelForNote, todoistTaskFromItemLine } from "@/lib/todoist";
+import { closeTodoistTasks, noteDateFromTitle, previewTodoistCompletions, pushTodoistTasks, todoistConfigured, todoistLabelForNote, todoistTaskFromItemLine } from "@/lib/todoist";
 
 // Writing to the vault: the note itself, plus the two best-effort weekly
 // side files (todos and the SFDC activity report), plus the transcript-only
@@ -18,6 +18,9 @@ export function useNoteSaving({ settings, meeting }) {
   const [savedPath, setSavedPath] = useState("");
   const [todosSaved, setTodosSaved] = useState(null);
   const [todoistSaved, setTodoistSaved] = useState(null);
+  // Open Todoist tasks this note appears to finish, for the CSM to approve.
+  const [todoistCompletions, setTodoistCompletions] = useState(null);
+  const [closingTodoist, setClosingTodoist] = useState(false);
   const [sfdcReportSaved, setSfdcReportSaved] = useState(null);
   const [customerFactsSaved, setCustomerFactsSaved] = useState(null);
   const [updatedExisting, setUpdatedExisting] = useState(false);
@@ -50,6 +53,7 @@ export function useNoteSaving({ settings, meeting }) {
     setSavedPath("");
     setTodosSaved(null);
     setTodoistSaved(null);
+    setTodoistCompletions(null);
     setSfdcReportSaved(null);
     setCustomerFactsSaved(null);
     setUpdatedExisting(false);
@@ -141,10 +145,26 @@ export function useNoteSaving({ settings, meeting }) {
             .filter(Boolean);
           if (tasks.length) {
             const result = await pushTodoistTasks(apiFetch, settings, tasks);
-            setTodoistSaved({ count: result?.count || 0, failed: result?.failed?.length || 0 });
+            setTodoistSaved({ count: result?.count || 0, failed: result?.failed?.length || 0, skipped: result?.skipped || 0 });
           }
         } catch (todoistError) {
           setTodoistSaved({ count: 0, failed: 0, error: todoistError.message });
+        }
+      }
+
+      // Which open tasks this note finishes. Proposed only — closing someone's
+      // task list is their call, so nothing happens until they approve it.
+      // Skipped on a migration, like the other Todoist side effects: an old
+      // meeting re-run today should not be proposing to close live tasks.
+      if (!existingNote && todoistConfigured(settings)) {
+        try {
+          const label = todoistLabelForNote(folderPath, settings.accounts);
+          const preview = await previewTodoistCompletions(apiFetch, settings, {
+            notes, noteTitle: meetingTitle, label, model: settings.model,
+          });
+          if (preview?.proposals?.length) setTodoistCompletions(preview);
+        } catch {
+          // Best-effort: the note and its new tasks are already safe.
         }
       }
 
@@ -232,12 +252,33 @@ export function useNoteSaving({ settings, meeting }) {
     clearTranscriptSaved();
   }
 
+  async function closeTodoistCompletions(taskIds) {
+    if (!taskIds?.length || closingTodoist) return;
+    setClosingTodoist(true);
+    try {
+      const result = await closeTodoistTasks(apiFetch, settings, taskIds);
+      setTodoistCompletions((previous) => previous && {
+        ...previous,
+        proposals: previous.proposals.filter((item) => !taskIds.includes(item.id)),
+        closed: (previous.closed || 0) + (result?.closed || 0),
+        closeFailed: result?.failed?.length || 0,
+      });
+    } catch (e) {
+      setTodoistCompletions((previous) => previous && { ...previous, error: e.message });
+    } finally {
+      setClosingTodoist(false);
+    }
+  }
+
   return {
     saving,
     saved,
     savedPath,
     todosSaved,
     todoistSaved,
+    todoistCompletions,
+    closeTodoistCompletions,
+    closingTodoist,
     sfdcReportSaved,
     customerFactsSaved,
     updatedExisting,

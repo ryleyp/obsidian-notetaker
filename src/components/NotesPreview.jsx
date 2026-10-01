@@ -438,8 +438,50 @@ export default function NotesPreview({
                 <span>
                   {todoistSaved.error
                     ? `Todoist tasks were not added: ${todoistSaved.error}`
-                    : `${todoistSaved.count} task${todoistSaved.count !== 1 ? "s" : ""} added to Todoist${todoistSaved.failed ? ` (${todoistSaved.failed} failed)` : ""}`}
+                    : `${todoistSaved.count} task${todoistSaved.count !== 1 ? "s" : ""} added to Todoist${todoistSaved.skipped ? `, ${todoistSaved.skipped} already there` : ""}${todoistSaved.failed ? ` (${todoistSaved.failed} failed)` : ""}`}
                 </span>
+              </div>
+            )}
+            {todoistCompletions?.proposals?.length > 0 && (
+              <div className="rounded-lg px-3 py-2 border border-rose-200 bg-rose-50 text-sm text-rose-800 space-y-2">
+                <p>
+                  <strong>{todoistCompletions.proposals.length} open Todoist task{todoistCompletions.proposals.length !== 1 ? "s" : ""}</strong>{" "}
+                  look{todoistCompletions.proposals.length === 1 ? "s" : ""} finished by this note.
+                </p>
+                <ul className="space-y-1">
+                  {todoistCompletions.proposals.map((item) => (
+                    <li key={item.id} className="flex items-start justify-between gap-2">
+                      <span className="text-xs">
+                        <span className="font-medium">{item.content}</span>
+                        <span className="block text-rose-700">
+                          {item.certain ? "Ticked off in this note" : item.reason}
+                          {item.evidence ? ` — “${item.evidence}”` : ""}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onCloseTodoistTasks?.([item.id])}
+                        disabled={closingTodoist}
+                        className="btn-secondary text-xs px-2 py-0.5 whitespace-nowrap"
+                      >
+                        Close
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  onClick={() => onCloseTodoistTasks?.(todoistCompletions.proposals.map((item) => item.id))}
+                  disabled={closingTodoist}
+                  className="btn-primary text-xs"
+                >
+                  {closingTodoist ? "Closing…" : `Close all ${todoistCompletions.proposals.length}`}
+                </button>
+              </div>
+            )}
+            {todoistCompletions?.closed > 0 && !todoistCompletions.proposals?.length && (
+              <div className="rounded-lg px-3 py-2 border border-green-200 bg-green-50 text-sm text-green-700">
+                {todoistCompletions.closed} Todoist task{todoistCompletions.closed !== 1 ? "s" : ""} closed.
               </div>
             )}
             {sfdcReportSaved && (

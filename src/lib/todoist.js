@@ -127,3 +127,46 @@ export async function pushTodoistTasks(apiFetch, settings, tasks) {
   if (!res.ok) throw new Error(data.error || "Todoist request failed");
   return data;
 }
+
+// Asks which of the account's open Todoist tasks this note finishes. Returns
+// null when Todoist is not configured, so callers can treat it as optional.
+export async function previewTodoistCompletions(apiFetch, settings, { notes, noteTitle, label, model }) {
+  if (!todoistConfigured(settings) || !String(notes || "").trim()) return null;
+  const res = await apiFetch("/api/todoist-reconcile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: "preview",
+      apiToken: settings.todoistApiToken.trim(),
+      projectId: parseTodoistProjectId(settings.todoistProject),
+      notes,
+      noteTitle,
+      label,
+      model,
+      apiKey: settings.apiKey || undefined,
+      openaiApiKey: settings.openaiApiKey || undefined,
+      replacements: settings.replacements || [],
+      corrections: settings.corrections || [],
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Todoist check failed");
+  return data;
+}
+
+// Closes the tasks the CSM approved.
+export async function closeTodoistTasks(apiFetch, settings, taskIds) {
+  const res = await apiFetch("/api/todoist-reconcile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      mode: "close",
+      apiToken: settings.todoistApiToken.trim(),
+      projectId: parseTodoistProjectId(settings.todoistProject),
+      taskIds,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Could not close Todoist tasks");
+  return data;
+}

@@ -6,6 +6,7 @@ import { assertTrustedRequest } from "@/lib/requestSafety";
 import { extractItems } from "@/lib/todoItems";
 import { normalizeTaskContent, todoistLabelForNote, todoistTaskFromItemLine } from "@/lib/todoist";
 import { createTodoistTaskWithDueFallback, listProjectTaskContents } from "@/lib/todoistApi";
+import { dropTasksAlreadyInProject } from "@/lib/todoistReconcile";
 import { collectNoteFiles, noteDate } from "@/lib/vaultScan";
 
 // One-shot backfill: scan every account folder in the vault for notes from
@@ -77,10 +78,8 @@ export async function POST(request) {
     }
 
     // Skip anything already in the project so re-runs don't pile up copies.
-    const existing = new Set(
-      (await listProjectTaskContents(apiToken.trim(), projectId.trim())).map(normalizeTaskContent)
-    );
-    const newTasks = tasks.filter((task) => !existing.has(normalizeTaskContent(task.content)));
+    const existing = await listProjectTaskContents(apiToken.trim(), projectId.trim());
+    const { tasks: newTasks } = dropTasksAlreadyInProject(tasks, existing);
     const duplicates = tasks.length - newTasks.length;
     const capped = newTasks.length > MAX_TASKS_PER_RUN;
     const toCreate = newTasks.slice(0, MAX_TASKS_PER_RUN);

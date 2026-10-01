@@ -87,7 +87,8 @@ export async function listProjectTasks(apiToken, projectId) {
     }
     const data = await res.json();
     for (const task of data.results || []) {
-      if (task?.content) tasks.push({ id: task.id, content: task.content });
+      // Labels come along so a caller can scope to one account's tasks.
+      if (task?.content) tasks.push({ id: task.id, content: task.content, labels: task.labels || [] });
     }
     cursor = data.next_cursor || null;
   } while (cursor);

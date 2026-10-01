@@ -21,7 +21,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { stripThreadNoise } from "@/lib/emailThreads";
 import { FAST_MODEL, calcCost, formatCost } from "@/lib/models";
 import { accountForEmailDomains, detectAccount, folderForAccount, matchVaultFolder } from "@/lib/accounts";
-import { completeTodoistTasks, pushTodoistTasks, todoistConfigured, todoistLabelForNote } from "@/lib/todoist";
+import { closeTodoistTasks, completeTodoistTasks, previewTodoistCompletions, pushTodoistTasks, todoistConfigured, todoistLabelForNote } from "@/lib/todoist";
 import { parseResponseNeeded } from "@/lib/emailFollowUp";
 
 function todayIso() {
@@ -69,11 +69,31 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   const [existingNote, setExistingNote] = useState(null);
   const [updateExisting, setUpdateExisting] = useState(true);
   const [todoistResult, setTodoistResult] = useState(null);
+  // Open Todoist tasks this thread appears to settle, for the CSM to approve.
+  const [todoistCompletions, setTodoistCompletions] = useState(null);
+  const [closingTodoist, setClosingTodoist] = useState(false);
   const [autoPickedFolder, setAutoPickedFolder] = useState(false);
   const [cost, setCost] = useState(null);
 
   const wordCount = emailThread.trim() ? emailThread.trim().split(/\s+/).length : 0;
   const canCreate = emailThread.trim() && !processing && !saving;
+
+  async function closeProposedTodoistTasks(taskIds) {
+    if (!taskIds?.length || closingTodoist) return;
+    setClosingTodoist(true);
+    try {
+      const result = await closeTodoistTasks(apiFetch, settings, taskIds);
+      setTodoistCompletions((previous) => previous && {
+        ...previous,
+        proposals: previous.proposals.filter((item) => !taskIds.includes(item.id)),
+        closed: (previous.closed || 0) + (result?.closed || 0),
+      });
+    } catch (e) {
+      setTodoistCompletions((previous) => previous && { ...previous, error: e.message });
+    } finally {
+      setClosingTodoist(false);
+    }
+  }
 
   function clearOutput() {
     setPendingReview(null);
@@ -85,6 +105,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setCustomerFactsPath("");
     setUpdatedExisting(false);
     setTodoistResult(null);
+    setTodoistCompletions(null);
     setError(null);
     setCost(null);
   }
@@ -379,6 +400,22 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         }
       }
 
+      // A thread often settles an action from an earlier meeting. Proposed
+      // only — closing someone's task list is their call.
+      if (todoistConfigured(settings)) {
+        try {
+          const preview = await previewTodoistCompletions(apiFetch, settings, {
+            notes: restoredNote,
+            noteTitle: saveTitle,
+            label: todoistLabelForNote(saveFolder, settings.accounts),
+            model: settings.model,
+          });
+          if (preview?.proposals?.length) setTodoistCompletions(preview);
+        } catch {
+          // Best-effort: the note and its reminder are already safe.
+        }
+      }
+
       const account = detectAccount(saveFolder, settings.accounts || []);
       if (account.name !== "Internal") {
         try {
@@ -614,6 +651,28 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
                 <p className="text-sm text-violet-700">
                   Customer callouts rebuilt at <code className="font-mono text-xs bg-violet-50 px-1.5 py-0.5 rounded">{customerFactsPath}</code>
                 </p>
+              )}
+              {todoistCompletions?.proposals?.length > 0 && (
+                <div className="rounded-lg px-3 py-2 border border-rose-200 bg-rose-50 text-sm text-rose-800 space-y-2">
+                  <p><strong>{todoistCompletions.proposals.length} open Todoist task{todoistCompletions.proposals.length !== 1 ? "s" : ""}</strong> look{todoistCompletions.proposals.length === 1 ? "s" : ""} settled by this thread.</p>
+                  <ul className="space-y-1">
+                    {todoistCompletions.proposals.map((item) => (
+                      <li key={item.id} className="flex items-start justify-between gap-2">
+                        <span className="text-xs">
+                          <span className="font-medium">{item.content}</span>
+                          <span className="block text-rose-700">{item.certain ? "Ticked off in this note" : item.reason}{item.evidence ? ` — “${item.evidence}”` : ""}</span>
+                        </span>
+                        <button type="button" onClick={() => closeProposedTodoistTasks([item.id])} disabled={closingTodoist} className="btn-secondary text-xs px-2 py-0.5 whitespace-nowrap">Close</button>
+                      </li>
+                    ))}
+                  </ul>
+                  <button type="button" onClick={() => closeProposedTodoistTasks(todoistCompletions.proposals.map((i) => i.id))} disabled={closingTodoist} className="btn-primary text-xs">
+                    {closingTodoist ? "Closing…" : `Close all ${todoistCompletions.proposals.length}`}
+                  </button>
+                </div>
+              )}
+              {todoistCompletions?.closed > 0 && !todoistCompletions.proposals?.length && (
+                <p className="text-sm text-green-700">{todoistCompletions.closed} Todoist task{todoistCompletions.closed !== 1 ? "s" : ""} closed.</p>
               )}
               {todoistResult && (
                 <p className={`text-sm ${todoistResult.ok ? "text-rose-700" : "text-amber-700"}`}>
