@@ -39,7 +39,9 @@ function Paragraph({ children }) {
   if (/^(#[a-z][a-z0-9-]*\s*)+$/i.test(text)) {
     return (
       <div className="mb-2 flex flex-wrap gap-1">
-        {text.split(/\s+/).map((tag) => (
+        {/* A note can repeat a tag; show it once rather than rendering two
+            children under the same key. */}
+        {[...new Set(text.split(/\s+/).filter(Boolean))].map((tag) => (
           <span
             key={tag}
             className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
@@ -90,6 +92,9 @@ export default function NotesPreview({
   ownerNames = [],
   ownerPronouns = "",
   otherAccounts = [],
+  todoistCompletions,
+  onCloseTodoistTasks,
+  closingTodoist,
 }) {
   const [viewMode, setViewMode] = useState("preview");
   const [regenerationInstruction, setRegenerationInstruction] = useState("");
