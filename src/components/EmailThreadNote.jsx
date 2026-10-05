@@ -206,6 +206,8 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     try {
       let newEntities = extractEmailEntities(scanText);
       let scanSkipped = !settings.aiPrivacyScan;
+      let scanError = "";
+      let truncated = false;
       if (settings.aiPrivacyScan) {
         try {
           const res = await apiFetch("/api/sanitize", {
@@ -221,19 +223,31 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           });
           const data = await res.json();
           if (data.skipped) scanSkipped = true;
+          if (data.error) scanError = data.error;
+          if (data.truncated) truncated = true;
           newEntities = mergeSensitiveEntities(newEntities, data.entities || []);
-        } catch {
+        } catch (err) {
           scanSkipped = true;
+          scanError = err?.message || "the scan could not be reached";
         }
       }
 
       if (newEntities.length > 0) {
+        if (truncated) {
+          setError("The sensitivity scan found more terms than it could list at once. Review these, then run it again to catch the rest.");
+        }
         setPendingReview(assignAliases(newEntities, savedReplacements));
         return;
       }
 
+      // An empty result means "nothing sensitive found" only when the scan
+      // actually ran. Anything else has to say so.
       if (scanSkipped && settings.aiPrivacyScan) {
-        setError("Sensitivity scan skipped — set your API key in Settings to enable name/company detection.");
+        setError(scanError
+          ? `Sensitivity scan did not run: ${scanError}. Names and companies were NOT checked.`
+          : "Sensitivity scan skipped — set your API key in Settings to enable name/company detection.");
+      } else if (truncated) {
+        setError("The sensitivity scan was cut off before it finished. Run it again before trusting the result.");
       }
       await createAndSave(savedReplacements);
     } finally {
@@ -405,9 +419,10 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       }
 
       // Archive the raw thread and the CSM's context next to the meeting
-      // transcripts. Titled by the thread rather than the note's date, so a
-      // reply that re-dates the note updates this file instead of adding a
-      // second copy of the same conversation.
+      // transcripts, titled "YYYY-MM-DD - subject" from the thread date in the
+      // UI. That date advances as replies arrive, so a grown thread archives
+      // as a new dated snapshot rather than overwriting the earlier one; an
+      // unchanged re-paste still matches on content and does not duplicate.
       if (settings.transcriptsPath) {
         const archiveBody = formatEmailArchive(correctedThread, correctedContext);
         if (archiveBody) {
@@ -417,7 +432,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 transcript: archiveBody,
-                meetingTitle: `Email - ${stripThreadNoise(correctedTitle) || "Email Thread"}`,
+                meetingTitle: `${threadDate || todayIso()} - ${stripThreadNoise(correctedTitle) || "Email Thread"}`,
                 transcriptsPath: settings.transcriptsPath,
                 folder: saveFolder || undefined,
                 accounts: settings.accounts || [],

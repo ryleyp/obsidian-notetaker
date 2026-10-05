@@ -69,3 +69,34 @@ describe("parseEntityList", () => {
     ]);
   });
 });
+
+describe("parseEntityList on an answer the model cut off", () => {
+  const full = Array.from({ length: 30 }, (_, i) => ({ text: `Person ${i}`, type: "person" }));
+
+  it("keeps every complete term when the array has no closing bracket", () => {
+    const truncated = JSON.stringify(full).slice(0, 400);
+    const parsed = parseEntityList(truncated);
+
+    // The old parser returned nothing here, so the review card never appeared.
+    expect(parsed.length).toBeGreaterThan(5);
+    expect(parsed.every((item) => item.text.startsWith("Person "))).toBe(true);
+    // The half-written object at the cut-off point is dropped, not guessed at.
+    expect(parsed.at(-1).text).toMatch(/^Person \d+$/);
+  });
+
+  it("still reads a well-formed answer, with or without prose around it", () => {
+    expect(parseEntityList(JSON.stringify(full))).toHaveLength(30);
+    expect(parseEntityList(`Here you go:\n${JSON.stringify(full.slice(0, 2))}\nThat is all.`)).toHaveLength(2);
+  });
+
+  it("salvages a malformed array rather than throwing", () => {
+    const broken = '[{"text":"Dana Whitfield","type":"person"},,{"text":"Acme","type":"org"}]';
+    expect(parseEntityList(broken).map((e) => e.text)).toEqual(["Dana Whitfield", "Acme"]);
+  });
+
+  it("returns nothing for prose, an empty answer, or an empty array", () => {
+    expect(parseEntityList("Nothing sensitive found.")).toEqual([]);
+    expect(parseEntityList("")).toEqual([]);
+    expect(parseEntityList("[]")).toEqual([]);
+  });
+});

@@ -51,14 +51,26 @@ export async function POST(request) {
   try {
     const msg = await client.messages.create({
       model: client.resolvedModel,
-      max_tokens: 512,
+      // One JSON object per sensitive term: a real transcript can name dozens
+      // of people and companies, and at the old 512 the answer was cut off
+      // mid-array on anything substantial.
+      max_tokens: 4000,
       messages: [{ role: "user", content: prompt }],
     });
 
     const raw = firstTextBlock(msg).trim() || "[]";
     const entities = mergeSensitiveEntities(emailEntities, parseEntityList(raw, scanAliases));
-    return NextResponse.json({ entities });
-  } catch {
-    return NextResponse.json({ entities: emailEntities });
+    // Say so when the answer was cut off. The salvaged terms are still real,
+    // but the list is incomplete and the CSM should know before it is used as
+    // a clean bill of health.
+    return NextResponse.json({ entities, truncated: msg.stop_reason === "max_tokens" });
+  } catch (error) {
+    // A failed scan is not a clean scan. Without this the caller could not
+    // tell "nothing sensitive found" from "the detector never ran".
+    return NextResponse.json({
+      entities: emailEntities,
+      skipped: true,
+      error: error?.message || "Sensitivity scan failed",
+    });
   }
 }

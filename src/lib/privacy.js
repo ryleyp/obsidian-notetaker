@@ -59,10 +59,38 @@ TEXT:
 ${transcript}`;
 }
 
+// The model answers with a JSON array. A long transcript produces a long
+// array, and an answer cut off by the output limit has no closing bracket —
+// which used to mean the whole scan silently returned nothing and the review
+// card never appeared. Salvage every complete object instead.
+function parseEntityArray(raw) {
+  const start = raw.indexOf("[");
+  if (start === -1) return [];
+  const body = raw.slice(start);
+
+  const closed = body.match(/\[[\s\S]*\]/);
+  if (closed) {
+    try {
+      return JSON.parse(closed[0]);
+    } catch {
+      // Malformed despite having both brackets; fall through and salvage.
+    }
+  }
+
+  const salvaged = [];
+  for (const match of body.matchAll(/\{[^{}]*\}/g)) {
+    try {
+      salvaged.push(JSON.parse(match[0]));
+    } catch {
+      // A half-written object at the cut-off point; skip it.
+    }
+  }
+  return salvaged;
+}
+
 export function parseEntityList(rawText, knownAliases = []) {
   const raw = rawText?.trim() || "[]";
-  const match = raw.match(/\[[\s\S]*\]/);
-  const parsed = match ? JSON.parse(match[0]) : [];
+  const parsed = parseEntityArray(raw);
   const aliases = new Set(knownAliases.map((a) => a.toLowerCase()));
 
   return parsed
