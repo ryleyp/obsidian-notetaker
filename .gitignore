@@ -52,3 +52,7 @@ notetaker-glossary.json
 
 # Copied from node_modules on install (scripts/copy-pdf-worker.mjs)
 public/pdf.worker.min.mjs
+
+# Written by the Windows launcher when an install fails, so the error survives
+# the console scrolling away.
+/npm-install.log

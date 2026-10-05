@@ -78,6 +78,11 @@ Notes on paths:
 - If PowerShell blocks the launcher with an execution-policy error, run it as
   `powershell -ExecutionPolicy Bypass -File scripts\start-notetaker-local.ps1`
   (this is what the `.bat` file already does).
+- If the first run fails at "Installing dependencies", the launcher names the
+  likely cause (corporate proxy, TLS inspection, a path too long for Windows,
+  OneDrive or antivirus locking files) and writes npm's full output to
+  `npm-install.log` in the project folder. A half-finished install is cleared
+  and retried automatically the next time you launch.
 
 ## Usage
 
