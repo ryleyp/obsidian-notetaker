@@ -23,8 +23,8 @@ from zero to a working app.
 
 ### If you were given a GitHub link
 ```bash
-git clone <the-repo-url>
-cd notetaker-webapp
+git clone https://github.com/ryleyp/obsidian-notetaker.git
+cd obsidian-notetaker
 ```
 
 (On Windows, open **PowerShell** or **Command Prompt** in the folder you want
@@ -80,7 +80,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 Each time you want to use it:
 ```bash
-cd notetaker-webapp
+cd obsidian-notetaker
 npm run dev
 ```
 Then open http://localhost:3000. Close the terminal when you're done.
