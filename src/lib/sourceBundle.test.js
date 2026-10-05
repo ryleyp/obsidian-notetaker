@@ -3,6 +3,7 @@ import {
   stripCitationMarkers,
   buildSourceBundle,
   extractReferencedSourceIds,
+  formatEmailArchive,
   formatSourceBundleForPrompt,
   formatTranscriptArchive,
 } from "./sourceBundle";
@@ -91,5 +92,22 @@ describe("slide sources", () => {
   it("strips and extracts [S#] markers like the others", () => {
     expect(stripCitationMarkers("Seats: 40 [S2] [T1].")).toBe("Seats: 40.");
     expect(extractReferencedSourceIds("x [O1] [S2] [N1] [S1]")).toEqual(["N1", "S1", "S2", "O1"]);
+  });
+});
+
+describe("formatEmailArchive", () => {
+  it("keeps the thread and the CSM's context as separate sections", () => {
+    expect(formatEmailArchive("Subject: Budget\n\nDana: can we move it?", "Dana is the EA admin."))
+      .toBe("## Email thread\n\nSubject: Budget\n\nDana: can we move it?\n\n---\n\n## Context & notes\n\nDana is the EA admin.");
+  });
+
+  it("archives the thread alone when there is no context", () => {
+    expect(formatEmailArchive("Subject: Budget", "")).toBe("Subject: Budget");
+    expect(formatEmailArchive("Subject: Budget", "   ")).toBe("Subject: Budget");
+  });
+
+  it("archives nothing when there is nothing to archive", () => {
+    expect(formatEmailArchive("", "")).toBe("");
+    expect(formatEmailArchive(null)).toBe("");
   });
 });

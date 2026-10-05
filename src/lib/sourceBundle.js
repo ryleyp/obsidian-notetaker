@@ -79,6 +79,17 @@ function makeTranscriptSources(transcript, extendedTranscript) {
   );
 }
 
+// The archive copy of an email thread: the raw thread as it was pasted, plus
+// whatever the CSM typed alongside it. Same shape as a meeting transcript, so
+// both sit in the transcripts archive looking like each other.
+export function formatEmailArchive(emailThread, context = "") {
+  const thread = cleanText(emailThread);
+  const notes = cleanText(context);
+  if (!thread && !notes) return "";
+  if (!notes) return thread;
+  return `## Email thread\n\n${thread}\n\n---\n\n## Context & notes\n\n${notes}`;
+}
+
 export function formatTranscriptArchive(transcript, extendedTranscript = "") {
   const primary = cleanText(transcript);
   const extended = cleanText(extendedTranscript);

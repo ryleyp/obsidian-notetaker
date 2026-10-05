@@ -15,7 +15,7 @@ import {
   reverseReplacements,
 } from "@/lib/sanitize";
 import { aliasesFromReplacements, extractEmailEntities, mergeSensitiveEntities } from "@/lib/privacy";
-import { buildSourceBundle, mapSourceBundle } from "@/lib/sourceBundle";
+import { buildSourceBundle, formatEmailArchive, mapSourceBundle } from "@/lib/sourceBundle";
 import { latestEmailResponseDate } from "@/lib/emailDates";
 import { apiFetch } from "@/lib/apiClient";
 import { stripThreadNoise } from "@/lib/emailThreads";
@@ -65,6 +65,9 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   const [sfdcReportUpdated, setSfdcReportUpdated] = useState(false);
   const [sfdcReportError, setSfdcReportError] = useState("");
   const [customerFactsPath, setCustomerFactsPath] = useState("");
+  // Where the raw thread and context were archived, alongside the meeting
+  // transcripts, so the sources behind a note are kept out of the vault.
+  const [archivedPath, setArchivedPath] = useState("");
   const [updatedExisting, setUpdatedExisting] = useState(false);
   const [existingNote, setExistingNote] = useState(null);
   const [updateExisting, setUpdateExisting] = useState(true);
@@ -106,6 +109,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setUpdatedExisting(false);
     setTodoistResult(null);
     setTodoistCompletions(null);
+    setArchivedPath("");
     setError(null);
     setCost(null);
   }
@@ -400,6 +404,33 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         }
       }
 
+      // Archive the raw thread and the CSM's context next to the meeting
+      // transcripts. Titled by the thread rather than the note's date, so a
+      // reply that re-dates the note updates this file instead of adding a
+      // second copy of the same conversation.
+      if (settings.transcriptsPath) {
+        const archiveBody = formatEmailArchive(correctedThread, correctedContext);
+        if (archiveBody) {
+          try {
+            const archiveRes = await apiFetch("/api/save-transcript", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                transcript: archiveBody,
+                meetingTitle: `Email - ${stripThreadNoise(correctedTitle) || "Email Thread"}`,
+                transcriptsPath: settings.transcriptsPath,
+                folder: saveFolder || undefined,
+                accounts: settings.accounts || [],
+              }),
+            });
+            const archiveData = await archiveRes.json();
+            if (archiveData?.savedPath) setArchivedPath(archiveData.savedPath);
+          } catch {
+            // The note itself is already saved; archiving is best-effort.
+          }
+        }
+      }
+
       // A thread often settles an action from an earlier meeting. Proposed
       // only — closing someone's task list is their call.
       if (todoistConfigured(settings)) {
@@ -650,6 +681,11 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               {customerFactsPath && (
                 <p className="text-sm text-violet-700">
                   Customer callouts rebuilt at <code className="font-mono text-xs bg-violet-50 px-1.5 py-0.5 rounded">{customerFactsPath}</code>
+                </p>
+              )}
+              {archivedPath && (
+                <p className="text-sm text-gray-600">
+                  Thread and context archived to <code className="font-mono text-xs bg-gray-100 px-1 rounded">{archivedPath}</code>
                 </p>
               )}
               {todoistCompletions?.proposals?.length > 0 && (
