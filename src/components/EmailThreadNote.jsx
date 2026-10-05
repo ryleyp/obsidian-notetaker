@@ -419,10 +419,12 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       }
 
       // Archive the raw thread and the CSM's context next to the meeting
-      // transcripts, titled "YYYY-MM-DD - subject" from the thread date in the
-      // UI. That date advances as replies arrive, so a grown thread archives
-      // as a new dated snapshot rather than overwriting the earlier one; an
-      // unchanged re-paste still matches on content and does not duplicate.
+      // transcripts, titled "Email - YYYY-MM-DD - subject" from the thread
+      // date in the UI, so email archives sort together and read apart from
+      // meeting transcripts. That date advances as replies arrive, so a grown
+      // thread archives as a new dated snapshot rather than overwriting the
+      // earlier one; an unchanged re-paste still matches on content and does
+      // not duplicate.
       if (settings.transcriptsPath) {
         const archiveBody = formatEmailArchive(correctedThread, correctedContext);
         if (archiveBody) {
@@ -432,7 +434,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 transcript: archiveBody,
-                meetingTitle: `${threadDate || todayIso()} - ${stripThreadNoise(correctedTitle) || "Email Thread"}`,
+                meetingTitle: `Email - ${threadDate || todayIso()} - ${stripThreadNoise(correctedTitle) || "Email Thread"}`,
                 transcriptsPath: settings.transcriptsPath,
                 folder: saveFolder || undefined,
                 accounts: settings.accounts || [],

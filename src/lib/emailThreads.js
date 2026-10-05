@@ -12,7 +12,10 @@
 // on the known-noise list below.
 
 // Reply and forward prefixes, including the ones non-English clients send.
-const REPLY_PREFIX = "re|res|ref|fw|fwd|fwed|forward|aw|antw|antwort|sv|vs|vb|tr|rv|enc|odp|doorst";
+// "ref" is deliberately absent: "Ref: Invoice 1182" is somebody's subject
+// line, not a reply marker. The ticketing tokens below handle the "ref:...:ref"
+// form, which is a different thing entirely.
+const REPLY_PREFIX = "re|res|fw|fwd|fwed|forward|aw|antw|antwort|sv|vs|vb|tr|rv|enc|odp|doorst";
 
 // Gateway markers meaning "this came from outside" — never part of a subject.
 const EXTERNAL_MARKER = "external(?:\\s+(?:email|sender|message))?|extern|ext";
@@ -33,12 +36,22 @@ const WRAPPED = new RegExp(`^\\s*(?:\\[\\s*(?:${EXTERNAL_MARKER})\\s*\\]|\\(\\s*
 // the app's own "RE- Subject" filename form is still peeled.
 const BARE = new RegExp(`^\\s*(?:${REPLY_PREFIX}|${EXTERNAL_MARKER})\\s*(?::+\\s*|[\\-–—]\\s+)`, "i");
 
+// Case-reference tokens that ticketing systems append to the subject, like
+// Salesforce email-to-case: "[ ref:!00Di00jTAB.!500VU01BYycT:ref ]". They
+// identify the case, not the conversation, and only some messages in a thread
+// carry one — so a reply that picked one up has to key the same as one that
+// did not. Matched anywhere in the subject, since a later reply can bury it
+// mid-line. The ":ref" terminator keeps a subject like "ref: budget" safe.
+const TRACKER_TOKEN = /\[?\s*ref:\s*\S+?\s*:ref\s*\]?/gi;
+
 // Leading warning glyphs some gateways prepend.
 const GLYPH = /^\s*(?:[⚠️❗❕‼Ὢ8]\s*)+/;
 
 // Strips every leading noise marker, in whatever order they were stacked.
 export function stripThreadNoise(subject) {
-  let out = String(subject || "");
+  // Tracker tokens go first and from anywhere in the line; the markers below
+  // are only ever peeled off the front.
+  let out = String(subject || "").replace(TRACKER_TOKEN, " ");
   for (let guard = 0; guard < 20; guard += 1) {
     const next = out.replace(GLYPH, "").replace(BANNER, "").replace(WRAPPED, "").replace(BARE, "");
     if (next === out) break;

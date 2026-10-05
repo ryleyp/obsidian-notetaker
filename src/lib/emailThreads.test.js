@@ -60,6 +60,35 @@ describe("stripThreadNoise", () => {
   });
 });
 
+describe("ticketing-system reference tokens", () => {
+  const REF = "[ ref:!00Di00jTAB.!500VU01BYycT:ref ]";
+
+  it("drops the token wherever it sits", () => {
+    expect(stripThreadNoise(`${SUBJECT} ${REF}`)).toBe(SUBJECT);
+    expect(stripThreadNoise(`${SUBJECT} [ref:_00Di0abc._500xyz:ref]`)).toBe(SUBJECT);
+    expect(stripThreadNoise(`${SUBJECT} ref:_00D0X._500Y:ref`)).toBe(SUBJECT);
+    expect(stripThreadNoise(`${REF} ${SUBJECT}`)).toBe(SUBJECT);
+  });
+
+  it("keys a reply carrying the token the same as one without it", () => {
+    // The whole point: only some messages in a thread pick one up.
+    expect(sameEmailThread(SUBJECT, `${SUBJECT} ${REF}`)).toBe(true);
+    expect(sameEmailThread(`RE: ${SUBJECT} ${REF}`, `[EXTERNAL] ${SUBJECT}`)).toBe(true);
+    expect(sameEmailThread(`FW: [EXT] ${SUBJECT} ${REF}`, SUBJECT)).toBe(true);
+  });
+
+  it("leaves a subject that merely starts with \"ref:\" alone", () => {
+    // No ":ref" terminator, so this is someone's actual subject line.
+    expect(stripThreadNoise("ref: budget planning")).toBe("ref: budget planning");
+    expect(stripThreadNoise("Reference architecture review")).toBe("Reference architecture review");
+  });
+
+  it("still tells two different threads apart once the token is gone", () => {
+    expect(sameEmailThread(`${SUBJECT} ${REF}`, `Q4 license server migration ${REF}`)).toBe(false);
+    expect(sameEmailThread(`${SUBJECT} ${REF}`, `[NI INTERNAL] ${SUBJECT}`)).toBe(false);
+  });
+});
+
 describe("emailThreadKey", () => {
   it("matches every variant of one thread to the same key", () => {
     const key = emailThreadKey(SUBJECT);
