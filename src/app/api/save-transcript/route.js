@@ -75,7 +75,7 @@ export async function POST(request) {
   try {
     assertTrustedRequest(request);
 
-    const { transcript, meetingTitle, transcriptsPath, folder, accounts } = await request.json();
+    const { transcript, meetingTitle, transcriptsPath, folder, accounts, subfolder } = await request.json();
     if (!transcript || !meetingTitle || !transcriptsPath) {
       return NextResponse.json({ ok: true, skipped: true });
     }
@@ -87,7 +87,15 @@ export async function POST(request) {
       (accounts?.length ? detectAccount(folder, accounts).archiveFolder : null) || mapFolder(folder, accounts);
 
     const resolvedBase = assertAllowedRoot(transcriptsPath, "Transcripts archive path");
-    const dir = resolveInsideDirectory(resolvedBase, archiveFolder, "Archive folder");
+    // An optional subfolder inside the account's archive — email threads use
+    // it so correspondence sits apart from meeting transcripts. Sanitized as
+    // a single folder name, so a caller cannot walk out of the archive.
+    const safeSubfolder = subfolder ? sanitizeFilename(subfolder, "") : "";
+    const dir = resolveInsideDirectory(
+      resolvedBase,
+      safeSubfolder ? path.join(archiveFolder, safeSubfolder) : archiveFolder,
+      "Archive folder"
+    );
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
     const safeTitle = sanitizeFilename(meetingTitle, "Transcript");

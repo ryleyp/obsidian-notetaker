@@ -80,3 +80,55 @@ describe("/api/save-transcript", () => {
     expect(fs.readdirSync(path.join(transcriptsPath, "Acme Transcripts"))).toHaveLength(1);
   });
 });
+
+describe("email threads archive in their own folder", () => {
+  it("puts an email thread inside the account's Emails folder", async () => {
+    const { transcriptsPath, body } = setup();
+    const data = await (await post({
+      ...body,
+      transcript: "## Email thread\n\nSubject: Q3 migration",
+      meetingTitle: "2026-10-05 - Email - Q3 migration",
+      subfolder: "Emails",
+    })).json();
+
+    expect(data.savedPath).toBe(path.join("Acme Transcripts", "Emails", "2026-10-05 - Email - Q3 migration.md"));
+    expect(fs.existsSync(path.join(transcriptsPath, "Acme Transcripts", "Emails"))).toBe(true);
+  });
+
+  it("leaves meeting transcripts in the account folder itself", async () => {
+    const { transcriptsPath, body } = setup();
+    await post(body);
+    expect(fs.readdirSync(path.join(transcriptsPath, "Acme Transcripts"))).toEqual(["2026-08-11 - Account Sync - Acme.md"]);
+  });
+
+  it("keeps an email and a meeting with the same title apart", async () => {
+    const { transcriptsPath, body } = setup();
+    await post({ ...body, transcript: "meeting body" });
+    const email = await (await post({ ...body, transcript: "email body", subfolder: "Emails" })).json();
+
+    expect(email.savedPath).toBe(path.join("Acme Transcripts", "Emails", "2026-08-11 - Account Sync - Acme.md"));
+    expect(fs.readFileSync(path.join(transcriptsPath, "Acme Transcripts", "2026-08-11 - Account Sync - Acme.md"), "utf-8")).toContain("meeting body");
+    expect(fs.readFileSync(path.join(transcriptsPath, email.savedPath), "utf-8")).toContain("email body");
+  });
+
+  it("updates the thread's own file when it is re-archived", async () => {
+    const { transcriptsPath, body } = setup();
+    const args = { ...body, meetingTitle: "2026-10-05 - Email - Q3 migration", subfolder: "Emails" };
+    await post({ ...args, transcript: "first message" });
+    const second = await (await post({ ...args, transcript: "first message\nsecond message" })).json();
+
+    expect(second.updated).toBe(true);
+    expect(fs.readdirSync(path.join(transcriptsPath, "Acme Transcripts", "Emails"))).toHaveLength(1);
+  });
+
+  it("cannot be walked out of the archive by the subfolder", async () => {
+    const { transcriptsPath, body } = setup();
+    const data = await (await post({ ...body, subfolder: "../../../etc" })).json();
+
+    // Sanitized to a single folder name inside the account's archive.
+    const parts = data.savedPath.split(path.sep);
+    expect(parts[0]).toBe("Acme Transcripts");
+    expect(parts).toHaveLength(3);
+    expect(fs.existsSync(path.join(transcriptsPath, data.savedPath))).toBe(true);
+  });
+});

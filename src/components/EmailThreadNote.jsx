@@ -418,10 +418,12 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         }
       }
 
-      // Archive the raw thread and the CSM's context next to the meeting
-      // transcripts, titled "Email - YYYY-MM-DD - subject" from the thread
-      // date in the UI, so email archives sort together and read apart from
-      // meeting transcripts. That date advances as replies arrive, so a grown
+      // Archive the raw thread and the CSM's context under an "Emails" folder
+      // inside the account's transcript archive, titled
+      // "YYYY-MM-DD - Email - subject" from the thread date in the UI, the
+      // same shape the vault note uses. The
+      // generated note itself goes to the vault alongside every other note;
+      // this is only the raw source. That date advances as replies arrive, so a grown
       // thread archives as a new dated snapshot rather than overwriting the
       // earlier one; an unchanged re-paste still matches on content and does
       // not duplicate.
@@ -434,9 +436,12 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 transcript: archiveBody,
-                meetingTitle: `Email - ${threadDate || todayIso()} - ${stripThreadNoise(correctedTitle) || "Email Thread"}`,
+                meetingTitle: `${threadDate || todayIso()} - Email - ${stripThreadNoise(correctedTitle) || "Email Thread"}`,
                 transcriptsPath: settings.transcriptsPath,
                 folder: saveFolder || undefined,
+                // Correspondence lives in its own folder inside the account's
+                // transcript archive, apart from the meeting recordings.
+                subfolder: "Emails",
                 accounts: settings.accounts || [],
               }),
             });
