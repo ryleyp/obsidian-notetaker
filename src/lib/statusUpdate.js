@@ -8,7 +8,12 @@
 //
 // Config spec: "Status Update Rules - App Config" in the vault.
 
-export const STATUS_WINDOW_DAYS = 30;
+// A trailing quarter, not the previous completed one: a status update is
+// about what is happening now, so the current quarter has to be in it. The
+// notes are still ordered newest first and the prompt leans on the recent
+// ones, so a wider window adds context without burying this week.
+export const STATUS_WINDOW_DAYS = 90;
+export const STATUS_WINDOW_LABEL = "last quarter";
 
 // The sections a status update is allowed to draw from. The transcript and
 // the SFDC entry are deliberately out: this is about what is happening on the
@@ -115,6 +120,7 @@ Rules:
 - Write dates as "October 2027", "early November", "end of October". The header date uses YYYY-MM-DD.
 - If a prior approved update is provided, keep its structure and wording wherever the notes have not changed, and update only what is new.
 - Only use facts found in the source notes. If the notes conflict, use the most recent one.
+- The notes span a quarter and are ordered newest first. Lead with where each motion stands now; older notes are background, and a motion that has since moved on is reported at its current state, not its earlier one.
 
 After the parts above, add a line "---" and then "Other risks considered:" with up to five short bullets of risks you did not use. This section is for the CSM only and will not be shared.`;
 }
@@ -235,7 +241,7 @@ export function checkStatusUpdate(parsed, {
 
   // D9 — everything has to come from the reporting window.
   if (notesOutsideWindow > 0) {
-    flag("D9", `${notesOutsideWindow} note${notesOutsideWindow !== 1 ? "s were" : " was"} older than the ${STATUS_WINDOW_DAYS} day window and were not used.`);
+    flag("D9", `${notesOutsideWindow} note${notesOutsideWindow !== 1 ? "s were" : " was"} older than the ${STATUS_WINDOW_LABEL} and ${notesOutsideWindow !== 1 ? "were" : "was"} not used.`);
   }
 
   return { fixed, flags };

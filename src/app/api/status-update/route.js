@@ -9,6 +9,7 @@ import {
   checkStatusUpdate,
   parseStatusUpdate,
   recentStatusNotes,
+  STATUS_WINDOW_LABEL,
 } from "@/lib/statusUpdate";
 
 // The short shareable status update. Deliberately a small model call over a
@@ -47,7 +48,7 @@ export async function POST(request) {
     const { notes: windowed, older } = recentStatusNotes(notes, { today: new Date(`${today}T12:00:00`) });
     if (!windowed.length) {
       return NextResponse.json({
-        error: `No notes in the last 30 days for ${accountLabel}. A status update reports on recent activity, so there is nothing to draw from.`,
+        error: `No notes in the ${STATUS_WINDOW_LABEL} for ${accountLabel}. A status update reports on recent activity, so there is nothing to draw from.`,
       }, { status: 422 });
     }
 

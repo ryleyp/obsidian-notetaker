@@ -58,12 +58,12 @@ describe("/api/status-update", () => {
     expect(data.flags).toEqual([]);
   });
 
-  it("sends only recent notes, newest first, and says what fell outside", async () => {
-    const data = await (await post({ notes: [recent("2026-10-06"), recent("2026-05-01"), recent("2026-09-20")] })).json();
+  it("sends only the quarter's notes, newest first, and says what fell outside", async () => {
+    const data = await (await post({ notes: [recent("2026-10-06"), recent("2026-01-15"), recent("2026-09-20")] })).json();
 
     const prompt = create.mock.calls[0][0].messages[0].content;
     expect(prompt.indexOf("2026-10-06")).toBeLessThan(prompt.indexOf("2026-09-20"));
-    expect(prompt).not.toContain("2026-05-01");
+    expect(prompt).not.toContain("2026-01-15");
     expect(data.notesOutsideWindow).toBe(1);
     expect(data.flags.map((f) => f.id)).toContain("D9");
   });
@@ -98,9 +98,9 @@ describe("/api/status-update", () => {
   });
 
   it("refuses when nothing is recent, rather than reporting on stale notes", async () => {
-    const response = await post({ notes: [recent("2026-01-15")] });
+    const response = await post({ notes: [recent("2025-11-20")] });
     expect(response.status).toBe(422);
-    expect((await response.json()).error).toContain("last 30 days");
+    expect((await response.json()).error).toContain("last quarter");
     expect(create).not.toHaveBeenCalled();
   });
 

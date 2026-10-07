@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { calcCost, FAST_MODEL, formatCost } from "@/lib/models";
 import { aliasesFromReplacements } from "@/lib/privacy";
 import { applyCorrections, applyReplacements, assignAliases, correctionFromRestoredItem } from "@/lib/sanitize";
-import { shareableStatusText, STATUS_WINDOW_DAYS } from "@/lib/statusUpdate";
+import { shareableStatusText, STATUS_WINDOW_LABEL } from "@/lib/statusUpdate";
 
 // The short status update the CSM sends upward: a status paragraph, a risk
 // line, and a next step. Lives on the SL Status tab because that is where the
@@ -181,8 +181,8 @@ export default function StatusUpdatePanel({
       </summary>
 
       <p className="text-sm text-gray-500 mt-2">
-        Drafted from this account&apos;s notes from the last {STATUS_WINDOW_DAYS} days only — a status update reports on what
-        is happening now. No names, no pricing, no hedging: the draft is checked against those rules before you see it.
+        Drafted from this account&apos;s notes from the {STATUS_WINDOW_LABEL}, newest first, so each motion is reported at
+        where it stands now. No names, no pricing, no hedging: the draft is checked against those rules before you see it.
       </p>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">

@@ -31,17 +31,18 @@ describe("recentStatusNotes", () => {
 
   it("keeps the window's notes, newest first, and counts what fell outside", () => {
     const { notes, older } = recentStatusNotes(
-      [note("2026-09-01", "old"), note("2026-10-06", "newest"), note("2026-09-20", "recent"), note("", "undated")],
+      [note("2026-05-01", "old"), note("2026-10-06", "newest"), note("2026-09-20", "recent"), note("", "undated")],
       { today: TODAY }
     );
     expect(notes.map((n) => n.title)).toEqual(["newest", "recent"]);
     expect(older).toBe(2);
   });
 
-  it("uses a 30 day window by default", () => {
-    expect(STATUS_WINDOW_DAYS).toBe(30);
-    expect(recentStatusNotes([note("2026-09-08", "edge")], { today: TODAY }).notes).toHaveLength(1);
-    expect(recentStatusNotes([note("2026-09-05", "past")], { today: TODAY }).notes).toHaveLength(0);
+  it("reaches back a trailing quarter, so the current one is included", () => {
+    expect(STATUS_WINDOW_DAYS).toBe(90);
+    // Just inside the quarter, and just outside it.
+    expect(recentStatusNotes([note("2026-07-10", "edge")], { today: TODAY }).notes).toHaveLength(1);
+    expect(recentStatusNotes([note("2026-07-05", "past")], { today: TODAY }).notes).toHaveLength(0);
   });
 });
 
