@@ -247,7 +247,7 @@ export default function Home() {
 
         {/* ── SystemLink Status mode ── */}
         {mode === "sl-status" && (
-          <SystemLinkStatus settings={settings} onSettingsClick={() => setShowSettings(true)} />
+          <SystemLinkStatus settings={settings} onSettingsClick={() => setShowSettings(true)} onSettingsPatch={applySettingsPatch} />
         )}
 
         {/* ── CSM EA Activity Report mode ── */}

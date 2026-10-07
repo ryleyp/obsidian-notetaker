@@ -2,6 +2,7 @@
 
 import FolderSelector from "@/components/FolderSelector";
 import NotesPreview from "@/components/NotesPreview";
+import StatusUpdatePanel from "@/components/StatusUpdatePanel";
 import { textHasAlias, detectAccount } from "@/lib/accounts";
 import { useReportWorkflow, TODAY } from "@/hooks/useReportWorkflow";
 import {
@@ -42,7 +43,7 @@ function noteMatchesSL(note, accountAliases) {
   return (accountAliases || []).some((a) => textHasAlias(text, a));
 }
 
-export default function SystemLinkStatus({ settings, onSettingsClick }) {
+export default function SystemLinkStatus({ settings, onSettingsClick, onSettingsPatch }) {
   const wf = useReportWorkflow({
     settings,
     storageKey: "report:sl-status",
@@ -136,23 +137,37 @@ export default function SystemLinkStatus({ settings, onSettingsClick }) {
               buttonLabel="Generate SystemLink Status"
             />
           )}
+        </div>
+      )}
 
-          {wf.activeNotes?.length > 0 && wf.showConfirm && (
-            <PreflightPanel
-              intro={
-                <>Sending <strong>{wf.activeNotes.length}</strong> SystemLink-related notes to Claude.
-                {excludedCount > 0 && ` ${excludedCount} non-SL notes excluded.`}</>
-              }
-              notes={wf.activeNotes}
-              loadCounts={wf.loadCounts}
-              model={wf.model}
-              setModel={wf.setModel}
-              scrub={scrub}
-              onCancel={() => wf.setShowConfirm(false)}
-              onConfirm={() => wf.handleSynthesize()}
-              synthesizing={wf.synthesizing}
-            />
-          )}
+      {settings.vaultPath && wf.activeNotes?.length > 0 && (
+        <StatusUpdatePanel
+          settings={settings}
+          notes={wf.activeNotes}
+          accountName={detectAccount(wf.selectedFolder, settings.accounts).name}
+          productFocus={SL_PRODUCT.name}
+          allAccounts={settings.accounts || []}
+          restoredIds={wf.restoredIds}
+          onSettingsPatch={onSettingsPatch}
+        />
+      )}
+
+      {settings.vaultPath && !wf.output && wf.activeNotes?.length > 0 && wf.showConfirm && (
+        <div className="card p-6">
+          <PreflightPanel
+            intro={
+              <>Sending <strong>{wf.activeNotes.length}</strong> SystemLink-related notes to Claude.
+              {excludedCount > 0 && ` ${excludedCount} non-SL notes excluded.`}</>
+            }
+            notes={wf.activeNotes}
+            loadCounts={wf.loadCounts}
+            model={wf.model}
+            setModel={wf.setModel}
+            scrub={scrub}
+            onCancel={() => wf.setShowConfirm(false)}
+            onConfirm={() => wf.handleSynthesize()}
+            synthesizing={wf.synthesizing}
+          />
         </div>
       )}
 
