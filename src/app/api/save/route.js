@@ -45,18 +45,31 @@ export function findDuplicateContentFile(vaultRoot, targetDir, notes) {
   return null;
 }
 
-function emailThreadTitleFromFilename(filename) {
+// Thread notes are named "YYYY-MM-DD - <Kind> - Title", where Kind is Email
+// or Teams. The kind is part of the thread's identity: an email thread and a
+// Teams chat that happen to share a title are different conversations, so an
+// update to one must never land on the other's note.
+function threadNoteFromFilename(filename) {
   const base = path.basename(filename, path.extname(filename)).replace(/ \(\d+\)$/, "");
-  return base.match(/^\d{4}-\d{2}-\d{2} - Email - (.+)$/i)?.[1] || "";
+  const match = base.match(/^\d{4}-\d{2}-\d{2} - (Email|Teams) - (.+)$/i);
+  return match ? { kind: match[1].toLowerCase(), title: match[2] } : null;
 }
 
-export function findExistingEmailThread(vaultRoot, targetDir, threadTitle, meetingTitle = "") {
+export function findExistingEmailThread(vaultRoot, targetDir, threadTitle, meetingTitle = "", threadKind = "") {
   const wanted = normalizedEmailThreadTitle(threadTitle);
   if (!wanted) return null;
 
+  // The kind comes from the caller, or from the desired filename's own
+  // "- Email -"/"- Teams -" segment; a legacy caller that supplies neither
+  // keeps matching email notes, which is what every pre-Teams note is.
+  const wantedKind = (threadKind || threadNoteFromFilename(`${meetingTitle}.md`)?.kind || "email").toLowerCase();
+
   const desiredFilename = `${sanitizeFilename(meetingTitle || "Email Thread")}.md`;
   const matches = folderMarkdownFiles(vaultRoot, targetDir)
-    .filter((entry) => normalizedEmailThreadTitle(emailThreadTitleFromFilename(entry.filename)) === wanted)
+    .filter((entry) => {
+      const parsed = threadNoteFromFilename(entry.filename);
+      return parsed && parsed.kind === wantedKind && normalizedEmailThreadTitle(parsed.title) === wanted;
+    })
     .map((entry) => ({ filePath: entry.filePath, filename: entry.filename, modified: fs.statSync(entry.filePath).mtimeMs }))
     .sort((a, b) => {
       if (a.filename === desiredFilename) return -1;

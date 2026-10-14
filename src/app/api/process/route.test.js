@@ -108,6 +108,15 @@ describe("buildPrompt", () => {
     expect(prompt).toContain("Do not restate items already listed under Action Items");
   });
 
+  // Teams transcripts and Outlook attendee lists write names as "Last, First";
+  // the generated note must use "First Last" and never split one name in two.
+  it("normalizes Last, First names to First Last", () => {
+    const prompt = buildPrompt("Priddy, Ryley: let's confirm the rollout.", "Planning Sync");
+
+    expect(prompt).toContain('Write every name as "First Last"');
+    expect(prompt).toContain('never split one "Last, First" name into two people');
+  });
+
   it("tells migrations to drop old sentiment sections but keep their facts", () => {
     const sourceBundle = buildSourceBundle({
       transcript: "Dana confirmed the Dallas rollout.",

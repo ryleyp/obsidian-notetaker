@@ -82,12 +82,13 @@ function makeTranscriptSources(transcript, extendedTranscript) {
 // The archive copy of an email thread: the raw thread as it was pasted, plus
 // whatever the CSM typed alongside it. Same shape as a meeting transcript, so
 // both sit in the transcripts archive looking like each other.
-export function formatEmailArchive(emailThread, context = "") {
+export function formatEmailArchive(emailThread, context = "", threadKind = "email") {
   const thread = cleanText(emailThread);
   const notes = cleanText(context);
   if (!thread && !notes) return "";
   if (!notes) return thread;
-  return `## Email thread\n\n${thread}\n\n---\n\n## Context & notes\n\n${notes}`;
+  const heading = threadKind === "teams" ? "Teams chat thread" : "Email thread";
+  return `## ${heading}\n\n${thread}\n\n---\n\n## Context & notes\n\n${notes}`;
 }
 
 export function formatTranscriptArchive(transcript, extendedTranscript = "") {
@@ -118,11 +119,15 @@ export function buildSourceBundle({
   emailThread = "",
   existingNote = "",
   slides = [],
+  threadKind = "email",
 } = {}) {
   const transcriptSources = makeTranscriptSources(transcript, extendedTranscript);
   const rawNoteSources = makeSourceBlocks(rawNotes, { prefix: "N", label: "Raw notes" });
   const slideSources = makeSlideSources(slides);
-  const emailSources = makeSourceBlocks(emailThread, { prefix: "E", label: "Email thread" });
+  const emailSources = makeSourceBlocks(emailThread, {
+    prefix: "E",
+    label: threadKind === "teams" ? "Teams chat thread" : "Email thread",
+  });
   const existingNoteSources = makeSourceBlocks(existingNote, { prefix: "O", label: "Existing meeting note" });
   return {
     transcriptSources,

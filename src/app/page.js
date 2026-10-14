@@ -220,6 +220,19 @@ export default function Home() {
         {/* ── Email Thread mode ── */}
         {mode === "email" && (
           <EmailThreadNote
+            key="email"
+            variant="email"
+            settings={settings}
+            onSettingsPatch={applySettingsPatch}
+            onSettingsClick={() => setShowSettings(true)}
+          />
+        )}
+
+        {/* ── Teams Thread mode: same pipeline, simpler note ── */}
+        {mode === "teams" && (
+          <EmailThreadNote
+            key="teams"
+            variant="teams"
             settings={settings}
             onSettingsPatch={applySettingsPatch}
             onSettingsClick={() => setShowSettings(true)}

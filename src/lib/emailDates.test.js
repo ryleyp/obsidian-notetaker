@@ -50,4 +50,33 @@ describe("latestEmailResponseDate", () => {
     expect(latestEmailResponseDate("")).toBe("");
     expect(latestEmailResponseDate("Subject: Hello\n\nJust checking in.")).toBe("");
   });
+
+  // Teams chat pastes have no Date:/Sent: headers — their timestamps are
+  // standalone date-divider lines between messages.
+  it("falls back to chat date-divider lines for Teams pastes", () => {
+    const thread = [
+      "October 8, 2026",
+      "Priddy, Ryley 10:32 AM",
+      "Can you confirm the license count?",
+      "[Friday, October 10, 2026 2:30 PM]",
+      "Smith, Jordan",
+      "Confirmed, 45 seats.",
+    ].join("\n");
+    expect(latestEmailResponseDate(thread)).toBe("2026-10-10");
+  });
+
+  it("never lets a divider-looking body line override real email headers", () => {
+    const thread = [
+      "Sent: Monday, August 17, 2026 9:15 AM",
+      "",
+      "The kickoff moved.",
+      "December 31, 2026",
+    ].join("\n");
+    expect(latestEmailResponseDate(thread)).toBe("2026-08-17");
+  });
+
+  it("ignores long prose lines that merely start with a date", () => {
+    const thread = "October 10, 2026 is when the migration finally lands for the Dallas lab.\nPlease confirm.";
+    expect(latestEmailResponseDate(thread)).toBe("");
+  });
 });

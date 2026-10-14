@@ -44,14 +44,38 @@ function toIsoDate(date) {
   return `${year}-${month}-${day}`;
 }
 
+// A Teams (or other chat) paste has no Date:/Sent: headers. Its timestamps
+// are standalone date-divider lines between messages — "October 10, 2026",
+// "Friday, October 10, 2026 2:30 PM", "[10/10/2026 2:30 PM]". A line only
+// counts when the WHOLE line (minus brackets) parses as a date, so body
+// sentences that mention a date stay ignored; the length cap keeps prose
+// that happens to start with a date out too.
+const CHAT_DIVIDER_MAX_LENGTH = 48;
+
+function chatDividerDate(line) {
+  const bare = line.trim().replace(/^\[/, "").replace(/\]$/, "").trim();
+  if (!bare || bare.length > CHAT_DIVIDER_MAX_LENGTH) return null;
+  return parseDateValue(bare);
+}
+
 // Returns the newest send date found in the thread as "YYYY-MM-DD",
-// or "" when no header-shaped date is present.
+// or "" when no header-shaped date is present. Email headers win when the
+// paste has any; chat date dividers are only consulted as a fallback, so an
+// email body date can never override its real send dates.
 export function latestEmailResponseDate(threadText) {
+  const lines = String(threadText || "").split("\n");
+
   let latest = null;
-  for (const line of String(threadText || "").split("\n")) {
+  for (const line of lines) {
     const candidate = line.match(HEADER_DATE_LINE)?.[1] ?? line.match(ON_WROTE_LINE)?.[1];
     if (!candidate) continue;
     const parsed = parseDateValue(candidate);
+    if (parsed && (!latest || parsed > latest)) latest = parsed;
+  }
+  if (latest) return toIsoDate(latest);
+
+  for (const line of lines) {
+    const parsed = chatDividerDate(line);
     if (parsed && (!latest || parsed > latest)) latest = parsed;
   }
   return latest ? toIsoDate(latest) : "";

@@ -32,9 +32,12 @@ function todayIso() {
   return `${year}-${month}-${day}`;
 }
 
-function filenameTitle(threadDate, threadTitle) {
-  const title = threadTitle.trim() || "Email Thread";
-  return `${threadDate || todayIso()} - Email - ${title}`;
+// The kind label is part of the note's filename identity: email and Teams
+// notes live side by side, so a Teams chat never updates an email note (or
+// vice versa) just because the titles match.
+function filenameTitle(threadDate, threadTitle, kindLabel = "Email") {
+  const title = threadTitle.trim() || `${kindLabel} Thread`;
+  return `${threadDate || todayIso()} - ${kindLabel} - ${title}`;
 }
 
 function inferTitleFromThread(text) {
@@ -46,10 +49,14 @@ function inferTitleFromThread(text) {
   return stripThreadNoise(subject);
 }
 
-export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsClick }) {
+export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsClick, variant = "email" }) {
+  const isTeams = variant === "teams";
+  const kindLabel = isTeams ? "Teams" : "Email";
+  const defaultTitle = `${kindLabel} Thread`;
   const [threadTitle, setThreadTitle] = useState("");
   const [threadDate, setThreadDate] = useState(todayIso());
   const [threadContext, setThreadContext] = useState("");
+  const [threadParticipants, setThreadParticipants] = useState("");
   const [emailThread, setEmailThread] = useState("");
   const [selectedFolder, setSelectedFolder] = useState("");
   // Mounted only when the Email tab opens, so saved settings have hydrated:
@@ -117,7 +124,8 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   function handleThreadChange(value) {
     clearOutput();
     setEmailThread(value);
-    if (!threadTitle) {
+    // A Teams chat has no subject line to infer a title from.
+    if (!threadTitle && !isTeams) {
       const inferred = inferTitleFromThread(value);
       if (inferred) setThreadTitle(inferred);
     }
@@ -168,6 +176,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         vaultPath: settings.vaultPath,
         folderPath: selectedFolder || "",
         threadTitle: correctedTitle,
+        threadKind: variant,
       });
       apiFetch(`/api/email-thread-note?${params}`)
         .then(async (res) => {
@@ -187,7 +196,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       canceled = true;
       clearTimeout(timer);
     };
-  }, [threadTitle, selectedFolder, settings.vaultPath, settings.corrections]);
+  }, [threadTitle, selectedFolder, settings.vaultPath, settings.corrections, variant]);
 
   async function runSanitizeDetection() {
     const savedReplacements = settings.replacements || [];
@@ -335,6 +344,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       emailThread: sanitizedThread,
       rawNotes: sanitizedContext,
       existingNote: sanitizedExisting,
+      threadKind: variant,
     });
     const displaySourceBundle = replacements.length
       ? mapSourceBundle(sourceBundle, (content) => reverseReplacements(content, replacements))
@@ -346,8 +356,10 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           emailThread: sanitizedThread,
-          threadTitle: sanitizedTitle || "Email Thread",
+          threadTitle: sanitizedTitle || defaultTitle,
           threadDate,
+          threadKind: variant,
+          threadParticipants: isTeams ? threadParticipants.trim() : "",
           context: sanitizedContext,
           apiKey: settings.apiKey || undefined,
               openaiApiKey: settings.openaiApiKey || undefined,
@@ -367,7 +379,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       // Updates go to the folder the thread already lives in, even when a
       // different folder is selected, so a thread never splits across folders.
       const saveFolder = updateExisting && existingNote ? existingNote.folder ?? selectedFolder : selectedFolder;
-      const saveTitle = filenameTitle(threadDate, correctedTitle || "Email Thread");
+      const saveTitle = filenameTitle(threadDate, correctedTitle || defaultTitle, kindLabel);
       const saveRes = await apiFetch("/api/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -406,10 +418,10 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           try {
             const label = todoistLabelForNote(saveFolder, settings.accounts);
             const result = await pushTodoistTasks(apiFetch, settings, [{
-              content: `Respond to "${correctedTitle.trim() || "email thread"}"${verdict.reason ? ` — ${verdict.reason}` : " (if needed)"}`,
+              content: `Respond to "${correctedTitle.trim() || defaultTitle.toLowerCase()}"${verdict.reason ? ` — ${verdict.reason}` : " (if needed)"}`,
               dueString: "in 2 days",
               labels: label ? [label] : [],
-              description: `From email note: ${saveTitle}`,
+              description: `From ${kindLabel.toLowerCase()} note: ${saveTitle}`,
             }]);
             setTodoistResult(result?.count ? { ok: true, reason: verdict.reason } : { ok: false, error: result?.failed?.[0]?.error || "Task not created" });
           } catch (todoistError) {
@@ -428,7 +440,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       // earlier one; an unchanged re-paste still matches on content and does
       // not duplicate.
       if (settings.transcriptsPath) {
-        const archiveBody = formatEmailArchive(correctedThread, correctedContext);
+        const archiveBody = formatEmailArchive(correctedThread, correctedContext, variant);
         if (archiveBody) {
           try {
             const archiveRes = await apiFetch("/api/save-transcript", {
@@ -436,12 +448,13 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 transcript: archiveBody,
-                meetingTitle: `${threadDate || todayIso()} - Email - ${stripThreadNoise(correctedTitle) || "Email Thread"}`,
+                meetingTitle: `${threadDate || todayIso()} - ${kindLabel} - ${stripThreadNoise(correctedTitle) || defaultTitle}`,
                 transcriptsPath: settings.transcriptsPath,
                 folder: saveFolder || undefined,
                 // Correspondence lives in its own folder inside the account's
-                // transcript archive, apart from the meeting recordings.
-                subfolder: "Emails",
+                // transcript archive, apart from the meeting recordings —
+                // emails and Teams chats each in their own.
+                subfolder: isTeams ? "Teams Chats" : "Emails",
                 accounts: settings.accounts || [],
               }),
             });
@@ -469,8 +482,11 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         }
       }
 
+      // A Teams note is deliberately minimal — no callout sections for the
+      // customer-facts rollup to read and no SFDC Activity Entry to file —
+      // so both post-save steps only run for email notes.
       const account = detectAccount(saveFolder, settings.accounts || []);
-      if (account.name !== "Internal") {
+      if (!isTeams && account.name !== "Internal") {
         try {
           const factsRes = await apiFetch("/api/customer-facts", {
             method: "POST",
@@ -489,7 +505,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         }
       }
 
-      try {
+      if (!isTeams) try {
         const reportRes = await apiFetch("/api/sfdc-report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -522,6 +538,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setThreadTitle("");
     setThreadDate(todayIso());
     setThreadContext("");
+    setThreadParticipants("");
     setEmailThread("");
     setUpdateExisting(true);
     setAutoPickedFolder(false);
@@ -543,8 +560,12 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       <div className="card p-6">
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
-            <h2 className="text-base font-semibold text-gray-900">Email Thread Note</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Paste a customer thread and save a dated decisions note to Obsidian</p>
+            <h2 className="text-base font-semibold text-gray-900">{kindLabel} Thread Note</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {isTeams
+                ? "Paste a Teams chat, say who's in it, and save a simple details + to-dos note to Obsidian"
+                : "Paste a customer email thread and save a dated decisions note to Obsidian"}
+            </p>
           </div>
           {note && (
             <button type="button" onClick={handleNewThread} className="btn-secondary text-xs">New Thread</button>
@@ -579,6 +600,22 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           </div>
         </div>
 
+        {isTeams && (
+          <div className="mb-4">
+            <label className="label">Who&apos;s in the thread <span className="font-normal text-gray-400">(optional)</span></label>
+            <input
+              className="input"
+              value={threadParticipants}
+              onChange={(event) => {
+                clearOutput();
+                setThreadParticipants(event.target.value);
+              }}
+              placeholder="e.g. Dana Smith (Acme EA admin), Jordan Lee (NI AE)"
+            />
+            <p className="mt-1 text-[10px] text-gray-400">Teams pastes often truncate names — list the people here and the note uses these names</p>
+          </div>
+        )}
+
         {existingNote && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-start justify-between gap-3">
             <span>
@@ -612,18 +649,22 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               clearOutput();
               setThreadContext(event.target.value);
             }}
-            placeholder="Anything the email thread won't explain on its own: account, project, stakeholder roles, or what you need the note to emphasize."
+            placeholder={isTeams
+              ? "Anything the chat won't explain on its own: account, project, or what the thread is about."
+              : "Anything the email thread won't explain on its own: account, project, stakeholder roles, or what you need the note to emphasize."}
           />
         </div>
 
         <div>
-          <label className="label">Email Thread</label>
+          <label className="label">{kindLabel} Thread</label>
           <textarea
             className="input resize-y font-mono text-xs leading-relaxed"
             rows={16}
             value={emailThread}
             onChange={(event) => handleThreadChange(event.target.value)}
-            placeholder="Paste the thread here, including subject/from/date lines if you have them..."
+            placeholder={isTeams
+              ? "Paste the Teams chat here. It has no subject line, so give it a Thread Title above..."
+              : "Paste the thread here, including subject/from/date lines if you have them..."}
           />
           <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
             <span>{wordCount.toLocaleString()} words</span>
@@ -682,8 +723,8 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               : saving
                 ? "Saving..."
                 : updateExisting && existingNote
-                  ? "Update Email Note"
-                  : "Create Email Note"}
+                  ? `Update ${kindLabel} Note`
+                  : `Create ${kindLabel} Note`}
           </button>
         </div>
       )}
@@ -753,7 +794,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       {note && (
         <div className="card overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-            <h2 className="section-header mb-0">Generated Email Note</h2>
+            <h2 className="section-header mb-0">Generated {kindLabel} Note</h2>
             <button
               type="button"
               onClick={() => navigator.clipboard.writeText(note).catch(() => {})}

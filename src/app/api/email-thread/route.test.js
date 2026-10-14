@@ -49,6 +49,63 @@ describe("buildEmailThreadPrompt", () => {
     expect(prompt).toContain("Carry forward action items from [O#]");
     expect(prompt).toContain("or [O#] for details preserved from the existing note");
   });
+
+  // Outlook headers write senders and recipients as "Last, First". The note
+  // must normalize to "First Last" and never split one such name into two
+  // people when reading a To/Cc list.
+  it("normalizes Last, First sender names to First Last", () => {
+    const prompt = buildEmailThreadPrompt({
+      emailThread: "From: Priddy, Ryley\nTo: Smith, Jordan; Lee, Dana\n\nThanks all.",
+      threadTitle: "License cleanup",
+    });
+
+    expect(prompt).toContain('Normalize every name to "First Last"');
+    expect(prompt).toContain("never turn one person into two");
+  });
+
+  // The Teams tab asks for a deliberately minimal note: participants, the
+  // concrete details, and the to-dos — no citations, callouts, or SFDC entry.
+  it("builds a minimal details-and-todos prompt for Teams threads", () => {
+    const prompt = buildEmailThreadPrompt({
+      emailThread: "October 8, 2026\nPriddy, Ryley 10:32 AM\nCan you confirm the license count?",
+      threadTitle: "License count check",
+      threadKind: "teams",
+    });
+
+    expect(prompt).toContain("Teams chat thread");
+    expect(prompt).toContain("Ignore chat noise");
+    expect(prompt).toContain("*Participants:");
+    expect(prompt).toContain("## Notes");
+    expect(prompt).toContain("## To-Dos");
+    expect(prompt).toContain("#teams-thread");
+    expect(prompt).toContain("**Response needed:**");
+    expect(prompt).not.toContain("## SFDC Activity Entry");
+    expect(prompt).not.toContain("## Attendee Callouts");
+    expect(prompt).not.toContain("Cite every factual bullet");
+  });
+
+  it("passes the CSM's participant list into the Teams prompt", () => {
+    const prompt = buildEmailThreadPrompt({
+      emailThread: "Priddy, Ryley 10:32 AM\nPing me when the install finishes.",
+      threadTitle: "Install check",
+      threadKind: "teams",
+      threadParticipants: "Dana Smith (EA admin), Jordan Lee",
+    });
+
+    expect(prompt).toContain("PARTICIPANTS (from the CSM): Dana Smith (EA admin), Jordan Lee");
+  });
+
+  it("keeps the email prompt free of Teams sections", () => {
+    const prompt = buildEmailThreadPrompt({
+      emailThread: "Subject: License cleanup\n\nSam agreed to use the shared license portal.",
+      threadTitle: "License cleanup",
+    });
+
+    expect(prompt).toContain("#email-thread");
+    expect(prompt).toContain("## SFDC Activity Entry");
+    expect(prompt).not.toContain("#teams-thread");
+    expect(prompt).not.toContain("## To-Dos");
+  });
 });
 
 describe("createEmailThreadMessage", () => {

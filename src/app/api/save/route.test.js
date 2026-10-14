@@ -126,6 +126,47 @@ describe("/api/save fiscal-year filing", () => {
     expect(fs.readdirSync(acct).filter((name) => name.includes("Email -"))).toHaveLength(2);
   });
 
+  // The kind segment is part of a thread note's identity: a Teams chat and an
+  // email thread with the same title are different conversations.
+  it("keeps Teams and email thread notes with the same title apart", async () => {
+    const root = makeTmp();
+    const vault = path.join(root, "vault");
+    const acct = path.join(vault, "Acme");
+    fs.mkdirSync(acct, { recursive: true });
+    allowDirectory(vault, "Vault path");
+    fs.writeFileSync(path.join(acct, "2026-09-01 - Email - License cleanup.md"), "# email note");
+
+    // Same title as the email note, but a Teams thread → a new note, not an update.
+    const teams = await (await postSave({
+      notes: "# teams note",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "2026-09-02 - Teams - License cleanup",
+      upsertEmailThreadTitle: "License cleanup",
+      fiscalYearFolders: false,
+    })).json();
+    expect(teams.updated).toBe(false);
+    expect(fs.readdirSync(acct).sort()).toEqual([
+      "2026-09-01 - Email - License cleanup.md",
+      "2026-09-02 - Teams - License cleanup.md",
+    ]);
+
+    // A grown Teams thread updates the Teams note and leaves the email note alone.
+    const grown = await (await postSave({
+      notes: "# teams note updated",
+      vaultPath: vault,
+      folderPath: "Acme",
+      meetingTitle: "2026-09-03 - Teams - License cleanup",
+      upsertEmailThreadTitle: "License cleanup",
+      fiscalYearFolders: false,
+    })).json();
+    expect(grown.updated).toBe(true);
+    expect(fs.readdirSync(acct).filter((n) => !n.startsWith("."))).toEqual([
+      "2026-09-01 - Email - License cleanup.md",
+      "2026-09-03 - Teams - License cleanup.md",
+    ]);
+  });
+
   it("keeps an email thread in the folder it already lives in across a year boundary", async () => {
     const root = makeTmp();
     const vault = path.join(root, "vault");

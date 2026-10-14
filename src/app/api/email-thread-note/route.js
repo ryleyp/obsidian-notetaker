@@ -18,6 +18,7 @@ export async function GET(request) {
     const vaultPath = searchParams.get("vaultPath") || "";
     const folderPath = searchParams.get("folderPath") || "";
     const threadTitle = searchParams.get("threadTitle") || "";
+    const threadKind = searchParams.get("threadKind") || "email";
 
     if (!vaultPath) return NextResponse.json({ error: "Vault path is required" }, { status: 400 });
     if (!threadTitle.trim()) return NextResponse.json({ note: null });
@@ -28,12 +29,12 @@ export async function GET(request) {
     // Prefer the selected folder, but a thread lives wherever its note was
     // first saved — search the rest of the vault so replies land in the same
     // place even when a different folder is selected.
-    let matchedPath = findExistingEmailThread(resolvedVault, targetDir, threadTitle);
+    let matchedPath = findExistingEmailThread(resolvedVault, targetDir, threadTitle, "", threadKind);
     let matchedFolder = folderPath || "";
     if (!matchedPath) {
       for (const { dirPath, folder } of collectFolders(resolvedVault)) {
         if (dirPath === targetDir) continue;
-        matchedPath = findExistingEmailThread(resolvedVault, dirPath, threadTitle);
+        matchedPath = findExistingEmailThread(resolvedVault, dirPath, threadTitle, "", threadKind);
         if (matchedPath) {
           matchedFolder = folder;
           break;

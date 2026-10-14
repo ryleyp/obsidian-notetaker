@@ -21,7 +21,6 @@ Your notes must be complete AND tight — capture every important fact, decision
 Do NOT include personal updates, personal check-ins, or personal anecdotes (e.g. weekend plans, health updates, family news, personal status). Focus only on business-relevant content.
 
 Keep the notes factual, not emotional. Do not include sentiment analysis, vibe reads, mood commentary, or speculation about how people felt. Stated positions are facts and belong in the notes — record an objection, concern, or agreement as what the person said ("Dana pushed back on the migration timeline"), without emotional interpretation ("Dana seemed frustrated").
-
 Always respond with ONLY the Markdown content, no preamble or explanation.`;
 
 // Account names are customer data, so they are injected from the caller's
@@ -278,6 +277,9 @@ ${sourceBlock}
 ${migrationBlock}
 
 ${buildTagCategories(accounts)}
+
+NAME NORMALIZATION
+Transcripts and attendee lists from Outlook/Teams often write names as "Last, First" (e.g. "Priddy, Ryley"). That is ONE person. Write every name as "First Last" ("Ryley Priddy") throughout the note — attribution, action-item owners, callouts, and the SFDC entry — never the "Last, First" form, and never split one "Last, First" name into two people. Treat "Priddy, Ryley", "Ryley Priddy", and a bare "Ryley" as the same person.
 
 SOURCE CITATION RULES
 - Use only the source block IDs above as citations.

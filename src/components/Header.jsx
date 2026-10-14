@@ -55,6 +55,16 @@ export default function Header({ onSettingsClick, isSettingsOpen, mode, onModeCh
                 Email
               </button>
               <button
+                onClick={() => onModeChange("teams")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  mode === "teams"
+                    ? "bg-white text-obsidian-700 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Teams
+              </button>
+              <button
                 onClick={() => onModeChange("status")}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                   mode === "status"
