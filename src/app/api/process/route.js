@@ -279,7 +279,7 @@ ${migrationBlock}
 ${buildTagCategories(accounts)}
 
 NAME NORMALIZATION
-Transcripts and attendee lists from Outlook/Teams often write names as "Last, First" (e.g. "Priddy, Ryley"). That is ONE person. Write every name as "First Last" ("Ryley Priddy") throughout the note — attribution, action-item owners, callouts, and the SFDC entry — never the "Last, First" form, and never split one "Last, First" name into two people. Treat "Priddy, Ryley", "Ryley Priddy", and a bare "Ryley" as the same person.
+Transcripts and attendee lists from Outlook/Teams often write names as "Last, First" (last name first, separated by a comma). That is ONE person. Write every name as "First Last" throughout the note — attribution, action-item owners, callouts, and the SFDC entry — never the "Last, First" form, and never split one "Last, First" name into two people. Treat the "Last, First" form, the "First Last" form, and a bare first name as the same person.
 
 SOURCE CITATION RULES
 - Use only the source block IDs above as citations.
@@ -385,6 +385,19 @@ ${SFDC_ACTIVITY_RULES}
 ${agreementBlock}${followUpOutput}`;
 }
 
+// The fixed instruction text of every prompt shape this route can build. The
+// privacy boundary skips lines that exactly match it, so example names in our
+// own instructions are never mistaken for the user's data.
+export function promptTemplateText() {
+  const labeled = "**Speaker 1:** a\n\n**Speaker 2:** b";
+  return [
+    SYSTEM_PROMPT,
+    buildPrompt("", ""),
+    buildPrompt("", "", [], "", { followUp: { enabled: true } }),
+    buildPrompt("", "", [], "", { sourceBundle: buildSourceBundle({ transcript: labeled, extendedTranscript: "b", rawNotes: "n", existingNote: "o" }) }),
+  ].join("\n");
+}
+
 export async function POST(request) {
   try {
     assertTrustedRequest(request);
@@ -417,7 +430,7 @@ export async function POST(request) {
       apiKey,
       openaiApiKey,
       signal: request.signal,
-      privacy: { sensitiveTerms: privacyTerms },
+      privacy: { sensitiveTerms: privacyTerms, templateText: promptTemplateText() },
     });
     const selectedModel = client.resolvedModel;
 

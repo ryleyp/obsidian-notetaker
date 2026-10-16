@@ -49,9 +49,27 @@ function auditBlocked(params, findings, reason) {
   console.warn(`[privacy-boundary] ${JSON.stringify(privacyAuditRecord("blocked", params, findings, reason))}`);
 }
 
+function templateLineSet(templateText) {
+  return new Set(
+    String(templateText || "").split("\n").map((line) => line.trim()).filter(Boolean)
+  );
+}
+
+// The fixed instruction text of a prompt (its section format, rules, and
+// worked examples) is ours, not the user's, so it is not scanned: an example
+// name that happens to match a term in the user's glossary would otherwise
+// block every request. Only a line that is character-for-character a template
+// line is skipped. Any line carrying user content differs from the template,
+// so it is still scanned in full.
+function withoutTemplateLines(text, templateText) {
+  const template = templateLineSet(templateText);
+  if (!template.size) return text;
+  return text.split("\n").filter((line) => !template.has(line.trim())).join("\n");
+}
+
 export function inspectOutboundPrivacy(params = {}, policy = {}) {
   if (policy?.enabled === false) return [];
-  const text = outboundPromptText(params);
+  const text = withoutTemplateLines(outboundPromptText(params), policy?.templateText);
   const configured = (policy?.sensitiveTerms || []).map((term) => (
     typeof term === "string" ? { text: term, type: "org" } : term
   ));

@@ -75,7 +75,7 @@ SOURCE BLOCKS:
 ${sourceBlock}
 ${updateBlock}
 Rules:
-- Teams writes names as "Last, First" (e.g. "Priddy, Ryley"). That is ONE person. Write every name as "First Last" ("Ryley Priddy") and never split one such name into two people. Treat "Priddy, Ryley", "Ryley Priddy", and a bare "Ryley" as the same person.
+- Teams writes names as "Last, First" (last name first, separated by a comma). That is ONE person. Write every name as "First Last" and never split one such name into two people. Treat the "Last, First" form, the "First Last" form, and a bare first name as the same person.
 ${formatRule}
 - Keep it brief: one bullet per point, keep the specifics (names, numbers, dates, versions, products, links), cut everything else. No source citations in this note.
 - Do not include personal updates, unrelated chatter, sentiment commentary, or YAML frontmatter.
@@ -117,7 +117,7 @@ SOURCE BLOCKS:
 ${sourceBlock}
 ${updateBlock}
 Rules:
-- Outlook and Teams often write names as "Last, First" (e.g. "Priddy, Ryley"). That is ONE person. Normalize every name to "First Last" ("Ryley Priddy") everywhere in the note — attribution, action-item owners, callouts, and the SFDC entry — and never output the "Last, First" form. When splitting To/Cc recipient lists, treat each "Last, First" pair as a single recipient (Outlook separates recipients with semicolons); never turn one person into two. Recognize that "Priddy, Ryley", "Ryley Priddy", and a bare "Ryley" in the message body are the same person.
+- Outlook and Teams often write names as "Last, First" (last name first, separated by a comma). That is ONE person. Normalize every name to "First Last" everywhere in the note — attribution, action-item owners, callouts, and the SFDC entry — and never output the "Last, First" form. When splitting To/Cc recipient lists, treat each "Last, First" pair as a single recipient (Outlook separates recipients with semicolons); never turn one person into two. Recognize that the "Last, First" form, the "First Last" form, and a bare first name in the message body are the same person.
 - Skip signatures, legal disclaimers, repeated quoted history, and email-client boilerplate.
 - Use only source block IDs above as citations.
 - Cite every factual bullet or factual paragraph with [E#] or [N#]${isUpdate ? ", or [O#] for details preserved from the existing note" : ""}.
@@ -215,6 +215,20 @@ ${activityWritingRules()}
 The Summary/Notes block is copied into Salesforce as written: all three labels (Summary, Outcomes, Next steps); 120 words or fewer and 800 characters or fewer; past tense; no "I"/"we"/"our"; no citations, Markdown, or placeholders; refer to the CSM as "CSM", never by name; name customer contacts with their role when the thread states it; never write that the CSM observed or attended; no corporate filler (synergy, leverage, circle back, bandwidth, actionable, value-add); and do not invent outcomes, owners, numbers, or next steps.`;
 }
 
+// The fixed instruction text of every prompt shape this route can build. The
+// privacy boundary skips lines that exactly match it, so example names in our
+// own instructions are never mistaken for the user's data.
+export function promptTemplateText() {
+  const existing = buildSourceBundle({ emailThread: "a", rawNotes: "n", existingNote: "o" });
+  return [
+    SYSTEM_PROMPT,
+    buildEmailThreadPrompt({ emailThread: "", threadKind: "email" }),
+    buildEmailThreadPrompt({ emailThread: "", threadKind: "teams" }),
+    buildEmailThreadPrompt({ emailThread: "a", threadKind: "email", sourceBundle: existing }),
+    buildEmailThreadPrompt({ emailThread: "a", threadKind: "teams", sourceBundle: existing }),
+  ].join("\n");
+}
+
 export async function createEmailThreadMessage(client, request) {
   const stream = client.messages.stream(request);
   return stream.finalMessage();
@@ -250,7 +264,7 @@ export async function POST(request) {
       apiKey,
       openaiApiKey,
       signal: request.signal,
-      privacy: { sensitiveTerms: privacyTerms },
+      privacy: { sensitiveTerms: privacyTerms, templateText: promptTemplateText() },
     });
     const selectedModel = client.resolvedModel;
     const msg = await createEmailThreadMessage(client, {

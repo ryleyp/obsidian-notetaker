@@ -44,4 +44,23 @@ describe("outbound privacy boundary", () => {
     expect(record.requestHash).toMatch(/^[a-f0-9]{16}$/);
     expect(JSON.stringify(record)).not.toContain("jane@example.com");
   });
+
+  // Instruction text carries example names. A glossary term that happens to
+  // match one must not block every request, but the same term in the user's
+  // own content must still be caught.
+  it("ignores fixed template lines but still scans lines that carry user content", () => {
+    const templateText = 'Example: "Dana pushed back on the timeline."\nMeeting Title:';
+    const policy = { sensitiveTerms: ["Dana"], templateText };
+
+    const clean = request('Example: "Dana pushed back on the timeline."\nMeeting Title: PRIVATE_AAAAAAAAAAAA sync');
+    expect(inspectOutboundPrivacy(clean, policy)).toEqual([]);
+    expect(() => assertOutboundPrivacy(clean, policy)).not.toThrow();
+
+    const leaked = request('Example: "Dana pushed back on the timeline."\nMeeting Title: Dana sync');
+    expect(inspectOutboundPrivacy(leaked, policy)).toEqual([{ text: "Dana", type: "org" }]);
+    expect(() => assertOutboundPrivacy(leaked, policy)).toThrow(/blocked this AI request/);
+
+    // Without a template the example line itself is scanned, as before.
+    expect(inspectOutboundPrivacy(clean, { sensitiveTerms: ["Dana"] })).toHaveLength(1);
+  });
 });
