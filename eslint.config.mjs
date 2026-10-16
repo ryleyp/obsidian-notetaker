@@ -7,6 +7,9 @@ const config = [
   ...nextVitals,
   {
     rules: {
+      // Catches a variable used outside the scope that declares it, which
+      // otherwise only surfaces as a ReferenceError at runtime.
+      "no-undef": "error",
       "react-hooks/set-state-in-effect": "off",
       "react/no-unescaped-entities": "off",
     },
