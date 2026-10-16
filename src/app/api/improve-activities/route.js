@@ -1,4 +1,5 @@
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions, redactForbiddenTerms } from "@/lib/scrub";
@@ -36,7 +37,7 @@ export async function POST(request) {
     // The client is created before the prompt is built because the budget,
     // the output ceiling, and whether structured output is available all
     // depend on the model Auto actually resolved to, not the literal "auto".
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, privacy: privacyPolicyFromReplacements(replacements) });
     const reviewModel = client.resolvedModel;
 
     // A fixed 350k-character ceiling used to reject the whole run here. It sat

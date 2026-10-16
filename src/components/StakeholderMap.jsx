@@ -5,7 +5,7 @@ import FolderSelector from "@/components/FolderSelector";
 import NotesPreview from "@/components/NotesPreview";
 import { calcCost, contextLimit, estimateUsage } from "@/lib/models";
 import { detectAccount } from "@/lib/accounts";
-import { aliasesFromReplacements } from "@/lib/privacy";
+import { aliasesFromReplacements, knownPrivacyEntities } from "@/lib/privacy";
 import {
   applyCorrections,
   applyReplacements,
@@ -239,9 +239,9 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
 
     try {
       let newEntities = [];
-      let scanSkipped = !settings.aiPrivacyScan;
+      let scanSkipped = false;
 
-      if (settings.aiPrivacyScan) {
+      {
         const scanText = buildMappingScanText(loadedSources, corrections, savedReplacements);
         try {
           const res = await apiFetch("/api/sanitize", {
@@ -253,11 +253,13 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
               openaiApiKey: settings.openaiApiKey || undefined,
               model,
               knownAliases: aliasesFromReplacements(savedReplacements),
+              knownEntities: knownPrivacyEntities(settings),
+              useAiScan: settings.aiPrivacyScan,
             }),
           });
           if (!res.ok) throw new Error("Name scan failed");
           const data = await res.json();
-          if (data.skipped) scanSkipped = true;
+          if (data.skipped && settings.aiPrivacyScan) scanSkipped = true;
           newEntities = dedupeEntities(data.entities || []);
         } catch {
           scanSkipped = true;
@@ -284,7 +286,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
       if (scanSkipped && settings.aiPrivacyScan) {
         setPrivacyScanError("Name scan skipped - set your API key in Settings to enable AI detection.");
       } else if (!settings.aiPrivacyScan) {
-        setPrivacyScanError("AI privacy scan is disabled in Settings. Showing saved glossary terms found in these sources.");
+        setPrivacyScanError("Local privacy detection completed. The optional AI second pass is disabled in Settings.");
       }
     } finally {
       setPrivacyScanning(false);
@@ -300,6 +302,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
         original: item.text,
         alias: item.alias,
         restored: item.restored || item.text,
+        type: item.type,
       }));
     return [...savedReplacements, ...additions];
   }
@@ -414,6 +417,7 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
     const baseOutput = append ? output : "";
     const controller = new AbortController();
     mapControllerRef.current = controller;
+    let accumulated = "";
     setLastMapRequest(requestPayload);
     setMapping(true);
     setMapError(null);
@@ -438,7 +442,6 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let accumulated = "";
       let buffer = "";
 
       while (true) {

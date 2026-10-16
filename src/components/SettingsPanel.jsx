@@ -198,6 +198,8 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           model: form.model,
           todoistToken: form.todoistApiToken.trim() || undefined,
           todoistProjectId: parseTodoistProjectId(form.todoistProject) || undefined,
+          replacements: form.replacements || [],
+          corrections: form.corrections || [],
         }),
       });
       const data = await res.json();
@@ -837,9 +839,9 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
             onChange={(e) => handleChange("aiPrivacyScan", e.target.checked)}
           />
           <span>
-            <span className="block text-sm font-medium text-gray-800">Use Claude to detect new sensitive terms</span>
+            <span className="block text-sm font-medium text-gray-800">Use AI as an extra privacy-detection pass</span>
             <span className="block text-xs text-gray-500 mt-0.5">
-              Saved replacements are applied first. New, unsaved names may be sent to Claude during this scan; turn this off to use only your saved/manual replacements.
+              Local detection always checks emails, phones, IDs, secrets, addresses, URLs, speaker names, and obvious organizations first. This optional second pass can find more names, but any leftovers may be sent to the selected AI during detection.
             </span>
           </span>
         </label>

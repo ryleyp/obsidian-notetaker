@@ -1,5 +1,6 @@
 import { activityWritingRules, classificationGuidance, taxonomyForReportPrompt } from "@/lib/sfdcTaxonomy";
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
 import { assertTrustedRequest } from "@/lib/requestSafety";
@@ -692,7 +693,7 @@ export async function POST(request) {
     }], accountName, allAccounts, []).at(0)?.content || "";
 
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, privacy: privacyPolicyFromReplacements(replacements) });
     const selectedModel = client.resolvedModel;
     const scrubbedNotes = scrubWithExceptions(sanitizedNotes, accountName, allAccounts, restoredIds);
     let { kept, dropped } = fitNotes(scrubbedNotes, selectedModel);

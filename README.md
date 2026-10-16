@@ -254,10 +254,22 @@ append another copy of the meeting to weekly ToDo or SFDC activity files.
 ### Email thread notes
 
 Email thread generation uses the streaming Claude request path, including with Haiku.
-Email addresses are detected locally and shown in Privacy Review as `EMAIL_#` aliases
-before any content is sent to Claude, even when AI privacy scanning is disabled. After
+Common sensitive values are detected locally and shown in Privacy Review before any
+content is sent to a model, even when the optional AI second pass is disabled. This
+includes email addresses, phone numbers, IDs, secrets, addresses, URLs, transcript
+speaker names, locations, organizations, and configured account/owner names. A local
+NER engine supplements the deterministic detectors. New terms use opaque random
+`PRIVATE_…` aliases rather than revealing whether a value is a person or company.
+Immediately before either provider receives a request, a shared fail-closed boundary
+checks the completely assembled prompt for unresolved identifiers and saved originals.
+Blocked checks write only counts and a prompt hash to the local log, never source text.
+After
 the email note is saved, its generated SFDC Activity Entry is also added to the weekly
 SFDC Activity Report.
+
+Speaker detection runs through the same local pseudonymization step. Slide pixels cannot
+be pseudonymized reliably, so slide reading remains blocked until the user explicitly
+confirms that the images were reviewed and cropped.
 
 The thread title is the stable email-note identity. Uploading the same title again
 updates the existing note (after creating a backup), replaces the previous SFDC

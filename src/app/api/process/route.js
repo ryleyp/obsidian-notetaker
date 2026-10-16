@@ -404,6 +404,7 @@ export async function POST(request) {
       ownerNames = [],
       ownerPronouns = "",
       goals = [],
+      privacyTerms = [],
     } = body;
 
     if (!transcript || transcript.trim().length === 0) {
@@ -411,7 +412,13 @@ export async function POST(request) {
     }
 
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const client = createModelClient({
+      model,
+      apiKey,
+      openaiApiKey,
+      signal: request.signal,
+      privacy: { sensitiveTerms: privacyTerms },
+    });
     const selectedModel = client.resolvedModel;
 
     const stream = client.messages.stream({

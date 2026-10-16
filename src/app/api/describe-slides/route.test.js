@@ -25,7 +25,7 @@ beforeEach(() => {
 
 describe("/api/describe-slides", () => {
   it("reads each slide with one image call and sums the usage", async () => {
-    const res = await post({ slides: [slide("a"), slide("b")] });
+    const res = await post({ slides: [slide("a"), slide("b")], allowUnredactedImages: true });
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.slides).toEqual([{ id: "a", text: "# Read 1", error: "" }, { id: "b", text: "# Read 2", error: "" }]);
@@ -38,7 +38,7 @@ describe("/api/describe-slides", () => {
 
   it("fails one slide without losing the rest", async () => {
     create.mockImplementationOnce(async () => { throw new Error("image too small"); });
-    const data = await (await post({ slides: [slide("a"), slide("b")] })).json();
+    const data = await (await post({ slides: [slide("a"), slide("b")], allowUnredactedImages: true })).json();
     expect(data.slides[0]).toEqual({ id: "a", text: "", error: "image too small" });
     expect(data.slides[1].text).toBe("# Read 2");
   });
@@ -47,6 +47,11 @@ describe("/api/describe-slides", () => {
     expect((await post({ slides: [] })).status).toBe(400);
     expect((await post({ slides: [{ id: "x", mediaType: "application/pdf", data: "QUJD" }] })).status).toBe(400);
     expect((await post({ slides: [slide("a")] }, "wrong-token")).status).toBe(401);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("requires explicit approval before sending image pixels", async () => {
+    expect((await post({ slides: [slide("a")] })).status).toBe(422);
     expect(create).not.toHaveBeenCalled();
   });
 });

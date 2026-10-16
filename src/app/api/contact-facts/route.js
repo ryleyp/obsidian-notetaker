@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import fs from "fs";
 import path from "path";
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
@@ -236,7 +237,7 @@ export async function POST(request) {
     const { reusable, changed, skipped, lastMappedAt } = notesForExtraction(normalized, index, acctKey, { changedOnly, force });
     const facts = reusable.flatMap(({ cached }) => cached.facts || []);
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast", privacy: privacyPolicyFromReplacements(replacements) });
     const batches = chunkNotes(changed);
     for (const batch of batches) {
       const extracted = await extractBatch(client, batch, accountName, allAccounts, mappingContext);

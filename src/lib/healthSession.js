@@ -258,7 +258,7 @@ export function disallowedPronouns(pronouns) {
     .flatMap(([, forms]) => forms.subjectAndPossessive);
 }
 
-const ALIAS_TOKEN = /\b(?:PERSON|ORG|EMAIL)(?:_[A-Z])?_\d+\b/;
+const ALIAS_TOKEN = /\b(?:(?:PERSON|ORG|LOCATION|EMAIL|PHONE|ADDRESS|IP|URL|SECRET|ID)(?:_[A-Z])?_\d+|PRIVATE_[A-F0-9]{12})\b/;
 const EM_DASH = /—/;
 const STRAY_PUNCTUATION = /[^\s]-[.,]\s*$/m;
 const USAGE_CLAIM = /\b(?:usage|machines|seats|licen[cs]es|bookings|churn|consumption|installs)\b/i;

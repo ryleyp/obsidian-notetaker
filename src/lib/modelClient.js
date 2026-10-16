@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { isOpenAIModel, providerLabel, resolveAutoModel } from "./models";
+import { assertOutboundPrivacy } from "./privacyBoundary";
 
 // Adapt OpenAI Responses to the small message/stream interface used by the
 // existing workflows, preserving their prompts, parsers, and output formats.
-export function createModelClient({ model, apiKey, openaiApiKey, signal, task = "generation" }) {
+export function createModelClient({ model, apiKey, openaiApiKey, signal, task = "generation", privacy = {} }) {
   const resolvedModel = resolveAutoModel(model, { apiKey: apiKey || process.env.ANTHROPIC_API_KEY, openaiApiKey: openaiApiKey || process.env.OPENAI_API_KEY, task });
   const openai = isOpenAIModel(resolvedModel);
   const key = openai ? openaiApiKey || process.env.OPENAI_API_KEY : apiKey || process.env.ANTHROPIC_API_KEY;
@@ -11,8 +12,14 @@ export function createModelClient({ model, apiKey, openaiApiKey, signal, task = 
   if (!openai) {
     const anthropic = new Anthropic({ apiKey: key });
     return { resolvedModel, messages: {
-      create: (params) => anthropic.messages.create({ ...params, model: resolvedModel }),
-      stream: (params) => anthropic.messages.stream({ ...params, model: resolvedModel }),
+      create: (params) => {
+        assertOutboundPrivacy(params, privacy);
+        return anthropic.messages.create({ ...params, model: resolvedModel });
+      },
+      stream: (params) => {
+        assertOutboundPrivacy(params, privacy);
+        return anthropic.messages.stream({ ...params, model: resolvedModel });
+      },
     } };
   }
 
@@ -36,6 +43,7 @@ export function createModelClient({ model, apiKey, openaiApiKey, signal, task = 
   }
 
   async function send(params, stream) {
+    assertOutboundPrivacy(params, privacy);
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },

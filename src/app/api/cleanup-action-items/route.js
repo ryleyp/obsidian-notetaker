@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
+import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import fs from "fs";
 import path from "path";
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
@@ -48,16 +50,17 @@ function noteExcerpt(content) {
   return sections.join("\n\n");
 }
 
-async function detectCompletedWithAI({ apiKey, openaiApiKey, model, folderNotes, openItems }) {
-  const client = createModelClient({ model: model || FAST_MODEL, apiKey, openaiApiKey, task: "fast" });
+async function detectCompletedWithAI({ apiKey, openaiApiKey, model, folderNotes, openItems, replacements = [], corrections = [] }) {
+  const clean = (value) => applyReplacements(applyCorrections(String(value || ""), corrections), replacements);
+  const client = createModelClient({ model: model || FAST_MODEL, apiKey, openaiApiKey, task: "fast", privacy: privacyPolicyFromReplacements(replacements) });
   const itemsJson = openItems.map((item, index) => ({
     id: index,
-    note: item.filename,
+    note: clean(item.filename),
     noteDate: item.date,
-    line: item.line,
+    line: clean(item.line),
   }));
   const evidence = folderNotes
-    .map((n) => `### ${n.filename} (${n.date})\n${n.excerpt}`)
+    .map((n) => `### ${clean(n.filename)} (${n.date})\n${clean(n.excerpt)}`)
     .join("\n\n---\n\n");
 
   const msg = await client.messages.create({
@@ -94,6 +97,8 @@ export async function POST(request) {
       vaultPath,
       mode = "preview",
       ownerNames = [],
+      replacements = [],
+      corrections = [],
       apiKey,
       openaiApiKey,
       model,
@@ -235,6 +240,8 @@ export async function POST(request) {
             model,
             folderNotes: folderNotes.map((n) => ({ filename: n.filename, date: n.date, excerpt: noteExcerpt(n.content) })),
             openItems,
+            replacements,
+            corrections,
           });
           if (parseFailed) warnings.push(`AI check for "${folder || "vault root"}" returned an unreadable answer; skipped.`);
           for (const completion of completions) {

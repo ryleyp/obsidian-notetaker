@@ -4,8 +4,9 @@
 
 import { textHasAlias } from "./accounts";
 
-function typeFromAlias(alias) {
-  return String(alias || "").toUpperCase().startsWith("PERSON_") ? "person" : "org";
+function typeFromReplacement(replacement) {
+  if (replacement?.type === "person") return "person";
+  return String(replacement?.alias || "").toUpperCase().startsWith("PERSON_") ? "person" : "org";
 }
 
 function noteText(note) {
@@ -36,7 +37,7 @@ export function savedReplacementsInSources(notes, replacements) {
     if (!foundIn) continue;
     items.push({
       text: r.original,
-      type: typeFromAlias(r.alias),
+      type: typeFromReplacement(r),
       alias: r.alias,
       restored: r.restored || r.original,
       context: "",

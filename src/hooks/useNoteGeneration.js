@@ -242,6 +242,21 @@ export function useNoteGeneration({ settings, model, meeting }) {
     const account = (settings.accounts || []).find((a) => a.name === acct.name);
     const agreementText = [transcript, extendedTranscript].filter(Boolean).join("\n\n");
     const suggestedAgreements = account ? suggestAgreements(agreementText, account) : [];
+    // The prompt only needs the selected account for tag guidance. Sending the
+    // entire configured customer roster would disclose unrelated customers.
+    const promptAccounts = account ? [{
+      name: sanitize(account.name),
+      aliases: (account.aliases || []).map(sanitize),
+    }] : [];
+
+    const sanitizeStructure = (value) => {
+      if (typeof value === "string") return sanitize(value);
+      if (Array.isArray(value)) return value.map(sanitizeStructure);
+      if (value && typeof value === "object") {
+        return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeStructure(item)]));
+      }
+      return value;
+    };
 
     const requestConfig = {
       payload: {
@@ -253,11 +268,12 @@ export function useNoteGeneration({ settings, model, meeting }) {
         model,
         suggestedAgreements,
         sourceBundle: promptSourceBundle,
-        accounts: settings.accounts || [],
-        ownerNames: settings.ownerNames || [],
+        accounts: promptAccounts,
+        ownerNames: (settings.ownerNames || []).map(sanitize),
         ownerPronouns: settings.ownerPronouns || "",
-        goals: settings.goals || [],
-        followUp: meeting.followUp || { enabled: false },
+        goals: sanitizeStructure(settings.goals || []),
+        followUp: sanitizeStructure(meeting.followUp || { enabled: false }),
+        privacyTerms: replacements.flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
       },
       replacements,
       displaySourceBundle,
@@ -298,6 +314,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
           openaiApiKey: settings.openaiApiKey || undefined,
           model: overrideModel,
           sourceBundle: requestConfig.payload.sourceBundle || null,
+          privacyTerms: replacements.flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
         }),
       });
       if (!response.ok) {
@@ -396,6 +413,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
           openaiApiKey: settings.openaiApiKey || undefined,
           model: requestModel,
           sourceBundle: lastGenerationRequest?.payload?.sourceBundle || null,
+          privacyTerms: replacements.flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
         }),
       });
       if (!res.ok) {
@@ -444,6 +462,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
           audience,
           tone,
           instructions: sanitize(instructions || ""),
+          privacyTerms: replacements.flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
           sourceBundle: lastGenerationRequest?.payload?.sourceBundle || null,
         }),
       });

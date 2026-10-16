@@ -14,7 +14,7 @@ import {
   mergeCorrections,
   reverseReplacements,
 } from "@/lib/sanitize";
-import { aliasesFromReplacements, extractEmailEntities, mergeSensitiveEntities } from "@/lib/privacy";
+import { aliasesFromReplacements, extractEmailEntities, knownPrivacyEntities, mergeSensitiveEntities } from "@/lib/privacy";
 import { buildSourceBundle, formatEmailArchive, mapSourceBundle } from "@/lib/sourceBundle";
 import { latestEmailResponseDate } from "@/lib/emailDates";
 import { apiFetch } from "@/lib/apiClient";
@@ -208,16 +208,20 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       applyReplacements(correctedTitle, savedReplacements),
       applyReplacements(correctedThread, savedReplacements),
       applyReplacements(correctedContext, savedReplacements),
+      applyReplacements(threadParticipants, savedReplacements),
+      applyReplacements(selectedFolder, savedReplacements),
+      applyReplacements(detectAccount(selectedFolder, settings.accounts).name, savedReplacements),
+      ...(settings.ownerNames || []).map((name) => applyReplacements(name, savedReplacements)),
     ].filter((part) => part && part.trim()).join("\n\n");
 
     setProcessing(true);
     setError(null);
     try {
       let newEntities = extractEmailEntities(scanText);
-      let scanSkipped = !settings.aiPrivacyScan;
+      let scanSkipped = false;
       let scanError = "";
       let truncated = false;
-      if (settings.aiPrivacyScan) {
+      {
         try {
           const res = await apiFetch("/api/sanitize", {
             method: "POST",
@@ -228,10 +232,12 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               openaiApiKey: settings.openaiApiKey || undefined,
               model,
               knownAliases: aliasesFromReplacements(savedReplacements),
+              knownEntities: knownPrivacyEntities(settings),
+              useAiScan: settings.aiPrivacyScan,
             }),
           });
           const data = await res.json();
-          if (data.skipped) scanSkipped = true;
+          if (data.skipped && settings.aiPrivacyScan) scanSkipped = true;
           if (data.error) scanError = data.error;
           if (data.truncated) truncated = true;
           newEntities = mergeSensitiveEntities(newEntities, data.entities || []);
@@ -239,6 +245,13 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           scanSkipped = true;
           scanError = err?.message || "the scan could not be reached";
         }
+      }
+
+      if (settings.aiPrivacyScan && (scanSkipped || truncated)) {
+        setError(scanError
+          ? `Privacy check blocked generation because the AI detection pass failed: ${scanError}. Retry it or disable the optional AI pass to use local-only detection.`
+          : "Privacy check blocked generation because the AI detection pass was incomplete. Retry it or disable the optional AI pass to use local-only detection.");
+        return;
       }
 
       if (newEntities.length > 0) {
@@ -251,13 +264,6 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
 
       // An empty result means "nothing sensitive found" only when the scan
       // actually ran. Anything else has to say so.
-      if (scanSkipped && settings.aiPrivacyScan) {
-        setError(scanError
-          ? `Sensitivity scan did not run: ${scanError}. Names and companies were NOT checked.`
-          : "Sensitivity scan skipped — set your API key in Settings to enable name/company detection.");
-      } else if (truncated) {
-        setError("The sensitivity scan was cut off before it finished. Run it again before trusting the result.");
-      }
       await createAndSave(savedReplacements);
     } finally {
       setProcessing(false);
@@ -271,7 +277,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     if (toSave.length > 0 || correctionsToSave.length > 0) {
       const newReplacements = [
         ...(settings.replacements || []),
-        ...toSave.map((r) => ({ original: r.text, alias: r.alias, restored: r.restored || r.text })),
+        ...toSave.map((r) => ({ original: r.text, alias: r.alias, restored: r.restored || r.text, type: r.type })),
       ];
       const newCorrections = correctionsToSave.length
         ? mergeCorrections(settings.corrections || [], correctionsToSave)
@@ -288,7 +294,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       ...(updatedSettings.replacements || []),
       ...confirmed
         .filter((c) => !(updatedSettings.replacements || []).some((r) => r.original === c.text))
-        .map((c) => ({ original: c.text, alias: c.alias, restored: c.restored || c.text })),
+        .map((c) => ({ original: c.text, alias: c.alias, restored: c.restored || c.text, type: c.type })),
     ];
 
     setProcessing(true);
@@ -359,13 +365,14 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           threadTitle: sanitizedTitle || defaultTitle,
           threadDate,
           threadKind: variant,
-          threadParticipants: isTeams ? threadParticipants.trim() : "",
+          threadParticipants: isTeams ? applyReplacements(threadParticipants.trim(), replacements) : "",
           context: sanitizedContext,
           apiKey: settings.apiKey || undefined,
               openaiApiKey: settings.openaiApiKey || undefined,
           model,
           sourceBundle,
-          ownerNames: settings.ownerNames || [],
+          ownerNames: (settings.ownerNames || []).map((name) => applyReplacements(name, replacements)),
+          privacyTerms: replacements.flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
         }),
       });
       const data = await res.json();

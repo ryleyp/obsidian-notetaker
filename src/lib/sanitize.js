@@ -58,32 +58,44 @@ function wordBoundaryRegex(term, flags) {
 }
 
 export function applyReplacements(text, replacements) {
-  let result = text;
-  for (const r of replacements) {
-    if (!r.skip && r.original) {
-      result = result.replace(wordBoundaryRegex(r.original, "gi"), r.alias);
+  let result = String(text ?? "");
+  // Replace the most specific values first. Without this, a saved "Jane"
+  // mapping can turn "Jane Doe" into "PERSON_1 Doe" before the full-name
+  // mapping gets a chance to run, leaking part of the name.
+  const ordered = [...(replacements || [])].sort(
+    (a, b) => String(b?.original || "").length - String(a?.original || "").length
+  );
+  for (const r of ordered) {
+    if (!r?.skip && r.original && r.alias) {
+      result = result.replace(wordBoundaryRegex(String(r.original), "gi"), String(r.alias));
     }
   }
   return result;
 }
 
 export function reverseReplacements(text, replacements) {
-  let result = text;
-  for (const r of [...replacements].reverse()) {
-    if (!r.skip && r.alias) {
-      result = result.replace(wordBoundaryRegex(r.alias, "gi"), r.restored || r.original);
+  let result = String(text ?? "");
+  const ordered = [...(replacements || [])].sort(
+    (a, b) => String(b?.alias || "").length - String(a?.alias || "").length
+  );
+  for (const r of ordered) {
+    if (!r?.skip && r.alias && (r.restored || r.original)) {
+      result = result.replace(wordBoundaryRegex(String(r.alias), "gi"), String(r.restored || r.original));
     }
   }
   return result;
 }
 
 export function assignAliases(entities, existingReplacements) {
-  const usedAliases = new Set(existingReplacements.map((r) => r.alias));
+  const usedAliases = new Set((existingReplacements || []).map((r) => r?.alias).filter(Boolean));
   return entities.map((e) => {
-    const prefix = e.type === "person" ? "PERSON" : e.type === "email" ? "EMAIL" : "ORG";
-    let n = 1;
-    while (usedAliases.has(`${prefix}_${n}`)) n++;
-    const alias = `${prefix}_${n}`;
+    let alias;
+    do {
+      const bytes = new Uint8Array(6);
+      if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
+      else for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+      alias = `PRIVATE_${[...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
+    } while (usedAliases.has(alias));
     usedAliases.add(alias);
     return { ...e, alias };
   });

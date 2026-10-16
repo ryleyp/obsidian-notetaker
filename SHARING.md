@@ -129,8 +129,12 @@ tailored and you may want to adjust them:
 - **It only works on your machine with your vault.** Nothing is uploaded or
   shared; your notes stay local. Notes are sent to Anthropic's API only when
   you click Generate.
-- **Privacy:** the app pseudonymizes names from your glossary before sending
-  text to Claude, and reverses them in the output.
+- **Privacy:** the app locally detects common personal identifiers and secrets,
+  adds on-device named-entity recognition, combines those results with names
+  from your glossary and account settings, and asks you to review opaque aliases
+  before sending text to an AI. A final fail-closed check runs on every assembled
+  provider request. The optional AI-based detection pass is off by default because
+  residual names may be visible to it. Slide images require separate explicit consent.
 
 ---
 

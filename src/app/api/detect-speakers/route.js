@@ -47,14 +47,21 @@ export async function POST(request) {
     assertTrustedRequest(request);
 
     const body = await request.json();
-    const { transcript, apiKey, openaiApiKey, model } = body;
+    const { transcript, apiKey, openaiApiKey, model, privacyTerms = [] } = body;
 
     if (!transcript || !transcript.trim()) {
       return new Response(JSON.stringify({ error: "Transcript is required" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
     const segments = splitIntoSegments(transcript);
-    const client = createModelClient({ model: model || FAST_MODEL, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
+    const client = createModelClient({
+      model: model || FAST_MODEL,
+      apiKey,
+      openaiApiKey,
+      signal: request.signal,
+      task: "fast",
+      privacy: { sensitiveTerms: privacyTerms },
+    });
     const selectedModel = client.resolvedModel;
     const msg = await client.messages.create({
       model: selectedModel,

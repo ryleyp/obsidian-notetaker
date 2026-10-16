@@ -70,6 +70,14 @@ describe("applyReplacements", () => {
     const out = applyReplacements("Acme", [{ original: "Acme", alias: "ORG_1", skip: true }]);
     expect(out).toBe("Acme");
   });
+
+  it("replaces longer overlapping names before shorter saved names", () => {
+    const out = applyReplacements("Jane Doe met Jane", [
+      { original: "Jane", alias: "PERSON_1" },
+      { original: "Jane Doe", alias: "PERSON_2" },
+    ]);
+    expect(out).toBe("PERSON_2 met PERSON_1");
+  });
 });
 
 describe("reverseReplacements", () => {
@@ -112,13 +120,16 @@ describe("round-trip", () => {
 });
 
 describe("assignAliases", () => {
-  it("assigns unique, type-prefixed aliases avoiding existing ones", () => {
+  it("assigns unique opaque aliases without exposing entity type", () => {
     const result = assignAliases(
       [{ text: "Bob", type: "person" }, { text: "Acme", type: "org" }],
       [{ original: "Old", alias: "PERSON_1" }]
     );
-    expect(result[0].alias).toBe("PERSON_2");
-    expect(result[1].alias).toBe("ORG_1");
+    expect(result.map((item) => item.alias)).toEqual([
+      expect.stringMatching(/^PRIVATE_[A-F0-9]{12}$/),
+      expect.stringMatching(/^PRIVATE_[A-F0-9]{12}$/),
+    ]);
+    expect(result[0].alias).not.toBe(result[1].alias);
   });
 
   it("assigns email-specific aliases", () => {
@@ -126,6 +137,10 @@ describe("assignAliases", () => {
       [{ text: "admin@acme.test", type: "email" }, { text: "ops@acme.test", type: "email" }],
       [{ original: "old@acme.test", alias: "EMAIL_1" }]
     );
-    expect(result.map((item) => item.alias)).toEqual(["EMAIL_2", "EMAIL_3"]);
+    expect(result.map((item) => item.alias)).toEqual([
+      expect.stringMatching(/^PRIVATE_[A-F0-9]{12}$/),
+      expect.stringMatching(/^PRIVATE_[A-F0-9]{12}$/),
+    ]);
+    expect(result[0].alias).not.toBe(result[1].alias);
   });
 });

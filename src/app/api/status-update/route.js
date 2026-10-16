@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
@@ -62,7 +63,7 @@ export async function POST(request) {
       restoredIds
     ).map((note) => ({ date: note.date, title: clean(note.title), content: clean(note.content) }));
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast", privacy: privacyPolicyFromReplacements(replacements) });
     const prompt = buildStatusUpdatePrompt({
       account: clean(accountLabel),
       productFocus: clean(productFocus),

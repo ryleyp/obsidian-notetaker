@@ -52,6 +52,7 @@ export async function POST(request) {
       tone = "warm-professional",
       instructions = "",
       sourceBundle,
+      privacyTerms = [],
     } = body;
 
     if (!notes?.trim()) {
@@ -59,7 +60,7 @@ export async function POST(request) {
     }
 
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, privacy: { sensitiveTerms: privacyTerms } });
     const selectedModel = client.resolvedModel;
     const msg = await client.messages.create({
       model: selectedModel,

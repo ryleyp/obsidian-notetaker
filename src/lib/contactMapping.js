@@ -225,7 +225,7 @@ export function verifyStakeholderMapDocument(markdown, facts = [], accountName, 
     }
   }
 
-  if (/\b(?:PERSON|ORG)_\d+\b/.test(text)) {
+  if (/\b(?:(?:PERSON|ORG|LOCATION|EMAIL|PHONE|ADDRESS|IP|URL|SECRET|ID)_\d+|PRIVATE_[A-F0-9]{12})\b/.test(text)) {
     findings.push({ severity: "error", message: "Unrestored anonymization placeholder is still visible." });
   }
 

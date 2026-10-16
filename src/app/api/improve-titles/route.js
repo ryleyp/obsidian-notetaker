@@ -1,4 +1,5 @@
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/sanitize";
 import { redactForbiddenTerms } from "@/lib/scrub";
@@ -31,7 +32,7 @@ export async function POST(request) {
       comments: clean(r.comments).slice(0, 900),
     }));
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, privacy: privacyPolicyFromReplacements(replacements) });
     const reviewModel = client.resolvedModel;
 
     const system = `You write Salesforce engagement titles for an NI Software Customer Success Manager's EA Activity Report for ${clean(accountName) || "the selected account"}.

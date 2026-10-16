@@ -1,4 +1,5 @@
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { firstTextBlock } from "@/lib/models";
@@ -48,7 +49,7 @@ OUTPUT — one JSON object per line (NDJSON), no other text, ONLY for rows where
 {"index":0,"type":"<exact Type>","subtype":"<exact Subtype>","reason":"one short sentence"}
 Copy Type and Subtype text exactly from the taxonomy. If every row is already right, output exactly: {"index":-1}`;
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast", privacy: privacyPolicyFromReplacements(replacements) });
     const msg = await client.messages.create({
       model: client.resolvedModel,
       max_tokens: 3000,

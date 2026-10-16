@@ -29,8 +29,13 @@ export default function SanitizeReview({ detected, savedReplacements, onConfirm,
             Edit "Restored as" to fix spellings — that's what appears in your final notes.
           </p>
         </div>
-        <button onClick={onSkip} className="text-xs text-gray-400 hover:text-gray-600 whitespace-nowrap ml-4">
-          Skip filter
+        <button
+          onClick={() => {
+            if (window.confirm("Generate with these detected sensitive terms still visible to the AI? This bypasses the privacy filter for this request.")) onSkip();
+          }}
+          className="text-xs text-red-500 hover:text-red-700 whitespace-nowrap ml-4"
+        >
+          Bypass privacy filter…
         </button>
       </div>
 
@@ -79,7 +84,7 @@ export default function SanitizeReview({ detected, savedReplacements, onConfirm,
                 onChange={(e) => update(i, "alias", e.target.value)}
                 disabled={!item.enabled}
                 title="Placeholder sent to Claude"
-                className="font-mono text-xs px-2 py-1 rounded border border-gray-200 bg-gray-50 w-24 focus:outline-none focus:border-obsidian-400 disabled:opacity-40"
+                className="font-mono text-xs px-2 py-1 rounded border border-gray-200 bg-gray-50 w-40 focus:outline-none focus:border-obsidian-400 disabled:opacity-40"
               />
               <input
                 type="text"

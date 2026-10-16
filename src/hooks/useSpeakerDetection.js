@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/sanitize";
+import { applyCorrections, applyReplacements, assignAliases, reverseReplacements } from "@/lib/sanitize";
+import { aliasesFromReplacements, knownPrivacyEntities } from "@/lib/privacy";
 import { apiFetch } from "@/lib/apiClient";
 
 // Best-effort speaker segmentation for raw dictation, which merges every
@@ -18,15 +19,35 @@ export function useSpeakerDetection({ settings, onConfirm }) {
     setError(null);
     setDetecting(true);
     try {
-      const replacements = settings.replacements || [];
-      const sanitized = applyReplacements(
-        applyCorrections(transcript, settings.corrections || []),
-        replacements
-      );
+      const savedReplacements = settings.replacements || [];
+      const corrected = applyCorrections(transcript, settings.corrections || []);
+      const locallyPrepared = applyReplacements(corrected, savedReplacements);
+      const scan = await apiFetch("/api/sanitize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcript: locallyPrepared,
+          knownAliases: aliasesFromReplacements(savedReplacements),
+          knownEntities: knownPrivacyEntities(settings),
+          useAiScan: false,
+        }),
+      });
+      const scanResult = await scan.json();
+      if (!scan.ok) throw new Error(scanResult.error || "Local privacy scan failed");
+      const transient = assignAliases(scanResult.entities || [], savedReplacements)
+        .map((item) => ({ original: item.text, alias: item.alias, restored: item.text }));
+      const replacements = [...savedReplacements, ...transient];
+      const sanitized = applyReplacements(corrected, replacements);
       const res = await apiFetch("/api/detect-speakers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript: sanitized, apiKey: settings.apiKey || undefined, openaiApiKey: settings.openaiApiKey || undefined, model: settings.model || undefined }),
+        body: JSON.stringify({
+          transcript: sanitized,
+          apiKey: settings.apiKey || undefined,
+          openaiApiKey: settings.openaiApiKey || undefined,
+          model: settings.model || undefined,
+          privacyTerms: replacements.flatMap((item) => [item.original, item.restored]).filter(Boolean),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Speaker detection failed");

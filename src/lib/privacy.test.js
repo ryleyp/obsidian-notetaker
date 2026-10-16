@@ -3,6 +3,9 @@ import {
   aliasesFromReplacements,
   buildSanitizePrompt,
   extractEmailEntities,
+  extractLocalSensitiveEntities,
+  extractKnownSensitiveEntities,
+  knownPrivacyEntities,
   mergeSensitiveEntities,
   parseEntityList,
 } from "@/lib/privacy";
@@ -49,12 +52,91 @@ describe("email privacy", () => {
   });
 });
 
+describe("local privacy detection", () => {
+  it("finds common identifiers and secrets without an AI call", () => {
+    const entities = extractLocalSensitiveEntities(`
+From: Jane Doe <jane.doe@acme.example>
+Jane Doe: Call me at (512) 555-0199.
+Office: 123 Main Street
+SSN: 123-45-6789
+Server: 10.20.30.40
+Portal: https://internal.acme.example/cases/42
+Key: sk-ant-api03_abcdefghijklmnopqrstuv
+Acme Aerospace LLC approved the work.
+    `);
+
+    expect(entities).toEqual(expect.arrayContaining([
+      { text: "jane.doe@acme.example", type: "email" },
+      { text: "(512) 555-0199", type: "phone" },
+      { text: "123 Main Street", type: "address" },
+      { text: "123-45-6789", type: "id" },
+      { text: "10.20.30.40", type: "ip" },
+      { text: "https://internal.acme.example/cases/42", type: "url" },
+      { text: "sk-ant-api03_abcdefghijklmnopqrstuv", type: "secret" },
+      { text: "Jane Doe", type: "person" },
+      { text: "Acme Aerospace LLC", type: "org" },
+    ]));
+    expect(entities.filter((entity) => entity.type === "person")).toEqual([
+      { text: "Jane Doe", type: "person" },
+    ]);
+  });
+
+  it("ignores invalid IPs and public product names used as speakers", () => {
+    const entities = extractLocalSensitiveEntities("SystemLink: online at 999.2.3.4");
+    expect(entities).toEqual([]);
+  });
+
+  it("derives a company token from non-public email domains", () => {
+    expect(extractLocalSensitiveEntities("jane@northwind.com joined the Northwind review")).toEqual(expect.arrayContaining([
+      { text: "jane@northwind.com", type: "email" },
+      { text: "northwind", type: "org" },
+    ]));
+    expect(extractLocalSensitiveEntities("jane@gmail.com")).not.toContainEqual({ text: "gmail", type: "org" });
+  });
+});
+
+describe("configured sensitive terms", () => {
+  it("finds only configured names that are present", () => {
+    const configured = knownPrivacyEntities({
+      accounts: [{ name: "Northwind Aerospace", aliases: ["northwind", "nwa"] }],
+      ownerNames: ["Ryley Priddy"],
+    });
+    expect(extractKnownSensitiveEntities("Ryley Priddy met the Northwind team.", configured)).toEqual([
+      { text: "northwind", type: "org" },
+      { text: "Ryley Priddy", type: "person" },
+    ]);
+  });
+});
+
+describe("adversarial privacy formats", () => {
+  it("handles Unicode names and Last, First speaker labels", () => {
+    expect(extractLocalSensitiveEntities("Dubois, Élodie: I approved it.")).toContainEqual({
+      text: "Dubois, Élodie",
+      type: "person",
+    });
+  });
+
+  it("finds URLs inside Markdown and secrets split across a line", () => {
+    const entities = extractLocalSensitiveEntities("[case](https://private.example/case/42)\nkey: sk-ant-api03_ABCD\nEFGHIJKLMNOPQRSTUV");
+    expect(entities).toEqual(expect.arrayContaining([
+      { text: "https://private.example/case/42", type: "url" },
+      { text: "sk-ant-api03_ABCD\nEFGHIJKLMNOPQRSTUV", type: "secret" },
+    ]));
+  });
+
+  it("matches configured names case-insensitively when generic NER cannot", () => {
+    expect(extractKnownSensitiveEntities("follow up with ryley priddy", [{ text: "Ryley Priddy", type: "person" }]))
+      .toEqual([{ text: "Ryley Priddy", type: "person" }]);
+  });
+});
+
 describe("parseEntityList", () => {
   it("normalizes entities and filters placeholder aliases", () => {
     const entities = parseEntityList(
       JSON.stringify([
         { text: "ORG_1", type: "org" },
         { text: "PERSON_12", type: "person" },
+        { text: "PRIVATE_A1B2C3D4E5F6", type: "person" },
         { text: "Jane Doe", type: "person" },
         { text: "Acme", type: "company" },
         { text: "jane@acme.test", type: "email" },

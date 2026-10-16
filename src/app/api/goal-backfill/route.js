@@ -5,6 +5,7 @@ import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { resolveInsideDirectory } from "@/lib/fileSafety";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import { FAST_MODEL, firstTextBlock } from "@/lib/models";
 import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/sanitize";
 import { collectNoteFiles, noteDate } from "@/lib/vaultScan";
@@ -155,7 +156,7 @@ export async function POST(request) {
     }
 
     const clean = (text) => applyReplacements(applyCorrections(String(text || ""), corrections), replacements);
-    const client = createModelClient({ model: model || FAST_MODEL, apiKey, openaiApiKey, task: "fast", signal: request.signal });
+    const client = createModelClient({ model: model || FAST_MODEL, apiKey, openaiApiKey, task: "fast", signal: request.signal, privacy: privacyPolicyFromReplacements(replacements) });
     const goalList = goals
       .map((goal) => `- ${goal.name}${goal.target ? ` (target: ${goal.target})` : ""}`)
       .join("\n");

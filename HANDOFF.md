@@ -31,9 +31,17 @@ npm test                                  # 23 vitest unit tests
 - **Accounts & aliases** (`src/lib/accounts.js`): `DEFAULT_ACCOUNTS` maps each account to
   name aliases (e.g. Cardinal → `cardinal`, `cad`). Editable in Settings. `detectAccount()`
   resolves the picked folder → account; `textHasAlias()` does whole-word matching.
-- **Privacy** (`src/lib/sanitize.js`): `applyCorrections` → `applyReplacements` (real→alias)
-  before sending to Claude, `reverseReplacements` (alias→real) on the way back. Word-boundary
-  regex avoids alias collisions (ORG_1 vs ORG_12).
+- **Privacy** (`src/lib/privacy.js`, `src/lib/sanitize.js`): a local-first pass detects
+  common PII/secrets plus configured account and owner names; `src/lib/localNer.js`
+  adds on-device person/organization/location recognition. Then
+  `applyCorrections` → `applyReplacements` (real→alias) runs before model calls and
+  `reverseReplacements` (alias→real) runs on the way back. New aliases are opaque random
+  `PRIVATE_…` tokens; longest-match-first, word-boundary replacement avoids partial-name
+  and alias collisions. `src/lib/privacyBoundary.js` is enforced by `modelClient.js` for
+  both providers after the final prompt is assembled; unresolved deterministic PII,
+  saved originals, or unapproved images fail closed. Audit events contain only counts
+  and hashes. The optional AI detection pass is off by default and receives locally
+  pseudonymized text. Speaker detection sanitizes first; slides require explicit consent.
 - **Durable config**: two files written via `/api/config` —
   `notetaker-config.json` (accounts + corrections, safe to sync) and
   `notetaker-glossary.json` (replacements w/ real names, sensitive).

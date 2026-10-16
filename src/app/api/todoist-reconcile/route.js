@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import { FAST_MODEL, firstTextBlock } from "@/lib/models";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { closeTodoistTask, listProjectTasks } from "@/lib/todoistApi";
@@ -84,7 +85,7 @@ export async function POST(request) {
     if (remaining.length && hasKey) {
       const clean = (text) => applyReplacements(applyCorrections(String(text || ""), corrections), replacements);
       try {
-        const client = createModelClient({ model: model || FAST_MODEL, apiKey, openaiApiKey, task: "fast", signal: request.signal });
+        const client = createModelClient({ model: model || FAST_MODEL, apiKey, openaiApiKey, task: "fast", signal: request.signal, privacy: privacyPolicyFromReplacements(replacements) });
         resolvedModel = client.resolvedModel;
         const msg = await client.messages.create({
           model: client.resolvedModel,

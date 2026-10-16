@@ -237,6 +237,7 @@ export async function POST(request) {
       ownerNames = [],
       threadKind = "email",
       threadParticipants = "",
+      privacyTerms = [],
     } = body;
 
     if (!emailThread?.trim()) {
@@ -244,7 +245,13 @@ export async function POST(request) {
     }
 
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const client = createModelClient({
+      model,
+      apiKey,
+      openaiApiKey,
+      signal: request.signal,
+      privacy: { sensitiveTerms: privacyTerms },
+    });
     const selectedModel = client.resolvedModel;
     const msg = await createEmailThreadMessage(client, {
       model: selectedModel,

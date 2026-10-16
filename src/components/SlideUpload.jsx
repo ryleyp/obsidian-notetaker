@@ -16,6 +16,7 @@ export default function SlideUpload({ slides, setSlides, settings, model }) {
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState("");
   const [cost, setCost] = useState(null);
+  const [allowImageUpload, setAllowImageUpload] = useState(false);
   const [rendering, setRendering] = useState(""); // "deck.pdf · page 3 of 12" while a PDF is being drawn
   const inputRef = useRef(null);
   const busy = slides.some((slide) => slide.status === "reading");
@@ -37,6 +38,7 @@ export default function SlideUpload({ slides, setSlides, settings, model }) {
           model,
           apiKey: settings.apiKey || undefined,
           openaiApiKey: settings.openaiApiKey || undefined,
+          allowUnredactedImages: true,
         }),
       });
       const result = await res.json();
@@ -59,6 +61,10 @@ export default function SlideUpload({ slides, setSlides, settings, model }) {
     setError("");
     const files = [...(fileList || [])];
     if (!files.length) return;
+    if (!allowImageUpload) {
+      setError("Confirm that you reviewed and cropped sensitive image content before uploading slides.");
+      return;
+    }
     let room = MAX_SLIDES - slides.length;
     if (room <= 0) { setError(`At most ${MAX_SLIDES} slides per meeting.`); return; }
 
@@ -144,10 +150,17 @@ export default function SlideUpload({ slides, setSlides, settings, model }) {
         <p className="text-[11px] text-gray-400 mt-1">PNG, JPEG, WebP, PDF · pages and screenshots resized to 1600px before upload · up to {MAX_SLIDES} slides per meeting</p>
       </div>
 
-      <p className="text-[11px] text-amber-700">
-        Images are sent to the model as they are — privacy replacements apply to the text that comes back, not to what is in the picture.
-        Crop out anything that should not leave your machine before dropping it here.
-      </p>
+      <label className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
+        <input
+          type="checkbox"
+          checked={allowImageUpload}
+          onChange={(event) => setAllowImageUpload(event.target.checked)}
+          className="mt-0.5 h-3.5 w-3.5 rounded accent-amber-700"
+        />
+        <span>
+          I reviewed and cropped these images. I understand that pixels cannot be pseudonymized and the images are sent to the selected AI as they are.
+        </span>
+      </label>
 
       {error && <p role="alert" className="text-xs text-red-700">{error}</p>}
 

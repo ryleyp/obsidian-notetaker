@@ -5,7 +5,7 @@ import ModelPicker from "@/components/ModelPicker";
 import SanitizeReview from "@/components/SanitizeReview";
 import { apiFetch } from "@/lib/apiClient";
 import { calcCost, FAST_MODEL, formatCost } from "@/lib/models";
-import { aliasesFromReplacements } from "@/lib/privacy";
+import { aliasesFromReplacements, knownPrivacyEntities } from "@/lib/privacy";
 import { applyCorrections, applyReplacements, assignAliases, correctionFromRestoredItem } from "@/lib/sanitize";
 import { shareableStatusText, STATUS_WINDOW_LABEL } from "@/lib/statusUpdate";
 
@@ -90,13 +90,20 @@ export default function StatusUpdatePanel({
     const savedReplacements = settings.replacements || [];
     const corrections = settings.corrections || [];
     const pre = (text) => applyReplacements(applyCorrections(String(text || ""), corrections), savedReplacements);
-    const scanText = [pre(priorUpdate), ...notes.map((note) => pre(note.content))].filter((part) => part.trim()).join("\n\n");
+    const scanText = [
+      pre(accountName),
+      pre(productFocus),
+      pre(divisions),
+      pre(priorUpdate),
+      ...(settings.ownerNames || []).map(pre),
+      ...notes.flatMap((note) => [pre(note.title), pre(note.content)]),
+    ].filter((part) => part.trim()).join("\n\n");
 
     let detected = [];
-    let scanSkipped = !settings.aiPrivacyScan;
+    let scanSkipped = false;
     let scanError = "";
     let truncated = false;
-    if (settings.aiPrivacyScan) {
+    {
       try {
         const res = await apiFetch("/api/sanitize", {
           method: "POST",
@@ -107,10 +114,12 @@ export default function StatusUpdatePanel({
             openaiApiKey: settings.openaiApiKey || undefined,
             model,
             knownAliases: aliasesFromReplacements(savedReplacements),
+            knownEntities: knownPrivacyEntities(settings),
+            useAiScan: settings.aiPrivacyScan,
           }),
         });
         const data = await res.json();
-        if (data.skipped) scanSkipped = true;
+        if (data.skipped && settings.aiPrivacyScan) scanSkipped = true;
         if (data.error) scanError = data.error;
         if (data.truncated) truncated = true;
         detected = data.entities || [];
@@ -121,17 +130,17 @@ export default function StatusUpdatePanel({
     }
     setBusy(false);
 
+    if (settings.aiPrivacyScan && (scanSkipped || truncated)) {
+      setNotice(scanError
+        ? `Privacy check blocked generation because the AI detection pass failed: ${scanError}. Retry it or disable the optional AI pass to use local-only detection.`
+        : "Privacy check blocked generation because the AI detection pass was incomplete. Retry it or disable the optional AI pass to use local-only detection.");
+      return;
+    }
+
     if (detected.length > 0) {
       if (truncated) setNotice("The sensitivity scan found more terms than it could list at once. Review these, then run it again to catch the rest.");
       setPendingReview(assignAliases(detected, savedReplacements));
       return;
-    }
-    if (scanSkipped && settings.aiPrivacyScan) {
-      setNotice(scanError
-        ? `Sensitivity scan did not run: ${scanError}. Names and companies were NOT checked.`
-        : "Sensitivity scan skipped — set your API key in Settings to enable name/company detection.");
-    } else if (truncated) {
-      setNotice("The sensitivity scan was cut off before it finished. Run it again before trusting the result.");
     }
     await generate(savedReplacements);
   }
@@ -142,14 +151,14 @@ export default function StatusUpdatePanel({
       onSettingsPatch({
         replacements: [
           ...savedReplacements,
-          ...toSave.map((item) => ({ original: item.text, alias: item.alias, restored: item.restored || item.text })),
+          ...toSave.map((item) => ({ original: item.text, alias: item.alias, restored: item.restored || item.text, type: item.type })),
         ],
         corrections: [...(settings.corrections || []), ...toSave.map(correctionFromRestoredItem).filter(Boolean)],
       });
     }
     const forThisRun = [
       ...savedReplacements,
-      ...confirmed.map((item) => ({ original: item.text, alias: item.alias, restored: item.restored || item.text })),
+      ...confirmed.map((item) => ({ original: item.text, alias: item.alias, restored: item.restored || item.text, type: item.type })),
     ];
     setPendingReview(null);
     generate(forThisRun);

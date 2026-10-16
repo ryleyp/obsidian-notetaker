@@ -14,14 +14,14 @@ function sse(events, chunkSize = 7) {
     controller.close();
   } }));
 }
-const client = () => createModelClient({ model: params.model, apiKey: "claude-key-never-send", openaiApiKey: "openai-test-key" });
+const client = (privacy = {}) => createModelClient({ model: params.model, apiKey: "claude-key-never-send", openaiApiKey: "openai-test-key", privacy });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe("OpenAI provider adapter", () => {
   it("maps Anthropic-shaped image and text blocks to Responses input parts", async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json(completed("# Slide")));
     vi.stubGlobal("fetch", fetchMock);
-    await client().messages.create({
+    await client({ allowImages: true }).messages.create({
       ...params,
       messages: [{ role: "user", content: [
         { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "QUJD" } },
@@ -88,6 +88,14 @@ describe("OpenAI provider adapter", () => {
   it("never falls back to an Anthropic key for OpenAI", () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     expect(() => createModelClient({ model: "gpt-5.6-terra", apiKey: "claude-key" })).toThrow("OpenAI (ChatGPT) API key is required");
+  });
+
+  it("blocks sensitive data before fetch is called", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(client().messages.create({ ...params, messages: [{ role: "user", content: "Email jane@example.com" }] }))
+      .rejects.toMatchObject({ status: 422, code: "PRIVACY_BOUNDARY_BLOCKED" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("resolves Auto to the configured provider before sending", async () => {

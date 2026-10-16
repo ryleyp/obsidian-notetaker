@@ -1,4 +1,5 @@
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { dateSortValue } from "@/lib/synthesisPolicy";
@@ -328,7 +329,7 @@ export async function POST(request) {
       return new Response(JSON.stringify({ error: "No notes or facts provided" }), { status: 400, headers: { "Content-Type": "application/json" } });
     }
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, privacy: privacyPolicyFromReplacements(replacements) });
 
     const sanitizedNotes = (notes || []).map((n) => ({
       ...n,

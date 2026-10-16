@@ -4,6 +4,7 @@ import path from "path";
 import { assertAllowedRoot } from "@/lib/pathAllowlist";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import { applyCorrections, applyReplacements, reverseReplacements } from "@/lib/sanitize";
 import { firstTextBlock, maxOutputTokens } from "@/lib/models";
 import { collectNoteFiles, noteDate } from "@/lib/vaultScan";
@@ -91,7 +92,7 @@ export async function POST(request) {
       })),
     }));
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, privacy: privacyPolicyFromReplacements(replacements) });
     const system = `You write a Customer Success Manager's self-assessment for a performance review, using only the evidence supplied.
 
 Rules:

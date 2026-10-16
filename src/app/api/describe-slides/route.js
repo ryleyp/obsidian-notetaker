@@ -15,12 +15,15 @@ const MAX_OUTPUT_TOKENS = 3000;
 export async function POST(request) {
   try {
     assertTrustedRequest(request);
-    const { slides = [], apiKey, openaiApiKey, model } = await request.json();
+    const { slides = [], apiKey, openaiApiKey, model, allowUnredactedImages = false } = await request.json();
 
     const problem = validateSlidePayload(slides);
     if (problem) return NextResponse.json({ error: problem }, { status: 400 });
+    if (allowUnredactedImages !== true) {
+      return NextResponse.json({ error: "Review and explicitly approve slide images before sending them to an AI." }, { status: 422 });
+    }
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, privacy: { allowImages: true } });
     const usage = { input_tokens: 0, output_tokens: 0 };
     const results = [];
 

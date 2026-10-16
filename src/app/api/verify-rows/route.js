@@ -1,4 +1,5 @@
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
 import { assertTrustedRequest } from "@/lib/requestSafety";
@@ -68,7 +69,7 @@ OUTPUT — one JSON object per line (NDJSON), no other text, one line per claim:
 
 For supported=false, include the closest source and excerpt when one exists; otherwise leave sourceTitle and evidenceQuote empty. Never create or paraphrase an evidenceQuote.`;
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast", privacy: privacyPolicyFromReplacements(replacements) });
     const msg = await client.messages.create({
       model: client.resolvedModel,
       max_tokens: 4000,

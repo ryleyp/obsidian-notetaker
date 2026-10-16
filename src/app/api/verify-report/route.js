@@ -1,4 +1,5 @@
 import { createModelClient } from "@/lib/modelClient";
+import { privacyPolicyFromReplacements } from "@/lib/privacyBoundary";
 import { applyCorrections, applyReplacements } from "@/lib/sanitize";
 import { scrubWithExceptions } from "@/lib/scrub";
 import { assertTrustedRequest } from "@/lib/requestSafety";
@@ -54,7 +55,7 @@ If the report is fully supported, output exactly one line:
 {"quote":"","problem":"none","reason":"clean"}
 Report at most 10 problems, most serious first.`;
 
-    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast" });
+    const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, task: "fast", privacy: privacyPolicyFromReplacements(replacements) });
     const msg = await client.messages.create({
       model: client.resolvedModel,
       max_tokens: 3000,

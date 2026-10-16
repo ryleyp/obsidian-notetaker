@@ -19,7 +19,9 @@ export const EMPTY_SETTINGS = {
   fiscalYearFolders: true,
   todoistApiToken: "",
   todoistProject: "",
-  aiPrivacyScan: true,
+  // Local deterministic detection always runs. The optional AI second pass is
+  // off by default because it can see residual names the local pass missed.
+  aiPrivacyScan: false,
   replacements: [],
   corrections: [],
   accounts: DEFAULT_ACCOUNTS,
