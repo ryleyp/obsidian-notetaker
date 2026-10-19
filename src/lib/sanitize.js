@@ -1,6 +1,9 @@
 export function applyCorrections(text, corrections) {
-  if (!corrections?.length) return text;
-  let result = text;
+  // Optional prompt fields (for example an absent slide filename or existing
+  // note) legitimately arrive as undefined. Always normalize them before a
+  // saved correction calls String#replaceAll.
+  let result = String(text ?? "");
+  if (!corrections?.length) return result;
   for (const { find, replace } of corrections) {
     if (!find?.trim()) continue;
     result = result.replaceAll(find, replace ?? "");

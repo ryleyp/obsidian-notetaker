@@ -71,7 +71,7 @@ export function useSanitizeReview({ settings, model, applySettingsPatch, actions
     setSanitizing(true);
     setPendingAction(action);
 
-    const preSanitize = (text) => applyReplacements(applyCorrections(text, corrections), savedReplacements);
+    const preSanitize = (text) => applyReplacements(applyCorrections(text ?? "", corrections), savedReplacements);
     const selectedAccount = detectAccount(selectedFolder, settings.accounts);
     const scanSources = [
       { label: "Meeting title", text: meetingTitle },

@@ -14,6 +14,11 @@ describe("applyCorrections", () => {
     expect(applyCorrections("hello", undefined)).toBe("hello");
   });
 
+  it("treats an absent optional field as empty even when corrections exist", () => {
+    expect(applyCorrections(undefined, [{ find: "Riley", replace: "Ryley" }])).toBe("");
+    expect(applyCorrections(null, [{ find: "Riley", replace: "Ryley" }])).toBe("");
+  });
+
   it("applies find/replace pairs", () => {
     const out = applyCorrections("we use in tools", [{ find: "in tools", replace: "NI tools" }]);
     expect(out).toBe("we use NI tools");
