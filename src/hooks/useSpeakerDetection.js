@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { applyCorrections, applyReplacements, assignAliases, reverseReplacements } from "@/lib/sanitize";
-import { aliasesFromReplacements, knownPrivacyEntities, privacyTermsFromReplacements } from "@/lib/privacy";
+import { aliasesFromReplacements, knownPrivacyEntities } from "@/lib/privacy";
 import { apiFetch } from "@/lib/apiClient";
 
 // Best-effort speaker segmentation for raw dictation, which merges every
@@ -46,7 +46,7 @@ export function useSpeakerDetection({ settings, onConfirm }) {
           apiKey: settings.apiKey || undefined,
           openaiApiKey: settings.openaiApiKey || undefined,
           model: settings.model || undefined,
-          privacyTerms: privacyTermsFromReplacements(replacements),
+          privacyTerms: replacements.flatMap((item) => [item.original, item.restored]).filter(Boolean),
         }),
       });
       const data = await res.json();

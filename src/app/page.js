@@ -443,16 +443,6 @@ export default function Home() {
                     <div>
                       <p className="text-sm font-medium text-red-800">Error</p>
                       <p className="text-sm text-red-700 mt-0.5">{generation.processError}</p>
-                      {generation.processError.includes("Privacy boundary blocked") && (
-                        <button
-                          type="button"
-                          onClick={handleProcess}
-                          disabled={sanitize.sanitizing || generation.processing}
-                          className="mt-3 text-xs font-medium px-3 py-1.5 rounded-lg border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-50"
-                        >
-                          {sanitize.sanitizing ? "Checking again…" : "Re-run Privacy Review"}
-                        </button>
-                      )}
                     </div>
                   </div>
                 </div>
