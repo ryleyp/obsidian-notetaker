@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { isOpenAIModel, providerLabel, resolveAutoModel } from "./models";
-import { assertOutboundPrivacy } from "./privacyBoundary";
+import { anonymizeOutboundParams, assertOutboundPrivacy } from "./privacyBoundary";
 
 // Adapt OpenAI Responses to the small message/stream interface used by the
 // existing workflows, preserving their prompts, parsers, and output formats.
@@ -13,12 +13,14 @@ export function createModelClient({ model, apiKey, openaiApiKey, signal, task = 
     const anthropic = new Anthropic({ apiKey: key });
     return { resolvedModel, messages: {
       create: (params) => {
-        assertOutboundPrivacy(params, privacy);
-        return anthropic.messages.create({ ...params, model: resolvedModel });
+        const safeParams = anonymizeOutboundParams(params, privacy);
+        assertOutboundPrivacy(safeParams, privacy);
+        return anthropic.messages.create({ ...safeParams, model: resolvedModel });
       },
       stream: (params) => {
-        assertOutboundPrivacy(params, privacy);
-        return anthropic.messages.stream({ ...params, model: resolvedModel });
+        const safeParams = anonymizeOutboundParams(params, privacy);
+        assertOutboundPrivacy(safeParams, privacy);
+        return anthropic.messages.stream({ ...safeParams, model: resolvedModel });
       },
     } };
   }
@@ -43,14 +45,15 @@ export function createModelClient({ model, apiKey, openaiApiKey, signal, task = 
   }
 
   async function send(params, stream) {
-    assertOutboundPrivacy(params, privacy);
+    const safeParams = anonymizeOutboundParams(params, privacy);
+    assertOutboundPrivacy(safeParams, privacy);
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { "Authorization": `Bearer ${key}`, "Content-Type": "application/json" },
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(600000)]) : AbortSignal.timeout(600000),
-      body: JSON.stringify({ model: resolvedModel, instructions: params.system || undefined,
-        input: toResponsesInput(params.messages), max_output_tokens: params.max_tokens, stream, store: false,
-        text: params.response_format ? { format: params.response_format } : undefined }),
+      body: JSON.stringify({ model: resolvedModel, instructions: safeParams.system || undefined,
+        input: toResponsesInput(safeParams.messages), max_output_tokens: safeParams.max_tokens, stream, store: false,
+        text: safeParams.response_format ? { format: safeParams.response_format } : undefined }),
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));

@@ -98,6 +98,18 @@ describe("OpenAI provider adapter", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("repairs configured glossary terms before fetch while retaining the boundary", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json(completed("# Notes")));
+    vi.stubGlobal("fetch", fetchMock);
+    await client({
+      sensitiveTerms: [{ text: "Northwind", alias: "PRIVATE_AAAAAAAAAAAA", type: "org" }],
+    }).messages.create({ ...params, messages: [{ role: "user", content: "Northwind update" }] });
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(JSON.stringify(body.input)).toContain("PRIVATE_AAAAAAAAAAAA update");
+    expect(JSON.stringify(body.input)).not.toContain("Northwind");
+  });
+
   it("resolves Auto to the configured provider before sending", async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json(completed("# Auto")));
     vi.stubGlobal("fetch", fetchMock);

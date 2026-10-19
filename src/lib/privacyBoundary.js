@@ -2,6 +2,7 @@ import {
   extractDeterministicSensitiveEntities,
   extractKnownSensitiveEntities,
   mergeSensitiveEntities,
+  privacyTermsFromReplacements,
 } from "./privacy";
 import { createHash } from "node:crypto";
 
@@ -24,6 +25,48 @@ export function outboundPromptText(params = {}) {
 export function outboundHasImages(params = {}) {
   return (params.messages || []).some((message) => Array.isArray(message?.content)
     && message.content.some((block) => block?.type === "image" || block?.type === "input_image"));
+}
+
+function exactTermRegex(term) {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const left = /^\w/.test(term) ? "\\b" : "";
+  const right = /\w$/.test(term) ? "\\b" : "";
+  return new RegExp(`${left}${escaped}${right}`, "gi");
+}
+
+// The boundary is the last place where the fully assembled prompt is visible.
+// If a known glossary value survived an earlier field-level replacement, repair
+// it here with the same alias the UI will restore after generation. Unknown
+// deterministic PII still fails closed in assertOutboundPrivacy.
+export function anonymizeOutboundParams(params = {}, policy = {}) {
+  const replacements = (policy?.sensitiveTerms || [])
+    .filter((term) => typeof term === "object" && term?.text && term?.alias)
+    .map((term) => ({ text: String(term.text), alias: String(term.alias) }))
+    .sort((a, b) => b.text.length - a.text.length);
+  if (!replacements.length) return params;
+
+  const anonymize = (value) => {
+    let result = String(value ?? "");
+    for (const replacement of replacements) {
+      result = result.replace(exactTermRegex(replacement.text), replacement.alias);
+    }
+    return result;
+  };
+  const content = (value) => {
+    if (typeof value === "string") return anonymize(value);
+    if (!Array.isArray(value)) return value;
+    return value.map((block) => (
+      block?.type === "text" || block?.type === "input_text"
+        ? { ...block, text: anonymize(block.text) }
+        : block
+    ));
+  };
+
+  return {
+    ...params,
+    ...(typeof params.system === "string" ? { system: anonymize(params.system) } : {}),
+    messages: (params.messages || []).map((message) => ({ ...message, content: content(message?.content) })),
+  };
 }
 
 export function privacyAuditRecord(decision, params = {}, findings = [], reason = "") {
@@ -106,7 +149,7 @@ export function privacyPolicyFromReplacements(replacements = [], extra = {}) {
     ...extra,
     sensitiveTerms: [
       ...(extra.sensitiveTerms || []),
-      ...(replacements || []).flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
+      ...privacyTermsFromReplacements(replacements),
     ],
   };
 }

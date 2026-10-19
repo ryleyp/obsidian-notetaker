@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  anonymizeOutboundParams,
   assertOutboundPrivacy,
   inspectOutboundPrivacy,
   outboundHasImages,
@@ -25,6 +26,31 @@ describe("outbound privacy boundary", () => {
     expect(() => assertOutboundPrivacy(request("ORG_1 update"), {
       sensitiveTerms: [{ text: "Northwind", type: "org" }],
     })).not.toThrow();
+  });
+
+  it("repairs a known glossary leak with its existing alias before sending", () => {
+    const policy = {
+      sensitiveTerms: [
+        { text: "Northwind Aerospace", alias: "PRIVATE_AAAAAAAAAAAA", type: "org" },
+        { text: "Northwind", alias: "PRIVATE_AAAAAAAAAAAA", type: "org" },
+      ],
+    };
+    const repaired = anonymizeOutboundParams(request("Northwind Aerospace met Northwind"), policy);
+
+    expect(outboundPromptText(repaired)).toContain("PRIVATE_AAAAAAAAAAAA met PRIVATE_AAAAAAAAAAAA");
+    expect(outboundPromptText(repaired)).not.toContain("Northwind");
+    expect(() => assertOutboundPrivacy(repaired, policy)).not.toThrow();
+  });
+
+  it("repairs text blocks without changing image blocks", () => {
+    const image = { type: "image", source: { type: "base64", media_type: "image/png", data: "QUJD" } };
+    const repaired = anonymizeOutboundParams({ messages: [{ role: "user", content: [
+      image,
+      { type: "text", text: "Northwind update" },
+    ] }] }, { sensitiveTerms: [{ text: "Northwind", alias: "PRIVATE_AAAAAAAAAAAA", type: "org" }] });
+
+    expect(repaired.messages[0].content[0]).toBe(image);
+    expect(repaired.messages[0].content[1].text).toBe("PRIVATE_AAAAAAAAAAAA update");
   });
 
   it("requires explicit approval for image content", () => {

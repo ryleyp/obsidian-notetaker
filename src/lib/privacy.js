@@ -4,6 +4,13 @@ export function aliasesFromReplacements(replacements = []) {
     .filter(Boolean);
 }
 
+export function privacyTermsFromReplacements(replacements = []) {
+  return (replacements || []).flatMap((item) => [item?.original, item?.restored]
+    .map((text) => String(text || "").trim())
+    .filter(Boolean)
+    .map((text) => ({ text, alias: item?.alias, type: item?.type || "org" })));
+}
+
 const EMAIL_PATTERN = /\b[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+\b/gi;
 const PHONE_PATTERN = /(?<![\w])(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]\d{3}[ .-]\d{4}(?:\s*(?:x|ext\.?|extension)\s*\d{1,6})?(?!\w)/gi;
 const SSN_PATTERN = /\b\d{3}-\d{2}-\d{4}\b/g;

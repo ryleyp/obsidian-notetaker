@@ -8,6 +8,7 @@ import {
   knownPrivacyEntities,
   mergeSensitiveEntities,
   parseEntityList,
+  privacyTermsFromReplacements,
 } from "@/lib/privacy";
 
 describe("aliasesFromReplacements", () => {
@@ -18,6 +19,15 @@ describe("aliasesFromReplacements", () => {
     ]);
 
     expect(aliases).toEqual(["ORG_1", "PERSON_1"]);
+  });
+
+  it("builds outbound repair mappings for original and corrected spellings", () => {
+    expect(privacyTermsFromReplacements([
+      { original: "Danna", restored: "Dana", alias: "PRIVATE_AAAAAAAAAAAA", type: "person" },
+    ])).toEqual([
+      { text: "Danna", alias: "PRIVATE_AAAAAAAAAAAA", type: "person" },
+      { text: "Dana", alias: "PRIVATE_AAAAAAAAAAAA", type: "person" },
+    ]);
   });
 });
 
