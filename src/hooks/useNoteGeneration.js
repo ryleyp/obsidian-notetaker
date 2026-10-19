@@ -8,6 +8,7 @@ import { buildSourceBundle, formatTranscriptArchive, mapSourceBundle } from "@/l
 import { splitGeneratedFollowUp } from "@/lib/followUpDraft";
 import { apiFetch } from "@/lib/apiClient";
 import { replaceNoteSection } from "@/lib/noteSections";
+import { privacyTermsFromReplacements } from "@/lib/privacy";
 
 // Reads an SSE body of {type: delta|done|error} events, invoking onDelta with
 // the running text. Returns the final usage payload. Shared by generate and
@@ -221,7 +222,9 @@ export function useNoteGeneration({ settings, model, meeting }) {
     // text is pseudonymized here exactly like a transcript, and the images
     // themselves never go to this call.
     const sanitizedSlides = slides.map((slide) => ({
-      name: slide.name,
+      // The filename becomes part of the [S#] source label, so it is outbound
+      // prompt text too (and filenames often contain customer/program names).
+      name: sanitize(slide.name),
       text: slide.status === "done" ? sanitize(slide.text || "") : "",
     }));
 
@@ -273,7 +276,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
         ownerPronouns: settings.ownerPronouns || "",
         goals: sanitizeStructure(settings.goals || []),
         followUp: sanitizeStructure(meeting.followUp || { enabled: false }),
-        privacyTerms: replacements.flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
+        privacyTerms: privacyTermsFromReplacements(replacements),
       },
       replacements,
       displaySourceBundle,
@@ -314,7 +317,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
           openaiApiKey: settings.openaiApiKey || undefined,
           model: overrideModel,
           sourceBundle: requestConfig.payload.sourceBundle || null,
-          privacyTerms: replacements.flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
+          privacyTerms: privacyTermsFromReplacements(replacements),
         }),
       });
       if (!response.ok) {
@@ -413,7 +416,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
           openaiApiKey: settings.openaiApiKey || undefined,
           model: requestModel,
           sourceBundle: lastGenerationRequest?.payload?.sourceBundle || null,
-          privacyTerms: replacements.flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
+          privacyTerms: privacyTermsFromReplacements(replacements),
         }),
       });
       if (!res.ok) {
@@ -462,7 +465,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
           audience,
           tone,
           instructions: sanitize(instructions || ""),
-          privacyTerms: replacements.flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
+          privacyTerms: privacyTermsFromReplacements(replacements),
           sourceBundle: lastGenerationRequest?.payload?.sourceBundle || null,
         }),
       });

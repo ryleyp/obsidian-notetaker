@@ -12,6 +12,33 @@ import { aliasesFromReplacements, knownPrivacyEntities } from "@/lib/privacy";
 import { apiFetch } from "@/lib/apiClient";
 import { detectAccount } from "@/lib/accounts";
 
+function stringsIn(value) {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) return value.flatMap(stringsIn);
+  if (value && typeof value === "object") return Object.values(value).flatMap(stringsIn);
+  return [];
+}
+
+export function decoratePrivacyEntities(entities = [], sources = []) {
+  return entities.map((entity) => {
+    const needle = String(entity?.text || "").toLowerCase();
+    if (!needle) return entity;
+    for (const source of sources) {
+      const text = String(source?.text || "").replace(/\s+/g, " ").trim();
+      const index = text.toLowerCase().indexOf(needle);
+      if (index < 0) continue;
+      const start = Math.max(0, index - 55);
+      const end = Math.min(text.length, index + needle.length + 55);
+      return {
+        ...entity,
+        source: source.label,
+        context: `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`,
+      };
+    }
+    return entity;
+  });
+}
+
 // The pseudonymization gate that every outbound generation passes through.
 //
 // Flow: pre-apply known corrections + replacements so the scan only ever sees
@@ -29,7 +56,16 @@ export function useSanitizeReview({ settings, model, applySettingsPatch, actions
       : actions.saveTranscript(replacements);
   }
 
-  async function run(action, { meetingTitle, transcript, extendedTranscript, meetingContext, selectedFolder }) {
+  async function run(action, {
+    meetingTitle,
+    transcript,
+    extendedTranscript,
+    meetingContext,
+    selectedFolder,
+    slides = [],
+    existingNote,
+    followUp,
+  }) {
     const savedReplacements = settings.replacements || [];
     const corrections = settings.corrections || [];
     setSanitizing(true);
@@ -37,17 +73,30 @@ export function useSanitizeReview({ settings, model, applySettingsPatch, actions
 
     const preSanitize = (text) => applyReplacements(applyCorrections(text, corrections), savedReplacements);
     const selectedAccount = detectAccount(selectedFolder, settings.accounts);
-    const scanText = [
-      preSanitize(meetingTitle),
-      preSanitize(transcript),
-      preSanitize(extendedTranscript),
-      preSanitize(meetingContext),
-      preSanitize(selectedFolder),
-      preSanitize(selectedAccount.name),
-      ...(settings.ownerNames || []).map(preSanitize),
+    const scanSources = [
+      { label: "Meeting title", text: meetingTitle },
+      { label: "Transcript", text: transcript },
+      { label: "Extended transcript", text: extendedTranscript },
+      { label: "Context & notes", text: meetingContext },
+      { label: "Vault folder", text: selectedFolder },
+      { label: "Selected account", text: selectedAccount.name },
+      ...(selectedAccount.aliases || []).map((text) => ({ label: "Account alias", text })),
+      ...(settings.ownerNames || []).map((text) => ({ label: "Note owner", text })),
+      ...stringsIn(settings.goals || []).map((text) => ({ label: "Configured goal", text })),
+      ...stringsIn(followUp || {}).map((text) => ({ label: "Follow-up setting", text })),
+      // Slide OCR, slide filenames, and an existing note are all included in
+      // the generation prompt. They must pass through the same review as the
+      // transcript instead of first being discovered by the final fail-closed
+      // boundary after the user has already approved the review.
+      ...slides.flatMap((slide, index) => [
+        { label: `Slide ${index + 1} filename`, text: slide?.name },
+        { label: `Slide ${index + 1}`, text: slide?.text },
+      ]),
+      { label: "Existing note", text: existingNote?.content },
     ]
-      .filter((part) => part && part.trim())
-      .join("\n\n");
+      .map((source) => ({ ...source, text: preSanitize(source.text) }))
+      .filter((source) => source.text && source.text.trim());
+    const scanText = scanSources.map((source) => source.text).join("\n\n");
 
     let newEntities = [];
     let scanSkipped = false;
@@ -72,7 +121,7 @@ export function useSanitizeReview({ settings, model, applySettingsPatch, actions
         if (data.skipped && settings.aiPrivacyScan) scanSkipped = true;
         if (data.error) scanError = data.error;
         if (data.truncated) truncated = true;
-        newEntities = data.entities || [];
+        newEntities = decoratePrivacyEntities(data.entities || [], scanSources);
       } catch (err) {
         scanSkipped = true;
         scanError = err?.message || "the scan could not be reached";

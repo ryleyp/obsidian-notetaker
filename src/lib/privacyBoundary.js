@@ -2,6 +2,7 @@ import {
   extractDeterministicSensitiveEntities,
   extractKnownSensitiveEntities,
   mergeSensitiveEntities,
+  privacyTermsFromReplacements,
 } from "./privacy";
 import { createHash } from "node:crypto";
 
@@ -94,10 +95,14 @@ export function assertOutboundPrivacy(params = {}, policy = {}) {
   const counts = Object.entries(findings.reduce((all, item) => ({ ...all, [item.type]: (all[item.type] || 0) + 1 }), {}))
     .map(([type, count]) => `${count} ${type}`)
     .join(", ");
-  throw Object.assign(new Error(`Privacy boundary blocked this AI request: unresolved sensitive data (${counts}). Return to Privacy Review and anonymize it before retrying.`), {
+  const references = [...new Set(findings.map((item) => item.reference).filter(Boolean))];
+  const reviewHint = references.length
+    ? ` Review ${references.join(", ")} in Privacy Review.`
+    : " Return to Privacy Review and anonymize it before retrying.";
+  throw Object.assign(new Error(`Privacy boundary blocked this AI request: unresolved sensitive data (${counts}).${reviewHint}`), {
     status: 422,
     code: "PRIVACY_BOUNDARY_BLOCKED",
-    findings: findings.map(({ type }) => ({ type })),
+    findings: findings.map(({ type, reference }) => ({ type, ...(reference ? { reference } : {}) })),
   });
 }
 
@@ -106,7 +111,7 @@ export function privacyPolicyFromReplacements(replacements = [], extra = {}) {
     ...extra,
     sensitiveTerms: [
       ...(extra.sensitiveTerms || []),
-      ...(replacements || []).flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
+      ...privacyTermsFromReplacements(replacements),
     ],
   };
 }

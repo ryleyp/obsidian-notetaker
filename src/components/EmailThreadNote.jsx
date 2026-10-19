@@ -14,7 +14,7 @@ import {
   mergeCorrections,
   reverseReplacements,
 } from "@/lib/sanitize";
-import { aliasesFromReplacements, extractEmailEntities, knownPrivacyEntities, mergeSensitiveEntities } from "@/lib/privacy";
+import { aliasesFromReplacements, extractEmailEntities, knownPrivacyEntities, mergeSensitiveEntities, privacyTermsFromReplacements } from "@/lib/privacy";
 import { buildSourceBundle, formatEmailArchive, mapSourceBundle } from "@/lib/sourceBundle";
 import { latestEmailResponseDate } from "@/lib/emailDates";
 import { apiFetch } from "@/lib/apiClient";
@@ -372,7 +372,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
           model,
           sourceBundle,
           ownerNames: (settings.ownerNames || []).map((name) => applyReplacements(name, replacements)),
-          privacyTerms: replacements.flatMap((item) => [item?.original, item?.restored]).filter(Boolean),
+          privacyTerms: privacyTermsFromReplacements(replacements),
         }),
       });
       const data = await res.json();

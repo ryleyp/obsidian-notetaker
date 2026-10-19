@@ -27,6 +27,12 @@ describe("outbound privacy boundary", () => {
     })).not.toThrow();
   });
 
+  it("reports the configured entity type and safe review reference", () => {
+    expect(() => assertOutboundPrivacy(request("Call Dana"), {
+      sensitiveTerms: [{ text: "Dana", type: "person", reference: "PRIVATE_AAAAAAAAAAAA" }],
+    })).toThrow(/1 person.*PRIVATE_AAAAAAAAAAAA/);
+  });
+
   it("requires explicit approval for image content", () => {
     const params = { messages: [{ role: "user", content: [
       { type: "image", source: { type: "base64", media_type: "image/png", data: "QUJD" } },

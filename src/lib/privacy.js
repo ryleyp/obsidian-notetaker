@@ -4,6 +4,20 @@ export function aliasesFromReplacements(replacements = []) {
     .filter(Boolean);
 }
 
+// Keep the entity kind and a non-sensitive review handle attached to every
+// configured term. Passing bare strings made every match appear as an "org"
+// and left the user no way to identify the glossary row that needed attention.
+export function privacyTermsFromReplacements(replacements = []) {
+  return (replacements || []).flatMap((item, index) => {
+    const reference = item?.alias || `privacy-term-${index + 1}`;
+    const type = item?.type || "org";
+    return [item?.original, item?.restored]
+      .map((text) => String(text || "").trim())
+      .filter(Boolean)
+      .map((text) => ({ text, type, reference }));
+  });
+}
+
 const EMAIL_PATTERN = /\b[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+\b/gi;
 const PHONE_PATTERN = /(?<![\w])(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]\d{3}[ .-]\d{4}(?:\s*(?:x|ext\.?|extension)\s*\d{1,6})?(?!\w)/gi;
 const SSN_PATTERN = /\b\d{3}-\d{2}-\d{4}\b/g;
@@ -88,11 +102,16 @@ export function extractKnownSensitiveEntities(text = "", knownEntities = []) {
   const source = String(text || "");
   const found = [];
   const seen = new Set();
+  const allowedTypes = new Set(["person", "email", "org", "location", "phone", "address", "ip", "url", "secret", "id"]);
   for (const entity of knownEntities || []) {
     const value = String(entity?.text || "").trim();
     if (!value || seen.has(value.toLowerCase()) || !exactTermRegex(value).test(source)) continue;
     seen.add(value.toLowerCase());
-    found.push({ text: value, type: entity?.type === "person" ? "person" : "org" });
+    found.push({
+      text: value,
+      type: allowedTypes.has(entity?.type) ? entity.type : "org",
+      ...(entity?.reference ? { reference: entity.reference } : {}),
+    });
   }
   return found;
 }
