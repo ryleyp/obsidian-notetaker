@@ -59,16 +59,35 @@ function wordBoundaryRegex(term, flags) {
 
 export function applyReplacements(text, replacements) {
   let result = String(text ?? "");
+  const active = (replacements || []).filter((r) => !r?.skip && r?.original && r?.alias);
+  const originals = new Set(active.map((r) => String(r.original).toLowerCase()));
+
+  // A replacement can be a spelling fix: the transcript mishears "Marlo" and the
+  // saved "restored" value is the correct "Marlowe". Text the user typed
+  // themselves (context, notes, participants) uses the correct spelling, which
+  // the misspelled original never matches — so it would reach the model
+  // un-anonymized. Match the restored spelling too, and send it to the same
+  // alias; reversing maps the alias back to that spelling. An exact original
+  // always wins over another entry's restored value, and very short restored
+  // values are skipped so they cannot mangle ordinary words.
+  const pairs = [];
+  const seenRestored = new Set();
+  for (const r of active) {
+    pairs.push({ term: String(r.original), alias: String(r.alias) });
+    const restored = String(r.restored || "").trim();
+    const key = restored.toLowerCase();
+    if (restored.length >= 3 && key !== String(r.original).toLowerCase() && !originals.has(key) && !seenRestored.has(key)) {
+      seenRestored.add(key);
+      pairs.push({ term: restored, alias: String(r.alias) });
+    }
+  }
+
   // Replace the most specific values first. Without this, a saved "Jane"
   // mapping can turn "Jane Doe" into "PERSON_1 Doe" before the full-name
   // mapping gets a chance to run, leaking part of the name.
-  const ordered = [...(replacements || [])].sort(
-    (a, b) => String(b?.original || "").length - String(a?.original || "").length
-  );
-  for (const r of ordered) {
-    if (!r?.skip && r.original && r.alias) {
-      result = result.replace(wordBoundaryRegex(String(r.original), "gi"), String(r.alias));
-    }
+  pairs.sort((a, b) => b.term.length - a.term.length);
+  for (const { term, alias } of pairs) {
+    result = result.replace(wordBoundaryRegex(term, "gi"), alias);
   }
   return result;
 }

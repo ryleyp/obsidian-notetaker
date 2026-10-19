@@ -54,6 +54,29 @@ describe("privacy review corrections", () => {
 });
 
 describe("applyReplacements", () => {
+  // A replacement can be a spelling fix (transcript mishears "Marlo", the
+  // saved restored value is "Marlowe"). Text the user typed uses the correct
+  // spelling, so it must be aliased too or it reaches the model un-anonymized.
+  it("also aliases the corrected spelling of a spelling-fix replacement", () => {
+    const reps = [{ original: "Marlo", alias: "PRIVATE_A1", restored: "Marlowe" }];
+    const out = applyReplacements("Marlo joined. Context: Marlowe owns the rollout.", reps);
+    expect(out).toBe("PRIVATE_A1 joined. Context: PRIVATE_A1 owns the rollout.");
+    expect(reverseReplacements(out, reps)).toBe("Marlowe joined. Context: Marlowe owns the rollout.");
+  });
+
+  it("lets an exact original win over another entry's restored spelling", () => {
+    const reps = [
+      { original: "Verna", alias: "PRIVATE_B1", restored: "Verne" },
+      { original: "Verne", alias: "PRIVATE_B2", restored: "Verne" },
+    ];
+    expect(applyReplacements("Verne and Verna", reps)).toBe("PRIVATE_B2 and PRIVATE_B1");
+  });
+
+  it("ignores skipped entries and very short restored values", () => {
+    expect(applyReplacements("Marlowe", [{ original: "Marlo", alias: "X1", restored: "Marlowe", skip: true }])).toBe("Marlowe");
+    expect(applyReplacements("an apple", [{ original: "app", alias: "X2", restored: "an" }])).toBe("an apple");
+  });
+
   it("replaces whole words case-insensitively", () => {
     const out = applyReplacements("Met with Acme and acme again", [
       { original: "Acme", alias: "ORG_1" },
