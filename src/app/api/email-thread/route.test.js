@@ -84,6 +84,21 @@ describe("buildEmailThreadPrompt", () => {
     expect(prompt).not.toContain("Cite every factual bullet");
   });
 
+  // Screenshot reads and Teams copies both arrive as "[time] Sender: message"
+  // lines; "You" is the CSM and an unknown sender must never get a guessed owner.
+  it("explains the screenshot transcript format to the Teams prompt", () => {
+    const prompt = buildEmailThreadPrompt({
+      emailThread: "[10:32 AM] You: Can you confirm the count?\n[10:40 AM] [sender not visible]: Yes.",
+      threadTitle: "Count check",
+      threadKind: "teams",
+    });
+
+    expect(prompt).toContain('"[time] Sender: message" lines');
+    expect(prompt).toContain('A sender named "You" is the CSM');
+    expect(prompt).toContain("[sender not visible]");
+    expect(prompt).toContain("**Owner:** unclear");
+  });
+
   it("passes the CSM's participant list into the Teams prompt", () => {
     const prompt = buildEmailThreadPrompt({
       emailThread: "Priddy, Ryley 10:32 AM\nPing me when the install finishes.",

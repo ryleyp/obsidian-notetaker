@@ -29,7 +29,8 @@ export function buildEmailThreadPrompt({
   // Teams form explains the chat paste format and the interface noise that
   // rides along with a copy.
   const formatRule = isTeams
-    ? `- The thread is a pasted Microsoft Teams chat. Messages appear as a name-and-timestamp line followed by the message; treat each message's author like a sender, and a standalone date-divider line as the date of the messages after it. Ignore chat noise: reaction counts and emoji reactions, "Edited" markers, system messages (someone joined, was added, or renamed the chat; meeting started/ended cards), and leftover interface text from copying (such as "Reply", "has context menu", or avatar initials).`
+    ? `- The thread is a pasted Microsoft Teams chat. Messages appear as a name-and-timestamp line followed by the message; treat each message's author like a sender, and a standalone date-divider line as the date of the messages after it. Ignore chat noise: reaction counts and emoji reactions, "Edited" markers, system messages (someone joined, was added, or renamed the chat; meeting started/ended cards), and leftover interface text from copying (such as "Reply", "has context menu", or avatar initials).
+- Messages may also appear as "[time] Sender: message" lines. A sender named "You" is the CSM (the note owner): attribute that person's commitments to the CSM's name, never to "You" or "me". A sender of "[sender not visible]" means attribution is unknown: record the point in Notes, and for a to-do from that message write **Owner:** unclear rather than guessing.`
     : `- Skip signatures, legal disclaimers, repeated quoted history, and email-client boilerplate.`;
 
   const csmNames = (ownerNames || []).map((n) => String(n || "").trim()).filter(Boolean);

@@ -271,6 +271,23 @@ Speaker detection runs through the same local pseudonymization step. Slide pixel
 be pseudonymized reliably, so slide reading remains blocked until the user explicitly
 confirms that the images were reviewed and cropped.
 
+### Teams chat notes
+
+The **Teams** tab turns a pasted Teams chat into a short note: a participants line,
+concise detail bullets, and a to-do list. Give it a thread title (a chat has no subject),
+optionally list who is in the thread, and pick the account folder. It writes no
+citations, callout sections, or SFDC entry, and it is saved as
+`YYYY-MM-DD - Teams - Title.md` so it never overwrites an email note with the same title.
+
+A copy-paste often drops sender names. **Chat screenshots** fix that: drop, choose, or
+paste (Cmd/Ctrl+V) screenshots oldest first, confirm you reviewed and cropped them, and
+click **Read into thread**. A vision model transcribes each one as
+`[time] Sender: message` lines into the thread box, so you can correct any name before the
+note is made. Your own messages come through as `You`, and a sender that is not visible
+is marked `[sender not visible]` instead of guessed. Screenshot pixels cannot be
+anonymized, so the images go to the selected AI as they are, behind the same approval the
+slide upload uses; the text that comes back goes through Privacy Review like any paste.
+
 The thread title is the stable email-note identity. Uploading the same title again
 updates the existing note (after creating a backup), replaces the previous SFDC
 activity even when the note date moves to another week, and rebuilds the customer

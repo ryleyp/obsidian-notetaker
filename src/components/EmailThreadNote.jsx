@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import FolderSelector from "@/components/FolderSelector";
+import ChatScreenshotUpload from "@/components/ChatScreenshotUpload";
 import ModelPicker from "@/components/ModelPicker";
 import SanitizeReview from "@/components/SanitizeReview";
 import {
@@ -18,6 +19,7 @@ import { aliasesFromReplacements, extractEmailEntities, knownPrivacyEntities, me
 import { buildSourceBundle, formatEmailArchive, mapSourceBundle } from "@/lib/sourceBundle";
 import { latestEmailResponseDate } from "@/lib/emailDates";
 import { buildThreadScanText } from "@/lib/threadScan";
+import { appendToThread } from "@/lib/chatScreenshots";
 import { apiFetch } from "@/lib/apiClient";
 import { stripThreadNoise } from "@/lib/emailThreads";
 import { FAST_MODEL, calcCost, formatCost } from "@/lib/models";
@@ -59,6 +61,9 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   const [threadContext, setThreadContext] = useState("");
   const [threadParticipants, setThreadParticipants] = useState("");
   const [emailThread, setEmailThread] = useState("");
+  // The latest thread text, for screenshot results that arrive after a render.
+  const threadRef = useRef("");
+  useEffect(() => { threadRef.current = emailThread; }, [emailThread]);
   const [selectedFolder, setSelectedFolder] = useState("");
   // Mounted only when the Email tab opens, so saved settings have hydrated:
   // the default model applies here the same as on every other tab.
@@ -664,6 +669,13 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         </div>
 
         <div>
+          {isTeams && (
+            <ChatScreenshotUpload
+              settings={settings}
+              model={model}
+              onTranscribed={(text) => handleThreadChange(appendToThread(threadRef.current, text))}
+            />
+          )}
           <label className="label">{kindLabel} Thread</label>
           <textarea
             className="input resize-y font-mono text-xs leading-relaxed"

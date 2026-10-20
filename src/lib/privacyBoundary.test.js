@@ -89,4 +89,16 @@ describe("outbound privacy boundary", () => {
     // Without a template the example line itself is scanned, as before.
     expect(inspectOutboundPrivacy(clean, { sensitiveTerms: ["Dana"] })).toHaveLength(1);
   });
+
+  it("can skip the text scan for an approved screenshot read while still requiring image approval", () => {
+    const withLink = {
+      messages: [{ role: "user", content: [
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "QUJD" } },
+        { type: "text", text: "The transcription so far ends with: see https://example.test/doc" },
+      ] }],
+    };
+    expect(() => assertOutboundPrivacy(withLink, { allowImages: true })).toThrow(/blocked this AI request/);
+    expect(() => assertOutboundPrivacy(withLink, { allowImages: true, scanText: false })).not.toThrow();
+    expect(() => assertOutboundPrivacy(withLink, { scanText: false })).toThrow(/blocked an image request/);
+  });
 });

@@ -112,6 +112,10 @@ function withoutTemplateLines(text, templateText) {
 
 export function inspectOutboundPrivacy(params = {}, policy = {}) {
   if (policy?.enabled === false) return [];
+  // For a request whose text only repeats what the user already approved
+  // sending as an image (reading a screenshot into text), the text carries no
+  // data the image does not. Image approval is still enforced separately.
+  if (policy?.scanText === false) return [];
   const text = withoutTemplateLines(outboundPromptText(params), policy?.templateText);
   const configured = (policy?.sensitiveTerms || []).map((term) => (
     typeof term === "string" ? { text: term, type: "org" } : term
