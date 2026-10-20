@@ -17,7 +17,9 @@ export function buildThreadScanText({
   corrections = [],
   replacements = [],
 }) {
-  const prepare = (text) => applyReplacements(applyCorrections(text, corrections), replacements);
+  // Optional inputs (no existing note, no context) arrive as undefined or null;
+  // normalize before corrections, which call String#replaceAll.
+  const prepare = (text) => applyReplacements(applyCorrections(String(text ?? ""), corrections), replacements);
   return [
     prepare(title),
     prepare(thread),

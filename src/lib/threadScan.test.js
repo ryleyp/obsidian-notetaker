@@ -36,6 +36,12 @@ describe("buildThreadScanText", () => {
     expect(text).toContain("PRIVATE_A1 owns the rollout and Ryley follows up.");
   });
 
+  it("does not crash on an absent optional field when corrections are configured", () => {
+    const corrections = [{ find: "Riley", replace: "Ryley" }];
+    expect(() => buildThreadScanText({ title: "T", thread: "Riley", existingNote: undefined, context: null, corrections })).not.toThrow();
+    expect(buildThreadScanText({ title: "T", thread: "Riley", existingNote: undefined, corrections })).toBe("T\n\nRyley");
+  });
+
   it("tolerates missing optional fields", () => {
     expect(buildThreadScanText({ title: "T", thread: "x" })).toBe("T\n\nx");
   });
