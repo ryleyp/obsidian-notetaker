@@ -17,6 +17,7 @@ import {
 import { aliasesFromReplacements, extractEmailEntities, knownPrivacyEntities, mergeSensitiveEntities, privacyTermsFromReplacements } from "@/lib/privacy";
 import { buildSourceBundle, formatEmailArchive, mapSourceBundle } from "@/lib/sourceBundle";
 import { latestEmailResponseDate } from "@/lib/emailDates";
+import { buildThreadScanText } from "@/lib/threadScan";
 import { apiFetch } from "@/lib/apiClient";
 import { stripThreadNoise } from "@/lib/emailThreads";
 import { FAST_MODEL, calcCost, formatCost } from "@/lib/models";
@@ -200,19 +201,19 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
 
   async function runSanitizeDetection() {
     const savedReplacements = settings.replacements || [];
-    const correctedTitle = applyCorrections(threadTitle, settings.corrections || []);
-    const correctedThread = applyCorrections(emailThread, settings.corrections || []);
-    const correctedContext = applyCorrections(threadContext, settings.corrections || []);
-
-    const scanText = [
-      applyReplacements(correctedTitle, savedReplacements),
-      applyReplacements(correctedThread, savedReplacements),
-      applyReplacements(correctedContext, savedReplacements),
-      applyReplacements(threadParticipants, savedReplacements),
-      applyReplacements(selectedFolder, savedReplacements),
-      applyReplacements(detectAccount(selectedFolder, settings.accounts).name, savedReplacements),
-      ...(settings.ownerNames || []).map((name) => applyReplacements(name, savedReplacements)),
-    ].filter((part) => part && part.trim()).join("\n\n");
+    const scanText = buildThreadScanText({
+      title: threadTitle,
+      thread: emailThread,
+      context: threadContext,
+      participants: threadParticipants,
+      folder: selectedFolder,
+      accountName: detectAccount(selectedFolder, settings.accounts).name,
+      ownerNames: settings.ownerNames || [],
+      // The current note is sent as a source when updating, so it is reviewed too.
+      existingNote: updateExisting ? existingNote?.content : "",
+      corrections: settings.corrections || [],
+      replacements: savedReplacements,
+    });
 
     setProcessing(true);
     setError(null);
