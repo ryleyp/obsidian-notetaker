@@ -80,3 +80,11 @@ export function latestEmailResponseDate(threadText) {
   }
   return latest ? toIsoDate(latest) : "";
 }
+
+// "YYYY-MM-DD" for the local calendar day `days` before `now` (0 = today).
+// Built from calendar fields, not by subtracting milliseconds, so a daylight
+// saving change never lands the result on the wrong day.
+export function isoDateDaysAgo(days = 0, now = new Date()) {
+  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
+  return toIsoDate(date);
+}

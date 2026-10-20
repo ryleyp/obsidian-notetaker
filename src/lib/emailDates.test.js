@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { latestEmailResponseDate } from "./emailDates";
+import { isoDateDaysAgo, latestEmailResponseDate } from "./emailDates";
 
 describe("latestEmailResponseDate", () => {
   it("reads an RFC 2822 Date header", () => {
@@ -78,5 +78,25 @@ describe("latestEmailResponseDate", () => {
   it("ignores long prose lines that merely start with a date", () => {
     const thread = "October 10, 2026 is when the migration finally lands for the Dallas lab.\nPlease confirm.";
     expect(latestEmailResponseDate(thread)).toBe("");
+  });
+});
+
+describe("isoDateDaysAgo", () => {
+  const noon = new Date(2026, 9, 20, 12, 0, 0); // Oct 20, 2026 local
+
+  it("returns today and earlier days as local calendar dates", () => {
+    expect(isoDateDaysAgo(0, noon)).toBe("2026-10-20");
+    expect(isoDateDaysAgo(1, noon)).toBe("2026-10-19");
+    expect(isoDateDaysAgo(20, noon)).toBe("2026-09-30");
+  });
+
+  it("crosses month and year boundaries", () => {
+    expect(isoDateDaysAgo(1, new Date(2026, 0, 1, 0, 30))).toBe("2025-12-31");
+    expect(isoDateDaysAgo(1, new Date(2026, 2, 1, 9, 0))).toBe("2026-02-28");
+  });
+
+  it("is not thrown off by the daylight saving change", () => {
+    // US clocks spring forward on Mar 8, 2026; the day before is still Mar 7.
+    expect(isoDateDaysAgo(1, new Date(2026, 2, 8, 12, 0))).toBe("2026-03-07");
   });
 });

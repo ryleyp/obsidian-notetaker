@@ -17,7 +17,7 @@ import {
 } from "@/lib/sanitize";
 import { aliasesFromReplacements, extractEmailEntities, knownPrivacyEntities, mergeSensitiveEntities, privacyTermsFromReplacements } from "@/lib/privacy";
 import { buildSourceBundle, formatEmailArchive, mapSourceBundle } from "@/lib/sourceBundle";
-import { latestEmailResponseDate } from "@/lib/emailDates";
+import { isoDateDaysAgo, latestEmailResponseDate } from "@/lib/emailDates";
 import { buildThreadScanText } from "@/lib/threadScan";
 import { appendToThread } from "@/lib/chatScreenshots";
 import { apiFetch } from "@/lib/apiClient";
@@ -58,6 +58,9 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   const defaultTitle = `${kindLabel} Thread`;
   const [threadTitle, setThreadTitle] = useState("");
   const [threadDate, setThreadDate] = useState(todayIso());
+  // Once a Teams date is typed or picked, text that arrives later (a paste, a
+  // screenshot read) must not silently overwrite it.
+  const dateIsManualRef = useRef(false);
   const [threadContext, setThreadContext] = useState("");
   const [threadParticipants, setThreadParticipants] = useState("");
   const [emailThread, setEmailThread] = useState("");
@@ -135,9 +138,10 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       const inferred = inferTitleFromThread(value);
       if (inferred) setThreadTitle(inferred);
     }
-    // Track the newest response so re-pasting a grown thread re-dates the note.
+    // Track the newest response so re-pasting a grown thread re-dates the note
+    // (unless the user set a Teams date themselves).
     const latestResponse = latestEmailResponseDate(value);
-    if (latestResponse) setThreadDate(latestResponse);
+    if (latestResponse && !(isTeams && dateIsManualRef.current)) setThreadDate(latestResponse);
   }
 
   // Auto-pick the account folder from the pasted thread when none is selected:
@@ -547,7 +551,14 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     return displaySourceBundle;
   }
 
+  function setManualDate(value) {
+    clearOutput();
+    if (isTeams) dateIsManualRef.current = true;
+    setThreadDate(value);
+  }
+
   function handleNewThread() {
+    dateIsManualRef.current = false;
     setThreadTitle("");
     setThreadDate(todayIso());
     setThreadContext("");
@@ -599,17 +610,38 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
             />
           </div>
           <div>
-            <label className="label">Note Date</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="label">{isTeams ? "Chat Date" : "Note Date"}</label>
+              {isTeams && (
+                <span className="flex items-center gap-1 text-[11px]">
+                  {[["Today", 0], ["Yesterday", 1]].map(([label, daysAgo]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setManualDate(isoDateDaysAgo(daysAgo))}
+                      className={`rounded-full border px-2 py-0.5 transition-colors ${
+                        threadDate === isoDateDaysAgo(daysAgo)
+                          ? "border-obsidian-300 bg-obsidian-50 text-obsidian-700"
+                          : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </span>
+              )}
+            </div>
             <input
               type="date"
               className="input"
               value={threadDate}
-              onChange={(event) => {
-                clearOutput();
-                setThreadDate(event.target.value);
-              }}
+              onChange={(event) => setManualDate(event.target.value)}
             />
-            <p className="mt-1 text-[10px] text-gray-400">Auto-set to the newest dated response in the pasted thread</p>
+            <p className="mt-1 text-[10px] text-gray-400">
+              {isTeams
+                ? "The day this chat happened. Defaults to today; a full date in the pasted chat sets it, and a date you pick here is kept."
+                : "Auto-set to the newest dated response in the pasted thread"}
+            </p>
           </div>
         </div>
 
