@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createModelClient } from "@/lib/modelClient";
+import { createEmailRestorer, pseudonymizeEmails } from "@/lib/privacyBoundary";
 import { looksSpeakerLabeled } from "@/lib/speakers";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { maxOutputTokens } from "@/lib/models";
@@ -434,7 +435,9 @@ export async function POST(request) {
     });
     const selectedModel = client.resolvedModel;
 
-    const stream = client.messages.stream({
+    // An email address that slipped past Privacy Review is swapped for a random
+    // placeholder here and restored in the streamed text, so it never leaves.
+    const { params: outbound, restorations } = pseudonymizeEmails({
       model: selectedModel,
       max_tokens: maxOutputTokens(selectedModel),
       system: SYSTEM_PROMPT,
@@ -450,6 +453,8 @@ export async function POST(request) {
         }),
       }],
     });
+    const stream = client.messages.stream(outbound);
+    const restorer = createEmailRestorer(restorations);
 
     const encoder = new TextEncoder();
     const readable = new ReadableStream({
@@ -458,11 +463,19 @@ export async function POST(request) {
         try {
           for await (const chunk of stream) {
             if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-              send({ type: "delta", text: chunk.delta.text });
+              const text = restorer.push(chunk.delta.text);
+              if (text) send({ type: "delta", text });
             }
           }
+          const tail = restorer.flush();
+          if (tail) send({ type: "delta", text: tail });
           const finalMsg = await stream.finalMessage();
-          send({ type: "done", usage: finalMsg.usage, model: selectedModel });
+          send({
+            type: "done",
+            usage: finalMsg.usage,
+            model: selectedModel,
+            ...(restorations.length ? { privacyRepairs: { email: restorations.length } } : {}),
+          });
         } catch (err) {
           send({ type: "error", message: err?.message || "Processing failed" });
         } finally {

@@ -1,10 +1,11 @@
 import {
+  extractEmailEntities,
   extractDeterministicSensitiveEntities,
   extractKnownSensitiveEntities,
   mergeSensitiveEntities,
   privacyTermsFromReplacements,
 } from "./privacy";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 function contentText(content) {
   if (typeof content === "string") return content;
@@ -155,5 +156,85 @@ export function privacyPolicyFromReplacements(replacements = [], extra = {}) {
       ...(extra.sensitiveTerms || []),
       ...privacyTermsFromReplacements(replacements),
     ],
+  };
+}
+
+// Email addresses are the one deterministic identifier that can be swapped for
+// a placeholder and put back exactly, so a request that still carries one is
+// repaired instead of blocked: each distinct address becomes a random
+// PRIVATE_ token before the request leaves, and restoreEmails puts the real
+// addresses back into the text that comes back. The address itself is never
+// sent. This is a safety net behind Privacy Review, not a replacement for it.
+export function pseudonymizeEmails(params = {}) {
+  const emails = extractEmailEntities(outboundPromptText(params));
+  if (!emails.length) return { params, restorations: [] };
+
+  const restorations = emails.map(({ text }) => ({
+    original: text,
+    alias: `PRIVATE_${randomBytes(6).toString("hex").toUpperCase()}`,
+  }));
+  const replace = (value) => restorations.reduce(
+    (result, { original, alias }) => result.replace(exactTermRegex(original), alias),
+    String(value ?? "")
+  );
+  const content = (value) => {
+    if (typeof value === "string") return replace(value);
+    if (!Array.isArray(value)) return value;
+    return value.map((block) => (
+      block?.type === "text" || block?.type === "input_text" ? { ...block, text: replace(block.text) } : block
+    ));
+  };
+
+  return {
+    params: {
+      ...params,
+      ...(typeof params.system === "string" ? { system: replace(params.system) } : {}),
+      messages: (params.messages || []).map((message) => ({ ...message, content: content(message?.content) })),
+    },
+    restorations,
+  };
+}
+
+export function restoreEmails(text, restorations = []) {
+  return restorations.reduce(
+    (result, { original, alias }) => result.split(alias).join(original),
+    String(text ?? "")
+  );
+}
+
+// The streaming counterpart of restoreEmails. A placeholder can be split across
+// two chunks ("PRIVATE_AB" then "CDEF..."), so any trailing text that could be
+// the start of a placeholder is held back until the next chunk settles it.
+// Call flush() once the stream ends to release whatever is still held.
+export function createEmailRestorer(restorations = []) {
+  if (!restorations.length) return { push: (chunk) => String(chunk ?? ""), flush: () => "" };
+
+  let buffer = "";
+  const heldLength = (text) => {
+    let longest = 0;
+    for (const { alias } of restorations) {
+      for (let length = Math.min(alias.length - 1, text.length); length > longest; length -= 1) {
+        if (text.endsWith(alias.slice(0, length))) {
+          longest = length;
+          break;
+        }
+      }
+    }
+    return longest;
+  };
+
+  return {
+    push(chunk) {
+      buffer = restoreEmails(buffer + String(chunk ?? ""), restorations);
+      const hold = heldLength(buffer);
+      const ready = buffer.slice(0, buffer.length - hold);
+      buffer = buffer.slice(buffer.length - hold);
+      return ready;
+    },
+    flush() {
+      const rest = restoreEmails(buffer, restorations);
+      buffer = "";
+      return rest;
+    },
   };
 }

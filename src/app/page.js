@@ -302,6 +302,12 @@ export default function Home() {
                   sources={generation.sourceBundle?.allSources || []}
                 />
               )}
+              {generation.privacyRepairs?.email > 0 && !generation.processing && (
+                <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+                  {generation.privacyRepairs.email} email address{generation.privacyRepairs.email === 1 ? " was" : "es were"} not caught in Privacy Review, so {generation.privacyRepairs.email === 1 ? "it was" : "they were"} replaced
+                  with a placeholder before sending and put back in these notes. {generation.privacyRepairs.email === 1 ? "It was" : "They were"} never sent.
+                </p>
+              )}
               <NotesPreview
                 notes={generation.notes}
                 onSave={() => saving.saveNote(generation.notes)}

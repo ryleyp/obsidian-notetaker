@@ -5,6 +5,9 @@ import {
   inspectOutboundPrivacy,
   outboundHasImages,
   outboundPromptText,
+  pseudonymizeEmails,
+  restoreEmails,
+  createEmailRestorer,
   privacyAuditRecord,
 } from "./privacyBoundary";
 
@@ -100,5 +103,71 @@ describe("outbound privacy boundary", () => {
     expect(() => assertOutboundPrivacy(withLink, { allowImages: true })).toThrow(/blocked this AI request/);
     expect(() => assertOutboundPrivacy(withLink, { allowImages: true, scanText: false })).not.toThrow();
     expect(() => assertOutboundPrivacy(withLink, { scanText: false })).toThrow(/blocked an image request/);
+  });
+
+  describe("email repair", () => {
+    it("swaps each distinct address for a placeholder and restores it exactly", () => {
+      const params = { system: "Cc: pat@example.test", messages: [{ role: "user", content: [
+        { type: "text", text: "From dana.okafor@example.test, again Dana.Okafor@Example.TEST, and pat@example.test." },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "QUJD" } },
+      ] }] };
+      const { params: safe, restorations } = pseudonymizeEmails(params);
+
+      expect(restorations).toHaveLength(2);
+      expect(outboundPromptText(safe)).not.toMatch(/@/);
+      expect(safe.messages[0].content[1]).toEqual(params.messages[0].content[1]);
+      expect(inspectOutboundPrivacy(safe, {})).toEqual([]);
+
+      const echoed = outboundPromptText(safe);
+      const restored = restoreEmails(echoed, restorations);
+      expect(restored).toContain("dana.okafor@example.test");
+      expect(restored).toContain("pat@example.test");
+      expect(restored).not.toContain("PRIVATE_");
+    });
+
+    it("leaves a request with no email address untouched", () => {
+      const params = request("No addresses here.");
+      expect(pseudonymizeEmails(params)).toEqual({ params, restorations: [] });
+    });
+
+    it("uses a fresh random placeholder each time", () => {
+      const first = pseudonymizeEmails(request("a@example.test")).restorations[0].alias;
+      const second = pseudonymizeEmails(request("a@example.test")).restorations[0].alias;
+      expect(first).toMatch(/^PRIVATE_[A-F0-9]{12}$/);
+      expect(first).not.toBe(second);
+    });
+  });
+
+  describe("streaming email restore", () => {
+    const restorations = [{ original: "dana.okafor@example.test", alias: "PRIVATE_0123456789AB" }];
+    const run = (chunks) => {
+      const restorer = createEmailRestorer(restorations);
+      return chunks.map((chunk) => restorer.push(chunk)).join("") + restorer.flush();
+    };
+
+    it("restores a placeholder that arrives whole", () => {
+      expect(run(["Contact: PRIVATE_0123456789AB today."])).toBe("Contact: dana.okafor@example.test today.");
+    });
+
+    it("restores a placeholder split at every possible position", () => {
+      const text = "Contact: PRIVATE_0123456789AB, thanks.";
+      for (let cut = 1; cut < text.length; cut += 1) {
+        expect(run([text.slice(0, cut), text.slice(cut)]), `split at ${cut}`).toBe("Contact: dana.okafor@example.test, thanks.");
+      }
+    });
+
+    it("restores a placeholder fed one character at a time", () => {
+      expect(run([..."a PRIVATE_0123456789AB b"])).toBe("a dana.okafor@example.test b");
+    });
+
+    it("releases text that only looks like the start of a placeholder", () => {
+      expect(run(["Seen in PRIV", "ATE data", " and PRIVATE_"])).toBe("Seen in PRIVATE data and PRIVATE_");
+    });
+
+    it("passes everything through unchanged when there is nothing to restore", () => {
+      const restorer = createEmailRestorer([]);
+      expect(restorer.push("PRIVATE_0123456789AB")).toBe("PRIVATE_0123456789AB");
+      expect(restorer.flush()).toBe("");
+    });
   });
 });

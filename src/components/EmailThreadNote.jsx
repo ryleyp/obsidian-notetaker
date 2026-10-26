@@ -93,6 +93,8 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   const [closingTodoist, setClosingTodoist] = useState(false);
   const [autoPickedFolder, setAutoPickedFolder] = useState(false);
   const [cost, setCost] = useState(null);
+  // Set when the server swapped leftover email addresses for placeholders.
+  const [privacyRepairs, setPrivacyRepairs] = useState(null);
 
   const wordCount = emailThread.trim() ? emailThread.trim().split(/\s+/).length : 0;
   const canCreate = emailThread.trim() && !processing && !saving;
@@ -126,6 +128,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setTodoistResult(null);
     setTodoistCompletions(null);
     setArchivedPath("");
+    setPrivacyRepairs(null);
     setError(null);
     setCost(null);
   }
@@ -390,6 +393,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
 
       const restoredNote = replacements.length ? reverseReplacements(data.note, replacements) : data.note;
       setNote(restoredNote);
+      setPrivacyRepairs(data.privacyRepairs || null);
       if (data.usage) setCost(calcCost(data.usage, data.model || model));
 
       setSaving(true);
@@ -855,6 +859,12 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               Copy
             </button>
           </div>
+          {privacyRepairs?.email > 0 && (
+            <p className="px-6 py-2 text-xs text-amber-800 bg-amber-50 border-b border-amber-200">
+              {privacyRepairs.email} email address{privacyRepairs.email === 1 ? " was" : "es were"} not caught in Privacy Review, so {privacyRepairs.email === 1 ? "it was" : "they were"} replaced
+              with a placeholder before sending and put back in this note. {privacyRepairs.email === 1 ? "It was" : "They were"} never sent.
+            </p>
+          )}
           <div className="p-6 markdown-preview max-h-[650px] overflow-y-auto">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{note}</ReactMarkdown>
           </div>

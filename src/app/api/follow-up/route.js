@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createModelClient } from "@/lib/modelClient";
+import { pseudonymizeEmails, restoreEmails } from "@/lib/privacyBoundary";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 
@@ -62,7 +63,9 @@ export async function POST(request) {
 
     const client = createModelClient({ model, apiKey, openaiApiKey, signal: request.signal, privacy: { sensitiveTerms: privacyTerms } });
     const selectedModel = client.resolvedModel;
-    const msg = await client.messages.create({
+    // A leftover email address is swapped for a placeholder and restored in the
+    // draft, so it never leaves.
+    const { params: outbound, restorations } = pseudonymizeEmails({
       model: selectedModel,
       max_tokens: 8_000,
       system: SYSTEM_PROMPT,
@@ -78,12 +81,13 @@ export async function POST(request) {
         }),
       }],
     });
+    const msg = await client.messages.create(outbound);
 
-    const draft = msg.content
+    const draft = restoreEmails(msg.content
       .filter((part) => part.type === "text")
       .map((part) => part.text)
       .join("\n")
-      .trim();
+      .trim(), restorations);
 
     return NextResponse.json({ draft, usage: msg.usage, model: selectedModel });
   } catch (error) {

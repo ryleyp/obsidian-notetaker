@@ -20,6 +20,7 @@ async function consumeStream(response, onDelta) {
   let buffer = "";
   let usage = null;
   let responseModel = null;
+  let privacyRepairs = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -36,12 +37,13 @@ async function consumeStream(response, onDelta) {
       } else if (evt.type === "done") {
         usage = evt.usage;
         responseModel = evt.model || null;
+        privacyRepairs = evt.privacyRepairs || null;
       } else if (evt.type === "error") {
         throw new Error(evt.message);
       }
     }
   }
-  return { accumulated, usage, model: responseModel };
+  return { accumulated, usage, model: responseModel, privacyRepairs };
 }
 
 // Owns the generated note and everything that produces or revises it:
@@ -53,6 +55,8 @@ export function useNoteGeneration({ settings, model, meeting }) {
   const [processError, setProcessError] = useState(null);
   const [notes, setNotes] = useState("");
   const [noteCost, setNoteCost] = useState(null);
+  // Set when the server swapped leftover email addresses for placeholders.
+  const [privacyRepairs, setPrivacyRepairs] = useState(null);
   const [sourceBundle, setSourceBundle] = useState(null);
   const [activeReplacements, setActiveReplacements] = useState([]);
   const [lastGenerationRequest, setLastGenerationRequest] = useState(null);
@@ -137,6 +141,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
     setRegenerateError(null);
     setNotes("");
     setNoteCost(null);
+    setPrivacyRepairs(null);
     clearFollowUp();
     onSaved?.();
 
@@ -152,7 +157,8 @@ export function useNoteGeneration({ settings, model, meeting }) {
         throw new Error(data.error || "Processing failed");
       }
 
-      const { accumulated, usage, model: completedModel } = await consumeStream(res, setNotes);
+      const { accumulated, usage, model: completedModel, privacyRepairs: repaired } = await consumeStream(res, setNotes);
+      setPrivacyRepairs(repaired);
       const usedModel = completedModel || requestModel;
       const cost = usage ? calcCost(usage, usedModel) : null;
       if (cost) setNoteCost(cost);
@@ -526,6 +532,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
     manualEditRef.current.active = false;
     setNotes("");
     setNoteCost(null);
+    setPrivacyRepairs(null);
     setProcessError(null);
     setRegenerateError(null);
     setActiveReplacements([]);
@@ -545,6 +552,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
     processError,
     setProcessError,
     noteCost,
+    privacyRepairs,
     sourceBundle,
     alternative,
     alternativeLoading,

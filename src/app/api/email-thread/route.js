@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createModelClient } from "@/lib/modelClient";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { firstTextBlock, maxOutputTokens } from "@/lib/models";
+import { pseudonymizeEmails, restoreEmails } from "@/lib/privacyBoundary";
 import { buildSourceBundle, formatSourceBundleForPrompt } from "@/lib/sourceBundle";
 import { activityWritingRules, classificationGuidance, taxonomyForReportPrompt } from "@/lib/sfdcTaxonomy";
 
@@ -268,7 +269,9 @@ export async function POST(request) {
       privacy: { sensitiveTerms: privacyTerms, templateText: promptTemplateText() },
     });
     const selectedModel = client.resolvedModel;
-    const msg = await createEmailThreadMessage(client, {
+    // An email address that slipped past Privacy Review is swapped for a random
+    // placeholder here and restored in the note below, so it never leaves.
+    const { params: outbound, restorations } = pseudonymizeEmails({
       model: selectedModel,
       max_tokens: maxOutputTokens(selectedModel),
       system: SYSTEM_PROMPT,
@@ -286,10 +289,16 @@ export async function POST(request) {
         }),
       }],
     });
+    const msg = await createEmailThreadMessage(client, outbound);
 
-    const note = firstTextBlock(msg).trim();
+    const note = restoreEmails(firstTextBlock(msg).trim(), restorations);
 
-    return NextResponse.json({ note, usage: msg.usage, model: selectedModel });
+    return NextResponse.json({
+      note,
+      usage: msg.usage,
+      model: selectedModel,
+      ...(restorations.length ? { privacyRepairs: { email: restorations.length } } : {}),
+    });
   } catch (error) {
     console.error("Email thread note error:", error);
     return NextResponse.json(
