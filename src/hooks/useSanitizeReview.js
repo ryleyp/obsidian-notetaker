@@ -11,6 +11,7 @@ import {
 import { aliasesFromReplacements, knownPrivacyEntities } from "@/lib/privacy";
 import { apiFetch } from "@/lib/apiClient";
 import { detectAccount } from "@/lib/accounts";
+import { buildMeetingScanText } from "@/lib/meetingScan";
 
 // The pseudonymization gate that every outbound generation passes through.
 //
@@ -29,25 +30,31 @@ export function useSanitizeReview({ settings, model, applySettingsPatch, actions
       : actions.saveTranscript(replacements);
   }
 
-  async function run(action, { meetingTitle, transcript, extendedTranscript, meetingContext, selectedFolder }) {
+  async function run(action, { meetingTitle, transcript, extendedTranscript, meetingContext, selectedFolder, existingNote, slides = [], followUp }) {
     const savedReplacements = settings.replacements || [];
     const corrections = settings.corrections || [];
     setSanitizing(true);
     setPendingAction(action);
 
-    const preSanitize = (text) => applyReplacements(applyCorrections(text, corrections), savedReplacements);
     const selectedAccount = detectAccount(selectedFolder, settings.accounts);
-    const scanText = [
-      preSanitize(meetingTitle),
-      preSanitize(transcript),
-      preSanitize(extendedTranscript),
-      preSanitize(meetingContext),
-      preSanitize(selectedFolder),
-      preSanitize(selectedAccount.name),
-      ...(settings.ownerNames || []).map(preSanitize),
-    ]
-      .filter((part) => part && part.trim())
-      .join("\n\n");
+    // Saving a transcript sends nothing to a model; only generation also sends
+    // the existing note, slides, goals, and follow-up settings.
+    const generating = action === "generate";
+    const scanText = buildMeetingScanText({
+      meetingTitle,
+      transcript,
+      extendedTranscript,
+      meetingContext,
+      selectedFolder,
+      accountName: selectedAccount.name,
+      ownerNames: settings.ownerNames || [],
+      existingNote: generating ? existingNote : undefined,
+      slides: generating ? slides : [],
+      goals: generating ? settings.goals || [] : [],
+      followUp: generating ? followUp : undefined,
+      corrections,
+      replacements: savedReplacements,
+    });
 
     let newEntities = [];
     let scanSkipped = false;

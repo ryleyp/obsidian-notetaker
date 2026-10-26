@@ -222,7 +222,9 @@ export function useNoteGeneration({ settings, model, meeting }) {
     // text is pseudonymized here exactly like a transcript, and the images
     // themselves never go to this call.
     const sanitizedSlides = slides.map((slide) => ({
-      name: slide.name,
+      // The file name becomes part of the [S#] source label, so it is outbound
+      // prompt text too, and file names often carry customer or program names.
+      name: sanitize(slide.name),
       text: slide.status === "done" ? sanitize(slide.text || "") : "",
     }));
 
