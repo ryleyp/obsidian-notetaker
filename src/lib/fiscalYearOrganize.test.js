@@ -55,6 +55,23 @@ describe("planFiscalYearMoves", () => {
     expect(moves).toHaveLength(1);
     expect(moves[0].to).toBe("1. Acme/FY2026/2026-09-08 - Acme Sync.md");
   });
+
+  it("reports every path with forward slashes when given Windows-style paths", () => {
+    const { moves, skipped } = plan([
+      "1. Acme\\Programs\\2026-09-08 - Acme Sync.md",
+      "1. Acme\\Contact Notes.md",
+      "1. Acme\\FY2026\\2026-08-01 - Already.md",
+    ]);
+
+    expect(moves).toEqual([expect.objectContaining({
+      from: "1. Acme/Programs/2026-09-08 - Acme Sync.md",
+      to: "1. Acme/Programs/FY2026/2026-09-08 - Acme Sync.md",
+    })]);
+    expect(skipped).toEqual([
+      { relativePath: "1. Acme/Contact Notes.md", reason: "undated" },
+      { relativePath: "1. Acme/FY2026/2026-08-01 - Already.md", reason: "already-filed" },
+    ]);
+  });
 });
 
 describe("isRollupName", () => {

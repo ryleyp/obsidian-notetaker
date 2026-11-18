@@ -24,8 +24,12 @@ export function planFiscalYearMoves(relativePaths = [], {
   const moves = [];
   const skipped = [];
 
-  for (const relativePath of relativePaths) {
-    const segments = String(relativePath || "").split(SEPARATOR).filter(Boolean);
+  for (const rawPath of relativePaths) {
+    const segments = String(rawPath || "").split(SEPARATOR).filter(Boolean);
+    // Every path in the plan uses forward slashes, whatever the caller passed.
+    // On Windows the caller passes backslashes, and echoing those back while
+    // building "to" with forward slashes put two separators in one plan.
+    const relativePath = segments.join("/");
     const filename = segments[segments.length - 1] || "";
     if (!filename.toLowerCase().endsWith(".md")) continue;
 

@@ -83,6 +83,33 @@ describe("/api/organize-fy", () => {
     expect(exists("1. Acme/FY2026")).toBe(false);
   });
 
+  it("records the run with forward slashes, whatever the host's separator is", async () => {
+    makeVault({ "1. Acme/2026-09-08 - Acme Sync.md": "# Sync" });
+    const preview = await (await post({ mode: "preview" })).json();
+    const applied = await (await post({ mode: "apply", moves: preview.moves })).json();
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(vault, ".notetaker", "organize-fy", applied.manifestId), "utf-8"));
+    expect(manifest.moves).toEqual([{
+      from: "1. Acme/2026-09-08 - Acme Sync.md",
+      to: "1. Acme/FY2026/2026-09-08 - Acme Sync.md",
+    }]);
+  });
+
+  it("undoes a run recorded on Windows with backslash paths", async () => {
+    makeVault({ "1. Acme/FY2026/2026-09-08 - Acme Sync.md": "# Sync" });
+    const dir = path.join(vault, ".notetaker", "organize-fy");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "2026-10-01T00-00-00-000Z.json"), JSON.stringify({
+      moves: [{ from: "1. Acme\\2026-09-08 - Acme Sync.md", to: "1. Acme\\FY2026\\2026-09-08 - Acme Sync.md" }],
+    }), "utf-8");
+
+    const undone = await (await post({ mode: "undo" })).json();
+
+    expect(undone).toMatchObject({ restored: 1, skipped: 0 });
+    expect(exists("1. Acme/2026-09-08 - Acme Sync.md")).toBe(true);
+    expect(exists("1. Acme/FY2026")).toBe(false);
+  });
+
   it("files beside a same-named note instead of overwriting it", async () => {
     makeVault({
       "1. Acme/2026-09-08 - Acme Sync.md": "# newer",

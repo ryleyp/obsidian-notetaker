@@ -23,6 +23,19 @@ function manifestDir(resolvedVault) {
   return resolveInsideDirectory(resolvedVault, MANIFEST_DIR, "Manifest folder");
 }
 
+// Manifest paths are stored with forward slashes so a run filed on Windows
+// can be undone from a Mac sharing the same synced vault, and the reverse.
+const toVaultPath = (relativePath) => relativePath.split(path.sep).join("/");
+
+// A manifest written on Windows by an earlier version carries backslashes,
+// which are separators only on Windows. Read as written first; fall back to
+// treating them as separators when that names nothing.
+function resolveManifestPath(resolvedVault, relativePath, label) {
+  const asWritten = resolveInsideDirectory(resolvedVault, relativePath, label);
+  if (fs.existsSync(asWritten) || !String(relativePath).includes("\\")) return asWritten;
+  return resolveInsideDirectory(resolvedVault, String(relativePath).replace(/\\/g, "/"), label);
+}
+
 function latestManifest(resolvedVault) {
   const dir = manifestDir(resolvedVault);
   if (!fs.existsSync(dir)) return null;
@@ -77,8 +90,8 @@ export async function POST(request) {
       let restored = 0;
       let skipped = 0;
       for (const move of [...(manifest.data.moves || [])].reverse()) {
-        const from = resolveInsideDirectory(resolvedVault, move.to, "Note");
-        const to = resolveInsideDirectory(resolvedVault, move.from, "Note");
+        const from = resolveManifestPath(resolvedVault, move.to, "Note");
+        const to = resolveManifestPath(resolvedVault, move.from, "Note");
         if (!fs.existsSync(from) || fs.existsSync(to)) {
           skipped += 1;
           continue;
@@ -122,7 +135,10 @@ export async function POST(request) {
       const to = uniqueFilePath(wantedTo);
       fs.renameSync(from, to);
       movedCount += 1;
-      applied.push({ from: path.relative(resolvedVault, from), to: path.relative(resolvedVault, to) });
+      applied.push({
+        from: toVaultPath(path.relative(resolvedVault, from)),
+        to: toVaultPath(path.relative(resolvedVault, to)),
+      });
     }
 
     let manifestId = null;
