@@ -4,13 +4,23 @@ import { useState } from "react";
 
 // The types a remembered "not sensitive" choice applies to. Everything else is
 // a deterministic identifier and is asked about every time.
-const GUESSED_TYPES = new Set(["person", "org", "location"]);
+const GUESSED_TYPES = new Set(["person", "org", "location", "name"]);
+
+// Certain identifiers first, then the typed guesses, then capitalized terms
+// the local pass could not classify. The last group is where an ordinary
+// word is most likely, so it is the group worth reading for rows to uncheck.
+const TYPE_ORDER = ["email", "phone", "id", "secret", "url", "ip", "address", "person", "org", "location", "name"];
+const typeRank = (type) => {
+  const rank = TYPE_ORDER.indexOf(type);
+  return rank === -1 ? TYPE_ORDER.length : rank;
+};
 
 const plural = (count, word) => `${count} ${word}${count !== 1 ? "s" : ""}`;
 
 export default function SanitizeReview({ detected, savedReplacements, remembered, onConfirm, onSkip }) {
-  const [items, setItems] = useState(
-    detected.map((d) => ({ ...d, enabled: true, saveToList: false, restored: d.text }))
+  const [items, setItems] = useState(() => detected
+    .map((d, order) => ({ ...d, order, enabled: true, saveToList: false, restored: d.text }))
+    .sort((a, b) => typeRank(a.type) - typeRank(b.type) || a.order - b.order)
   );
   // On by default: the point of the card is to be asked once per term.
   const [remember, setRemember] = useState(true);
@@ -29,6 +39,7 @@ export default function SanitizeReview({ detected, savedReplacements, remembered
   const autoAnonymized = remembered?.anonymized || 0;
   const autoIgnored = remembered?.ignored || 0;
   const uncheckedGuesses = items.filter((i) => !i.enabled && GUESSED_TYPES.has(i.type)).length;
+  const unclassified = items.filter((i) => i.type === "name").length;
 
   return (
     <div className="card p-6">
@@ -39,6 +50,12 @@ export default function SanitizeReview({ detected, savedReplacements, remembered
             Found {detected.length} new term{detected.length !== 1 ? "s" : ""} to anonymize.
             Edit "Restored as" to fix spellings — that's what appears in your final notes.
           </p>
+          {unclassified > 0 && (
+            <p className="text-xs text-gray-500 mt-1.5" data-testid="name-hint">
+              {plural(unclassified, "row")} marked <span className="font-medium">name</span> at the end {unclassified !== 1 ? "are" : "is a"} capitalized
+              {unclassified !== 1 ? " terms" : " term"} that may be a person, company, or site. Uncheck any that are ordinary words.
+            </p>
+          )}
           {(autoAnonymized > 0 || autoIgnored > 0) && (
             <p className="text-xs text-gray-500 mt-1.5" data-testid="remembered-summary">
               Already decided, so not shown:{" "}

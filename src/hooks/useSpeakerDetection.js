@@ -4,6 +4,7 @@ import { useState } from "react";
 import { applyCorrections, applyReplacements, assignAliases, reverseReplacements } from "@/lib/sanitize";
 import { aliasesFromReplacements, knownPrivacyEntities, privacyTermsFromReplacements } from "@/lib/privacy";
 import { apiFetch } from "@/lib/apiClient";
+import { applyRememberedDecisions, protectedTextSet } from "@/lib/privacyDecisions";
 
 // Best-effort speaker segmentation for raw dictation, which merges every
 // speaker into one stream. Known glossary replacements are applied before the
@@ -34,7 +35,13 @@ export function useSpeakerDetection({ settings, onConfirm }) {
       });
       const scanResult = await scan.json();
       if (!scan.ok) throw new Error(scanResult.error || "Local privacy scan failed");
-      const transient = assignAliases(scanResult.entities || [], savedReplacements)
+      // Everything detected is anonymized for this call except terms already
+      // marked "not sensitive" in Privacy Review: turning ordinary words into
+      // aliases would only strip the conversational cues this pass reads.
+      const { review, auto } = applyRememberedDecisions(scanResult.entities || [], settings.privacyDecisions, {
+        protectedTexts: protectedTextSet(knownPrivacyEntities(settings)),
+      });
+      const transient = assignAliases([...auto, ...review], savedReplacements)
         .map((item) => ({ original: item.text, alias: item.alias, restored: item.text }));
       const replacements = [...savedReplacements, ...transient];
       const sanitized = applyReplacements(corrected, replacements);

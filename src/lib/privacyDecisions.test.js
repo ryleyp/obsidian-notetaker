@@ -120,6 +120,16 @@ describe("recordPrivacyDecisions", () => {
     ]);
   });
 
+  it("remembers an unchecked capitalized term the local pass could not classify", () => {
+    expect(recordPrivacyDecisions([], [
+      { text: "Rollout Sync", type: "name", enabled: false },
+      { text: "Priya Natarajan", type: "name", enabled: true },
+    ])).toEqual([
+      { text: "Rollout Sync", type: "name", decision: "ignore" },
+      { text: "Priya Natarajan", type: "name", decision: "anonymize" },
+    ]);
+  });
+
   it("does not remember an unchecked email, phone number, or other deterministic match", () => {
     expect(recordPrivacyDecisions([], [
       { text: "dana@acme.example", type: "email", enabled: false },

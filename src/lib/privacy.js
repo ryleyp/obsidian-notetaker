@@ -195,7 +195,9 @@ export function mergeSensitiveEntities(...groups) {
     const text = String(entity?.text || "").trim();
     if (!text) continue;
     const key = text.toLowerCase();
-    const allowedTypes = new Set(["person", "email", "org", "location", "phone", "address", "ip", "url", "secret", "id"]);
+    // "name" is a capitalized term the local proper-noun pass could not
+    // classify further: a person, company, site, or program name.
+    const allowedTypes = new Set(["person", "email", "org", "location", "name", "phone", "address", "ip", "url", "secret", "id"]);
     const normalized = {
       ...entity,
       text,

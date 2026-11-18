@@ -6,6 +6,7 @@ import NotesPreview from "@/components/NotesPreview";
 import { calcCost, contextLimit, estimateUsage } from "@/lib/models";
 import { detectAccount } from "@/lib/accounts";
 import { aliasesFromReplacements, knownPrivacyEntities } from "@/lib/privacy";
+import { applyRememberedDecisions, protectedTextSet } from "@/lib/privacyDecisions";
 import {
   applyCorrections,
   applyReplacements,
@@ -260,7 +261,12 @@ export default function StakeholderMap({ settings, onSettingsClick, onSettingsPa
           if (!res.ok) throw new Error("Name scan failed");
           const data = await res.json();
           if (data.skipped && settings.aiPrivacyScan) scanSkipped = true;
-          newEntities = dedupeEntities(data.entities || []);
+          // Terms marked "not sensitive" in Privacy Review are not offered
+          // again here; everything else is listed exactly as before.
+          const decided = applyRememberedDecisions(data.entities || [], settings.privacyDecisions, {
+            protectedTexts: protectedTextSet(knownPrivacyEntities(settings)),
+          });
+          newEntities = dedupeEntities([...decided.auto, ...decided.review]);
         } catch {
           scanSkipped = true;
         }

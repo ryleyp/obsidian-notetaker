@@ -19,7 +19,7 @@ export const IGNORE = "ignore";
 // numbers, IDs, secrets, addresses, URLs, and IPs are deterministic matches
 // that the outbound boundary blocks regardless, so remembering "ignore" for
 // one would only turn a review row into a blocked request.
-const IGNORABLE_TYPES = new Set(["person", "org", "location"]);
+const IGNORABLE_TYPES = new Set(["person", "org", "location", "name"]);
 
 const keyOf = (value) => String(value ?? "").trim().toLowerCase();
 

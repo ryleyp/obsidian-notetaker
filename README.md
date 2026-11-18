@@ -258,7 +258,17 @@ Common sensitive values are detected locally and shown in Privacy Review before 
 content is sent to a model, even when the optional AI second pass is disabled. This
 includes email addresses, phone numbers, IDs, secrets, addresses, URLs, transcript
 speaker names, locations, organizations, and configured account/owner names. A local
-NER engine supplements the deterministic detectors. New terms use opaque random
+NER engine supplements the deterministic detectors. It also runs a proper-noun pass for names
+its word list does not know: a capitalized word that is not at the start of a sentence is
+treated as a possible person, company, or site name, neighbouring ones are joined ("Halvorsen
+Dynamics", "Wright-Patterson"), and a part of a flagged name is flagged on its own when it
+appears alone. These rows carry the type `name` and sit at the end of the card. The pass
+over-collects on purpose, so expect some ordinary capitalized words there; unchecking one with
+**Remember these choices** ticked means it is not offered again. Product, tool, and program
+names that the app's own prompts already state (LabVIEW, Teams, Enterprise Agreement, and
+similar) are left readable. Two limits remain: an all-capitals acronym is not judged, so add a
+sensitive one as an account alias or Privacy Replacement, and a name that only ever appears as
+the first word of a sentence, and is not a common first name, can still be missed. New terms use opaque random
 `PRIVATE_…` aliases rather than revealing whether a value is a person or company.
 Immediately before either provider receives a request, a shared fail-closed boundary
 checks the completely assembled prompt for unresolved identifiers and saved originals.
