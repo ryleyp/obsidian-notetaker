@@ -267,6 +267,19 @@ After
 the email note is saved, its generated SFDC Activity Entry is also added to the weekly
 SFDC Activity Report.
 
+Privacy Review asks about each term once. Confirming a card with **Remember these choices**
+ticked (the default) stores the decision for every row: a checked term is anonymized
+automatically on later runs, and an unchecked name, company, or place is treated as not
+sensitive and left as written. The next card then shows only terms it has never asked about,
+and when there are none it does not appear at all; a one-line note says how many remembered
+terms were anonymized. What is remembered is the decision, not an alias, so each run still
+mints a new random `PRIVATE_…` token and no pseudonym repeats across requests. Emails, phone
+numbers, IDs, secrets, addresses, and URLs are asked about every time, as are your configured
+account and owner names if you uncheck them. Decisions live in your browser and in
+`notetaker-glossary.json`, are never sent to a model, and can be removed one at a time under
+**Remembered Privacy Review Choices** in Settings. The meeting, email, Teams, and status-update
+reviews share the list; the Mapping tab has its own review and does not use it.
+
 Speaker detection runs through the same local pseudonymization step. Slide pixels cannot
 be pseudonymized reliably, so slide reading remains blocked until the user explicitly
 confirms that the images were reviewed and cropped.

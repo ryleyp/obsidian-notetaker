@@ -6,7 +6,8 @@ import SanitizeReview from "@/components/SanitizeReview";
 import { apiFetch } from "@/lib/apiClient";
 import { calcCost, FAST_MODEL, formatCost } from "@/lib/models";
 import { aliasesFromReplacements, knownPrivacyEntities } from "@/lib/privacy";
-import { applyCorrections, applyReplacements, assignAliases, correctionFromRestoredItem } from "@/lib/sanitize";
+import { applyCorrections, applyReplacements, correctionFromRestoredItem } from "@/lib/sanitize";
+import { planPrivacyReview, recordPrivacyDecisions } from "@/lib/privacyDecisions";
 import { shareableStatusText, STATUS_WINDOW_LABEL } from "@/lib/statusUpdate";
 
 // The short status update the CSM sends upward: a status paragraph, a risk
@@ -38,6 +39,10 @@ export default function StatusUpdatePanel({
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
   const [pendingReview, setPendingReview] = useState(null);
+  // Replacements for terms decided in an earlier review, for this run only,
+  // and the counts shown on the card.
+  const [pendingAuto, setPendingAuto] = useState([]);
+  const [remembered, setRemembered] = useState(null);
 
   const today = new Date().toISOString().slice(0, 10);
   const shareable = result ? shareableStatusText(result.update) : "";
@@ -137,18 +142,32 @@ export default function StatusUpdatePanel({
       return;
     }
 
-    if (detected.length > 0) {
+    // Terms decided in an earlier review are applied without asking again.
+    const plan = planPrivacyReview(detected, {
+      decisions: settings.privacyDecisions,
+      savedReplacements,
+      knownEntities: knownPrivacyEntities(settings),
+    });
+    setPendingAuto(plan.autoReplacements);
+    setRemembered(plan.remembered);
+
+    if (plan.review.length > 0) {
       if (truncated) setNotice("The sensitivity scan found more terms than it could list at once. Review these, then run it again to catch the rest.");
-      setPendingReview(assignAliases(detected, savedReplacements));
+      setPendingReview(plan.review);
       return;
     }
-    await generate(savedReplacements);
+    await generate([...savedReplacements, ...plan.autoReplacements]);
   }
 
-  function confirmSanitize(confirmed, toSave) {
+  function confirmSanitize(confirmed, toSave, review = {}) {
     const savedReplacements = settings.replacements || [];
-    if (toSave.length && onSettingsPatch) {
+    const reviewed = review?.remember ? review.reviewed || [] : [];
+    const decisions = reviewed.length
+      ? recordPrivacyDecisions(settings.privacyDecisions, reviewed, { knownEntities: knownPrivacyEntities(settings) })
+      : null;
+    if ((toSave.length || decisions) && onSettingsPatch) {
       onSettingsPatch({
+        ...(decisions ? { privacyDecisions: decisions } : {}),
         replacements: [
           ...savedReplacements,
           ...toSave.map((item) => ({ original: item.text, alias: item.alias, restored: item.restored || item.text, type: item.type })),
@@ -158,6 +177,7 @@ export default function StatusUpdatePanel({
     }
     const forThisRun = [
       ...savedReplacements,
+      ...pendingAuto,
       ...confirmed.map((item) => ({ original: item.text, alias: item.alias, restored: item.restored || item.text, type: item.type })),
     ];
     setPendingReview(null);
@@ -176,8 +196,10 @@ export default function StatusUpdatePanel({
       <SanitizeReview
         detected={pendingReview}
         savedReplacements={settings.replacements || []}
+        remembered={remembered}
         onConfirm={confirmSanitize}
-        onSkip={() => { setPendingReview(null); generate(settings.replacements || []); }}
+        // Bypass covers the terms on the card only; remembered ones stay anonymized.
+        onSkip={() => { setPendingReview(null); generate([...(settings.replacements || []), ...pendingAuto]); }}
       />
     );
   }

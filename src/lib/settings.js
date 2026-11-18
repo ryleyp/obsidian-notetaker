@@ -1,4 +1,5 @@
 import { mergeCorrections } from "@/lib/sanitize";
+import { decisionsFromConfig } from "@/lib/privacyDecisions";
 
 export function mergeReplacements(replacements = [], additions = []) {
   const merged = [...replacements];
@@ -42,5 +43,10 @@ export function mergeFileConfigIntoSettings(settings, config) {
     ownerNames: config.ownerNames?.length ? config.ownerNames : settings.ownerNames,
     ownerPronouns: config.ownerPronouns || settings.ownerPronouns,
     goals: config.goals?.length ? config.goals : settings.goals,
+    // Unlike the lists above, the file's decision list replaces the browser's
+    // rather than merging: see decisionsFromConfig.
+    ...(Array.isArray(config.privacyDecisions) || settings.privacyDecisions
+      ? { privacyDecisions: decisionsFromConfig(settings.privacyDecisions, config.privacyDecisions) }
+      : {}),
   };
 }

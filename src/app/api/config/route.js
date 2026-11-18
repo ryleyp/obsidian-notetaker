@@ -49,6 +49,7 @@ export async function GET(request) {
       goals: cfg?.goals ?? undefined,
       corrections: cfg?.corrections ?? undefined,
       replacements: gls?.replacements ?? cfg?.replacements ?? undefined,
+      privacyDecisions: Array.isArray(gls?.privacyDecisions) ? gls.privacyDecisions : undefined,
     },
   });
 }
@@ -76,10 +77,19 @@ export async function POST(request) {
       });
     }
 
-    // Glossary file — replacements with real names, keep separate
+    // Glossary file — replacements and remembered Privacy Review decisions,
+    // both of which hold real names, kept apart from the config file. Each
+    // key is written only when the caller sent it, so a save that carries
+    // one never erases the other.
     const replacements = glossary?.replacements ?? config?.replacements;
-    if (replacements !== undefined) {
-      writeJSON(path.join(base, GLOSSARY_FILE), { replacements });
+    const privacyDecisions = glossary?.privacyDecisions;
+    if (replacements !== undefined || privacyDecisions !== undefined) {
+      const existing = readJSON(path.join(base, GLOSSARY_FILE)) || {};
+      writeJSON(path.join(base, GLOSSARY_FILE), {
+        ...existing,
+        ...(replacements !== undefined && { replacements }),
+        ...(Array.isArray(privacyDecisions) && { privacyDecisions }),
+      });
     }
 
     return NextResponse.json({ ok: true });

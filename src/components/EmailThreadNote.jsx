@@ -7,10 +7,11 @@ import FolderSelector from "@/components/FolderSelector";
 import ChatScreenshotUpload from "@/components/ChatScreenshotUpload";
 import ModelPicker from "@/components/ModelPicker";
 import SanitizeReview from "@/components/SanitizeReview";
+import RememberedPrivacyNote from "@/components/RememberedPrivacyNote";
+import { planPrivacyReview, recordPrivacyDecisions } from "@/lib/privacyDecisions";
 import {
   applyCorrections,
   applyReplacements,
-  assignAliases,
   correctionFromRestoredItem,
   mergeCorrections,
   reverseReplacements,
@@ -72,6 +73,10 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   // the default model applies here the same as on every other tab.
   const [model, setModel] = useState(settings.model || FAST_MODEL);
   const [pendingReview, setPendingReview] = useState(null);
+  // Replacements for terms decided in an earlier review, for this run only,
+  // and the counts shown beside them.
+  const [pendingAuto, setPendingAuto] = useState([]);
+  const [remembered, setRemembered] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -229,6 +234,8 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
 
     setProcessing(true);
     setError(null);
+    setPendingAuto([]);
+    setRemembered(null);
     try {
       let newEntities = extractEmailEntities(scanText);
       let scanSkipped = false;
@@ -267,27 +274,40 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         return;
       }
 
-      if (newEntities.length > 0) {
+      // Terms decided in an earlier review are applied without asking again.
+      const plan = planPrivacyReview(newEntities, {
+        decisions: settings.privacyDecisions,
+        savedReplacements,
+        knownEntities: knownPrivacyEntities(settings),
+      });
+      setPendingAuto(plan.autoReplacements);
+      setRemembered(plan.remembered);
+
+      if (plan.review.length > 0) {
         if (truncated) {
           setError("The sensitivity scan found more terms than it could list at once. Review these, then run it again to catch the rest.");
         }
-        setPendingReview(assignAliases(newEntities, savedReplacements));
+        setPendingReview(plan.review);
         return;
       }
 
       // An empty result means "nothing sensitive found" only when the scan
       // actually ran. Anything else has to say so.
-      await createAndSave(savedReplacements);
+      await createAndSave([...savedReplacements, ...plan.autoReplacements]);
     } finally {
       setProcessing(false);
     }
   }
 
-  async function handleReviewConfirm(confirmed, toSave) {
+  async function handleReviewConfirm(confirmed, toSave, review = {}) {
     let updatedSettings = settings;
     const correctionsToSave = toSave.map(correctionFromRestoredItem).filter(Boolean);
+    const reviewed = review?.remember ? review.reviewed || [] : [];
+    const decisions = reviewed.length
+      ? recordPrivacyDecisions(settings.privacyDecisions, reviewed, { knownEntities: knownPrivacyEntities(settings) })
+      : null;
 
-    if (toSave.length > 0 || correctionsToSave.length > 0) {
+    if (toSave.length > 0 || correctionsToSave.length > 0 || decisions) {
       const newReplacements = [
         ...(settings.replacements || []),
         ...toSave.map((r) => ({ original: r.text, alias: r.alias, restored: r.restored || r.text, type: r.type })),
@@ -298,6 +318,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       updatedSettings = onSettingsPatch({
         replacements: newReplacements,
         corrections: newCorrections,
+        ...(decisions ? { privacyDecisions: decisions } : {}),
       });
     }
 
@@ -305,6 +326,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
 
     const replacements = [
       ...(updatedSettings.replacements || []),
+      ...pendingAuto,
       ...confirmed
         .filter((c) => !(updatedSettings.replacements || []).some((r) => r.original === c.text))
         .map((c) => ({ original: c.text, alias: c.alias, restored: c.restored || c.text, type: c.type })),
@@ -322,7 +344,8 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setPendingReview(null);
     setProcessing(true);
     try {
-      await createAndSave(settings.replacements || []);
+      // Bypass covers the terms on the card only; remembered ones stay anonymized.
+      await createAndSave([...(settings.replacements || []), ...pendingAuto]);
     } finally {
       setProcessing(false);
     }
@@ -752,10 +775,13 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
         <SanitizeReview
           detected={pendingReview}
           savedReplacements={settings.replacements || []}
+          remembered={remembered}
           onConfirm={handleReviewConfirm}
           onSkip={handleReviewSkip}
         />
       )}
+
+      <RememberedPrivacyNote remembered={!pendingReview && !processing ? remembered : null} />
 
       {error && (
         <div className="card p-4 border-l-4 border-l-red-400">

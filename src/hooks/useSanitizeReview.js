@@ -4,7 +4,6 @@ import { useState } from "react";
 import {
   applyCorrections,
   applyReplacements,
-  assignAliases,
   correctionFromRestoredItem,
   mergeCorrections,
 } from "@/lib/sanitize";
@@ -12,6 +11,7 @@ import { aliasesFromReplacements, knownPrivacyEntities } from "@/lib/privacy";
 import { apiFetch } from "@/lib/apiClient";
 import { detectAccount } from "@/lib/accounts";
 import { buildMeetingScanText } from "@/lib/meetingScan";
+import { planPrivacyReview, recordPrivacyDecisions } from "@/lib/privacyDecisions";
 
 // The pseudonymization gate that every outbound generation passes through.
 //
@@ -19,10 +19,20 @@ import { buildMeetingScanText } from "@/lib/meetingScan";
 // already-pseudonymized text, ask Claude for entities it still recognizes,
 // then either show the review card or (when nothing new was found) run the
 // pending action straight away.
+//
+// Terms decided in an earlier review are not asked about again: one remembered
+// as "anonymize" is replaced for this run under a fresh random alias, one
+// remembered as "not sensitive" is left alone, and only terms never seen
+// before reach the card.
 export function useSanitizeReview({ settings, model, applySettingsPatch, actions, onScanSkipped }) {
   const [sanitizing, setSanitizing] = useState(false);
   const [pendingReview, setPendingReview] = useState(null); // null | detected[]
   const [pendingAction, setPendingAction] = useState("generate");
+  // Replacements for remembered terms, applied to this run only.
+  const [pendingAuto, setPendingAuto] = useState([]);
+  // { anonymized, ignored } counts for the last scan, shown to the CSM so a
+  // run that skipped the card still says what was done on their behalf.
+  const [remembered, setRemembered] = useState(null);
 
   function runAction(action, replacements) {
     return action === "generate"
@@ -35,6 +45,8 @@ export function useSanitizeReview({ settings, model, applySettingsPatch, actions
     const corrections = settings.corrections || [];
     setSanitizing(true);
     setPendingAction(action);
+    setPendingAuto([]);
+    setRemembered(null);
 
     const selectedAccount = detectAccount(selectedFolder, settings.accounts);
     // Saving a transcript sends nothing to a model; only generation also sends
@@ -95,26 +107,38 @@ export function useSanitizeReview({ settings, model, applySettingsPatch, actions
       return;
     }
 
-    if (newEntities.length > 0) {
+    const plan = planPrivacyReview(newEntities, {
+      decisions: settings.privacyDecisions,
+      savedReplacements,
+      knownEntities: knownPrivacyEntities(settings),
+    });
+    setPendingAuto(plan.autoReplacements);
+    setRemembered(plan.remembered);
+
+    if (plan.review.length > 0) {
       // A cut-off answer still found real terms, but the list is partial —
       // say so rather than letting the review card imply it is the whole set.
       if (truncated) {
         onScanSkipped?.("The sensitivity scan found more terms than it could list at once. Review these, then run it again to catch the rest.");
       }
-      setPendingReview(assignAliases(newEntities, savedReplacements));
+      setPendingReview(plan.review);
       return;
     }
 
     // An empty result means "nothing sensitive found" only when the scan
     // actually ran. Anything else has to say so.
-    await runAction(action, savedReplacements);
+    await runAction(action, [...savedReplacements, ...plan.autoReplacements]);
   }
 
-  async function confirm(confirmed, toSave) {
+  async function confirm(confirmed, toSave, review = {}) {
     let current = settings;
     const correctionsToSave = toSave.map(correctionFromRestoredItem).filter(Boolean);
+    const reviewed = review?.remember ? review.reviewed || [] : [];
+    const decisions = reviewed.length
+      ? recordPrivacyDecisions(settings.privacyDecisions, reviewed, { knownEntities: knownPrivacyEntities(settings) })
+      : null;
 
-    if (toSave.length > 0 || correctionsToSave.length > 0) {
+    if (toSave.length > 0 || correctionsToSave.length > 0 || decisions) {
       const patch = {
         replacements: [
           ...(settings.replacements || []),
@@ -123,6 +147,7 @@ export function useSanitizeReview({ settings, model, applySettingsPatch, actions
         corrections: correctionsToSave.length
           ? mergeCorrections(settings.corrections || [], correctionsToSave)
           : settings.corrections || [],
+        ...(decisions ? { privacyDecisions: decisions } : {}),
       };
       current = applySettingsPatch(patch) || { ...settings, ...patch };
     }
@@ -131,6 +156,7 @@ export function useSanitizeReview({ settings, model, applySettingsPatch, actions
 
     const all = [
       ...(current.replacements || []),
+      ...pendingAuto,
       ...confirmed
         .filter((c) => !(current.replacements || []).some((r) => r.original === c.text))
         .map((c) => ({ original: c.text, alias: c.alias, restored: c.restored || c.text, type: c.type })),
@@ -139,14 +165,18 @@ export function useSanitizeReview({ settings, model, applySettingsPatch, actions
     await runAction(pendingAction, all);
   }
 
+  // Bypass covers the terms on the card only. Terms already remembered as
+  // "anonymize" were never offered for bypass, so they stay anonymized.
   function skip() {
     setPendingReview(null);
-    return runAction(pendingAction, settings.replacements || []);
+    return runAction(pendingAction, [...(settings.replacements || []), ...pendingAuto]);
   }
 
   function reset() {
     setPendingReview(null);
+    setPendingAuto([]);
+    setRemembered(null);
   }
 
-  return { sanitizing, pendingReview, pendingAction, run, confirm, skip, reset };
+  return { sanitizing, pendingReview, pendingAction, remembered, run, confirm, skip, reset };
 }

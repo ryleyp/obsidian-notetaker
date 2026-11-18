@@ -2,10 +2,18 @@
 
 import { useState } from "react";
 
-export default function SanitizeReview({ detected, savedReplacements, onConfirm, onSkip }) {
+// The types a remembered "not sensitive" choice applies to. Everything else is
+// a deterministic identifier and is asked about every time.
+const GUESSED_TYPES = new Set(["person", "org", "location"]);
+
+const plural = (count, word) => `${count} ${word}${count !== 1 ? "s" : ""}`;
+
+export default function SanitizeReview({ detected, savedReplacements, remembered, onConfirm, onSkip }) {
   const [items, setItems] = useState(
     detected.map((d) => ({ ...d, enabled: true, saveToList: false, restored: d.text }))
   );
+  // On by default: the point of the card is to be asked once per term.
+  const [remember, setRemember] = useState(true);
 
   function update(i, field, value) {
     setItems((prev) => prev.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
@@ -14,10 +22,13 @@ export default function SanitizeReview({ detected, savedReplacements, onConfirm,
   function handleConfirm() {
     const confirmed = items.filter((i) => i.enabled);
     const toSave = items.filter((i) => i.enabled && i.saveToList);
-    onConfirm(confirmed, toSave);
+    onConfirm(confirmed, toSave, { remember, reviewed: items });
   }
 
   const activeCount = items.filter((i) => i.enabled).length;
+  const autoAnonymized = remembered?.anonymized || 0;
+  const autoIgnored = remembered?.ignored || 0;
+  const uncheckedGuesses = items.filter((i) => !i.enabled && GUESSED_TYPES.has(i.type)).length;
 
   return (
     <div className="card p-6">
@@ -25,9 +36,18 @@ export default function SanitizeReview({ detected, savedReplacements, onConfirm,
         <div>
           <h3 className="text-base font-semibold text-gray-900">Privacy Review</h3>
           <p className="text-sm text-gray-500 mt-0.5">
-            Found {detected.length} term{detected.length !== 1 ? "s" : ""} to anonymize.
+            Found {detected.length} new term{detected.length !== 1 ? "s" : ""} to anonymize.
             Edit "Restored as" to fix spellings — that's what appears in your final notes.
           </p>
+          {(autoAnonymized > 0 || autoIgnored > 0) && (
+            <p className="text-xs text-gray-500 mt-1.5" data-testid="remembered-summary">
+              Already decided, so not shown:{" "}
+              {[
+                autoAnonymized > 0 ? `${plural(autoAnonymized, "term")} anonymized automatically` : null,
+                autoIgnored > 0 ? `${plural(autoIgnored, "term")} you marked not sensitive left as written` : null,
+              ].filter(Boolean).join(", ")}.
+            </p>
+          )}
         </div>
         <button
           onClick={() => {
@@ -59,7 +79,7 @@ export default function SanitizeReview({ detected, savedReplacements, onConfirm,
             <span>Detected</span>
             <span>Alias (sent to Claude)</span>
             <span>Restored as</span>
-            <span>Save</span>
+            <span title="Always use this exact alias. Added to Privacy Replacements in Settings.">Fixed alias</span>
           </div>
           {items.map((item, i) => (
             <div
@@ -103,7 +123,7 @@ export default function SanitizeReview({ detected, savedReplacements, onConfirm,
                 checked={item.saveToList}
                 onChange={() => update(i, "saveToList", !item.saveToList)}
                 disabled={!item.enabled}
-                title="Save to permanent list"
+                title="Always use this exact alias. Added to Privacy Replacements in Settings."
                 className="w-4 h-4 rounded accent-obsidian-600 disabled:opacity-40"
               />
             </div>
@@ -112,6 +132,29 @@ export default function SanitizeReview({ detected, savedReplacements, onConfirm,
       ) : (
         <p className="text-sm text-gray-500 mb-5">No new terms detected beyond your saved list.</p>
       )}
+
+      <label className="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 mb-4">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 rounded accent-obsidian-600"
+          checked={remember}
+          onChange={(e) => setRemember(e.target.checked)}
+        />
+        <span>
+          <span className="block text-sm font-medium text-gray-800">Remember these choices and only ask about new terms</span>
+          <span className="block text-xs text-gray-500 mt-0.5">
+            Checked terms are anonymized automatically from now on, under a new random alias each time.
+            Unchecked names, companies, and places are treated as not sensitive and not asked about again.
+            Emails, phone numbers, and other identifiers are always asked about.
+            Choices are kept in your browser and glossary file, never sent to an AI, and can be removed in Settings.
+          </span>
+          {remember && uncheckedGuesses > 0 && (
+            <span className="block text-xs text-amber-700 mt-1" data-testid="ignore-warning">
+              {plural(uncheckedGuesses, "unchecked term")} will be sent as written on every future request.
+            </span>
+          )}
+        </span>
+      </label>
 
       <button onClick={handleConfirm} className="btn-primary w-full py-3 text-base">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

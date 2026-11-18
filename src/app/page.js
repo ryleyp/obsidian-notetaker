@@ -16,6 +16,7 @@ import GoalReview from "@/components/GoalReview";
 import HealthScore from "@/components/HealthScore";
 import StakeholderMap from "@/components/StakeholderMap";
 import SanitizeReview from "@/components/SanitizeReview";
+import RememberedPrivacyNote from "@/components/RememberedPrivacyNote";
 import SpeakerReview from "@/components/SpeakerReview";
 import ModelPicker from "@/components/ModelPicker";
 import RunModePicker from "@/components/RunModePicker";
@@ -435,10 +436,13 @@ export default function Home() {
                 <SanitizeReview
                   detected={sanitize.pendingReview}
                   savedReplacements={settings.replacements || []}
+                  remembered={sanitize.remembered}
                   onConfirm={sanitize.confirm}
                   onSkip={sanitize.skip}
                 />
               )}
+
+              <RememberedPrivacyNote remembered={!sanitize.pendingReview && !sanitize.sanitizing ? sanitize.remembered : null} />
 
               {generation.processError && (
                 <div className="card p-4 border-l-4 border-l-red-400">

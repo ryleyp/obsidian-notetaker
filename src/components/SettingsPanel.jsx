@@ -7,6 +7,7 @@ import { parseTodoistProjectId } from "@/lib/todoist";
 import { goalsToText, parseGoalsText } from "@/lib/goals";
 import { EXAMPLE_TRANSCRIPTS_PATH, EXAMPLE_VAULT_PATH } from "@/lib/hostPlatform";
 import ModelPicker from "@/components/ModelPicker";
+import { IGNORE, normalizePrivacyDecisions, removePrivacyDecision } from "@/lib/privacyDecisions";
 
 const CONFIG_VERSION = 1;
 
@@ -44,6 +45,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
     goalsText: goalsToText(settings.goals || []),
     model: settings.model || "claude-haiku-4-5",
     replacements: settings.replacements || [],
+    privacyDecisions: normalizePrivacyDecisions(settings.privacyDecisions),
     corrections: settings.corrections || [],
     // Edit aliases/keywords as comma-separated strings; split on save.
     accounts: (settings.accounts?.length ? settings.accounts : DEFAULT_ACCOUNTS).map(accountToFormRow),
@@ -346,6 +348,16 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
     setForm((f) => ({ ...f, replacements: f.replacements.filter((_, idx) => idx !== i) }));
   }
 
+  // Forgetting a choice puts the term back on the Privacy Review card the
+  // next time it is detected.
+  function forgetDecision(text) {
+    setForm((f) => ({ ...f, privacyDecisions: removePrivacyDecision(f.privacyDecisions, text) }));
+  }
+
+  function forgetDecisions(decision) {
+    setForm((f) => ({ ...f, privacyDecisions: f.privacyDecisions.filter((item) => item.decision !== decision) }));
+  }
+
   function addCorrection() {
     const find = newFind.trim();
     if (!find) return;
@@ -436,6 +448,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       fiscalYearFolders: form.fiscalYearFolders,
       model: form.model,
       replacements: form.replacements,
+      privacyDecisions: form.privacyDecisions,
       corrections: form.corrections,
       ownerNames: form.ownerNamesText.split(",").map((n) => n.trim()).filter(Boolean),
       ownerPronouns: form.ownerPronouns.trim(),
@@ -456,6 +469,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
       transcriptsPath: form.transcriptsPath.trim(),
       model: form.model,
       replacements: form.replacements,
+      privacyDecisions: form.privacyDecisions,
       corrections: form.corrections,
       accounts: serializeAccounts(),
       goals: parseGoalsText(form.goalsText),
@@ -496,6 +510,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           todoistApiToken: typeof cfg.todoistApiToken === "string" && cfg.todoistApiToken ? cfg.todoistApiToken : f.todoistApiToken,
           todoistProject: typeof cfg.todoistProject === "string" && cfg.todoistProject ? cfg.todoistProject : f.todoistProject,
           replacements: Array.isArray(cfg.replacements) ? cfg.replacements : f.replacements,
+          privacyDecisions: Array.isArray(cfg.privacyDecisions) ? normalizePrivacyDecisions(cfg.privacyDecisions) : f.privacyDecisions,
           corrections: Array.isArray(cfg.corrections) ? cfg.corrections : f.corrections,
           ownerNamesText: Array.isArray(cfg.ownerNames) ? cfg.ownerNames.join(", ") : f.ownerNamesText,
           ownerPronouns: typeof cfg.ownerPronouns === "string" ? cfg.ownerPronouns : f.ownerPronouns,
@@ -507,6 +522,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
         const counts = [
           Array.isArray(cfg.accounts) ? `${cfg.accounts.length} accounts` : null,
           Array.isArray(cfg.replacements) ? `${cfg.replacements.length} replacements` : null,
+          Array.isArray(cfg.privacyDecisions) ? `${normalizePrivacyDecisions(cfg.privacyDecisions).length} remembered privacy choices` : null,
           Array.isArray(cfg.corrections) ? `${cfg.corrections.length} corrections` : null,
         ].filter(Boolean).join(", ");
         setImportMsg({ ok: true, message: `Loaded ${counts || "config"}. Review, then click Save Settings to apply.` });
@@ -971,6 +987,66 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
               Add
             </button>
           </div>
+        </div>
+
+        <div>
+          <label className="label">Remembered Privacy Review Choices</label>
+          <p className="text-xs text-gray-500 mb-3">
+            Terms you already decided on a Privacy Review card. They are applied automatically, so the review only asks about new terms. Remove one to be asked about it again. Kept in your browser and glossary file, never sent to an AI.
+          </p>
+
+          {form.privacyDecisions.length === 0 ? (
+            <p className="text-xs text-gray-400">Nothing remembered yet. Choices are added when you confirm a Privacy Review card.</p>
+          ) : (
+            <div className="space-y-3">
+              {[
+                {
+                  decision: IGNORE,
+                  title: "Not sensitive — sent to the AI as written",
+                  open: true,
+                  chip: "bg-amber-50 text-amber-800 border-amber-200",
+                },
+                {
+                  decision: "anonymize",
+                  title: "Anonymized automatically — new random alias each run",
+                  open: false,
+                  chip: "bg-obsidian-50 text-obsidian-700 border-obsidian-200",
+                },
+              ].map((group) => {
+                const items = form.privacyDecisions.filter((item) => item.decision === group.decision);
+                if (!items.length) return null;
+                return (
+                  <details key={group.decision} open={group.open} className="rounded-lg border border-gray-200 bg-gray-50 p-3" data-testid={`privacy-decisions-${group.decision}`}>
+                    <summary className="cursor-pointer text-xs font-medium text-gray-700">
+                      {group.title} ({items.length})
+                    </summary>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {items.map((item) => (
+                        <span key={item.text} className={`inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full text-xs border ${group.chip}`}>
+                          {item.text}
+                          {item.restored ? ` → ${item.restored}` : ""}
+                          <button
+                            type="button"
+                            onClick={() => forgetDecision(item.text)}
+                            aria-label={`Forget choice for ${item.text}`}
+                            title="Forget this choice and ask again"
+                            className="opacity-60 hover:opacity-100 hover:text-red-600"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <button type="button" onClick={() => forgetDecisions(group.decision)} className="mt-2 text-xs text-red-500 hover:text-red-700">
+                      Forget all {items.length}
+                    </button>
+                  </details>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div>

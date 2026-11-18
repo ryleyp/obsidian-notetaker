@@ -61,6 +61,7 @@ Add them either way:
 | Placeholder accounts | `src/lib/accounts.js` | Yes — fictional |
 | Real accounts, aliases, keywords, agreements | `notetaker-config.json` in your transcripts folder | No |
 | Pseudonymization glossary (real people's names) | `notetaker-glossary.json` in your transcripts folder | No |
+| Remembered Privacy Review choices (real names, with "anonymize" or "not sensitive") | `privacyDecisions` in `notetaker-glossary.json`, mirrored in browser `localStorage` | No |
 | Anthropic API key | browser `sessionStorage`, or `.env.local` | No |
 | Seed copy of the real roster for a new machine | `private/notetaker-accounts.json` | No — `/private/` is gitignored |
 

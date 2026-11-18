@@ -23,6 +23,9 @@ export const EMPTY_SETTINGS = {
   // off by default because it can see residual names the local pass missed.
   aiPrivacyScan: false,
   replacements: [],
+  // Privacy Review decisions already made, so the card only asks about new
+  // terms. Stored with the glossary: it holds real names.
+  privacyDecisions: [],
   corrections: [],
   accounts: DEFAULT_ACCOUNTS,
   ownerNames: [],
@@ -63,6 +66,7 @@ export function useAppSettings({ onSettingsSaved } = {}) {
           },
           glossary: {
             replacements: s.replacements || [],
+            privacyDecisions: s.privacyDecisions || [],
           },
         }),
       }))

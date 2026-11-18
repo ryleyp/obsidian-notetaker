@@ -19,6 +19,34 @@ describe("mergeReplacements", () => {
 });
 
 describe("mergeFileConfigIntoSettings", () => {
+  it("lets the glossary file's remembered privacy choices replace the browser copy", () => {
+    const settings = {
+      replacements: [],
+      corrections: [],
+      accounts: [],
+      privacyDecisions: [
+        { text: "Monday", type: "org", decision: "ignore" },
+        { text: "Jordan", type: "location", decision: "ignore" },
+      ],
+    };
+    const fileDecisions = [{ text: "Monday", type: "org", decision: "ignore" }];
+
+    expect(mergeFileConfigIntoSettings(settings, { privacyDecisions: fileDecisions }).privacyDecisions)
+      .toEqual(fileDecisions);
+  });
+
+  it("keeps browser-saved privacy choices when the glossary file predates them", () => {
+    const settings = {
+      replacements: [],
+      corrections: [],
+      accounts: [],
+      privacyDecisions: [{ text: "Dana Whitfield", type: "person", decision: "anonymize" }],
+    };
+
+    expect(mergeFileConfigIntoSettings(settings, { corrections: [] }).privacyDecisions)
+      .toEqual(settings.privacyDecisions);
+  });
+
   it("takes the owner's names and pronouns from the config file, and keeps the local ones when it has none", () => {
     const settings = { replacements: [], corrections: [], accounts: [], ownerNames: ["Jordan"], ownerPronouns: "she/her" };
 
