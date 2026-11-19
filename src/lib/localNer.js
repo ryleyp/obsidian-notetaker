@@ -1,4 +1,5 @@
 import nlp from "compromise";
+import { isCommonEnglishWord } from "./commonWords";
 
 const PUBLIC_TERMS = new Set([
   "ni", "labview", "teststand", "systemlink", "diadem", "flexlogger", "veristand",
@@ -46,6 +47,11 @@ function collect(view, type, found) {
 //
 //   - a capitalized word that is NOT at a sentence start is a name candidate,
 //     and neighbouring candidates join into one term ("Halvorsen Dynamics");
+//   - a candidate that is an ordinary dictionary word ("the Engineering team",
+//     "our Quarterly Business Review") is not a name by itself. A stretch of
+//     candidates is flagged only when at least one word in it is not an
+//     ordinary word, and is then flagged whole, so "Dynamics" stays with
+//     "Halvorsen";
 //   - a capitalized word AT a sentence start counts only when the word list
 //     marks it as a name, or when it is unknown to the word list and leads
 //     straight into a candidate ("Priya" in "Priya Natarajan will ...");
@@ -53,13 +59,21 @@ function collect(view, type, found) {
 //     appears alone ("Priya said ..."), since whole-term replacement would
 //     otherwise leave that mention behind.
 //
-// This over-collects on purpose: a capitalized ordinary word costs one row on
-// the Privacy Review card, once, while a missed name leaves the machine.
+// Replacement ignores case, so flagging "Engineering" would also swap every
+// "engineering" in the transcript for an alias. That is why ordinary words are
+// left out: the cost is not one extra row on the card, it is the model reading
+// a transcript with its plain vocabulary removed.
+//
+// The price is a name that is also an ordinary word and that the engine's name
+// list does not know ("Stone", "Baker"). With a first name beside it the typed
+// passes above usually still catch it; mentioned alone it is not flagged.
 // ---------------------------------------------------------------------------
 
 const NAME_TAGS = new Set([
   "FirstName", "MaleName", "FemaleName", "LastName", "Person", "Honorific",
   "Place", "City", "Country", "Region", "Organization", "Company", "ProperNoun",
+  // "German", "Texans": not a name, but it says where a team or customer is.
+  "Demonym",
 ]);
 const DATE_TAGS = ["Month", "WeekDay", "Holiday"];
 // Anything that ends a sentence or opens a new unit of text: after one of
@@ -78,9 +92,13 @@ function lexiconTags(word) {
 
 const isNameInLexicon = (word) => (lexiconTags(word) || []).some((tag) => NAME_TAGS.has(tag));
 // An ordinary dictionary word with no name sense: never worth flagging alone.
+// The engine's own word list is small ("business" and "security" are missing
+// from it), so a full English word list backs it up. A word the engine marks
+// as a name stays a name whatever the dictionary says.
 const isOrdinaryWord = (word) => {
   const tags = lexiconTags(word);
-  return !!tags && !tags.some((tag) => NAME_TAGS.has(tag));
+  if (tags) return !tags.some((tag) => NAME_TAGS.has(tag));
+  return isCommonEnglishWord(word);
 };
 
 // The engine's Pronoun tag is trusted only for a word that really is one
@@ -149,10 +167,9 @@ function collectProperNouns(document, source, found) {
       // so that a later mention of either one alone is replaced too.
       if (word.includes("/")) {
         flush();
-        const startsSentence = afterBoundary || BOUNDARY.test(term.pre || "");
         for (const piece of word.split("/").map(bareWord)) {
           const titled = piece.length > 1 && /^\p{Lu}/u.test(piece) && /\p{Ll}/u.test(piece);
-          if (titled && !(startsSentence && isOrdinaryWord(piece))) add(piece);
+          if (titled && !isOrdinaryWord(piece)) add(piece);
         }
         afterBoundary = BOUNDARY.test(term.post || "");
         continue;
@@ -169,12 +186,13 @@ function collectProperNouns(document, source, found) {
       const dateWord = DATE_TAGS.some((tag) => tags.includes(tag));
 
       if (candidate && !sentenceStart && !dateWord) {
+        // An ordinary word joins the stretch but cannot justify it.
         run.push(word);
-        keep = true;
+        if (!isOrdinaryWord(word)) keep = true;
       } else if (candidate && sentenceStart && isNameInLexicon(word)) {
         run.push(word);
         keep = true;
-      } else if (candidate && sentenceStart && lexiconTags(word) === null) {
+      } else if (candidate && sentenceStart && !isOrdinaryWord(word)) {
         // Unknown word at a sentence start: kept only if a name follows it.
         run.push(word);
       } else if (candidate && dateWord && run.length) {

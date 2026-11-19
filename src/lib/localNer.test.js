@@ -108,6 +108,42 @@ describe("capitalized words that are not names", () => {
     expect(found).toEqual([]);
   });
 
+  it("does not flag a capitalized everyday word in the middle of a sentence", () => {
+    expect(guessedNames("We asked the Engineering team to Review the Budget with the Training Manager.")).toEqual([]);
+    expect(guessedNames("The Design Review moved, and the Design/Marketing teams agreed.")).toEqual([]);
+  });
+
+  it("knows everyday words the engine's own word list is missing", () => {
+    const input = "The Security group moved the Software Renewal to the Sales/Business dashboard and the Hardware Budget.";
+    expect(guessedNames(input)).toEqual([]);
+  });
+
+  it("does not let the dictionary hide a word the engine knows as a name", () => {
+    expect(texts("Then we asked Jordan about the Renewal.")).toContain("Jordan");
+  });
+
+  it("keeps an everyday word with the name it sits beside", () => {
+    const found = texts("We sent the Design Review to Halvorsen Systems and the Okonkwo Team.");
+    expect(found).toEqual(expect.arrayContaining(["Halvorsen Systems", "Okonkwo Team"]));
+    expect(found).not.toContain("Design Review");
+  });
+
+  it("does not swap an everyday word for an alias throughout the transcript", () => {
+    const input = "The Engineering team met Okonkwo. Their engineering backlog is long.";
+    const sent = anonymized(input);
+    expect(sent).toContain("Engineering team");
+    expect(sent).toContain("engineering backlog");
+    expect(sent).not.toContain("Okonkwo");
+  });
+
+  it("still flags a nationality, which says where a team or customer is", () => {
+    expect(texts("We handed the rollout to the Norwegian team.")).toContain("Norwegian");
+  });
+
+  it("still catches a surname that is an everyday word when a first name comes with it", () => {
+    expect(anonymized("We spoke with Emily Stone about the rollout.")).not.toMatch(/Emily|Stone/);
+  });
+
   it("does not judge an all-capitals acronym", () => {
     expect(guessedNames("We reviewed the roadmap for the HIL rigs and the FAE notes.")).toEqual([]);
   });

@@ -857,7 +857,7 @@ export default function SettingsPanel({ settings, onSave, onClose }) {
           <span>
             <span className="block text-sm font-medium text-gray-800">Use AI as an extra privacy-detection pass</span>
             <span className="block text-xs text-gray-500 mt-0.5">
-              Local detection always checks emails, phones, IDs, secrets, addresses, URLs, speaker names, organizations, and capitalized names anywhere in a sentence first. It does not judge all-capitals acronyms, so add a sensitive acronym as an account alias or Privacy Replacement. This optional second pass can find more names, but any leftovers may be sent to the selected AI during detection.
+              Local detection always checks emails, phones, IDs, secrets, addresses, URLs, speaker names, organizations, and capitalized names anywhere in a sentence first. It does not judge all-capitals acronyms or a lone surname that is also an everyday word (Stone, Baker), so add a sensitive one as an account alias or Privacy Replacement. This optional second pass can find more names, but any leftovers may be sent to the selected AI during detection.
             </span>
           </span>
         </label>

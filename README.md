@@ -262,13 +262,19 @@ NER engine supplements the deterministic detectors. It also runs a proper-noun p
 its word list does not know: a capitalized word that is not at the start of a sentence is
 treated as a possible person, company, or site name, neighbouring ones are joined ("Halvorsen
 Dynamics", "Wright-Patterson"), and a part of a flagged name is flagged on its own when it
-appears alone. These rows carry the type `name` and sit at the end of the card. The pass
-over-collects on purpose, so expect some ordinary capitalized words there; unchecking one with
-**Remember these choices** ticked means it is not offered again. Product, tool, and program
-names that the app's own prompts already state (LabVIEW, Teams, Enterprise Agreement, and
-similar) are left readable. Two limits remain: an all-capitals acronym is not judged, so add a
-sensitive one as an account alias or Privacy Replacement, and a name that only ever appears as
-the first word of a sentence, and is not a common first name, can still be missed. New terms use opaque random
+appears alone. These rows carry the type `name` and sit at the end of the card. A capitalized
+everyday word ("the Engineering team", "our Security Review") is not flagged by itself, because
+replacement ignores case and would swap every "engineering" in the transcript for an alias; it
+is kept only as part of a flagged name beside it ("Halvorsen Systems"). Everyday words are
+recognized from the engine's word list and a bundled English word list (the `wordlist-english`
+package, read from disk). A few capitalized ordinary words still get through, mostly newer
+jargon; unchecking one with **Remember these choices** ticked means it is not offered again.
+Product, tool, and program names that the app's own prompts already state (LabVIEW, Teams,
+Enterprise Agreement, and similar) are left readable. Three limits remain: an all-capitals acronym is not judged, so
+add a sensitive one as an account alias or Privacy Replacement; a name that only ever appears
+as the first word of a sentence, and is not a common first name, can still be missed; and a
+name that is also an everyday word ("Stone", "Baker") is caught when a first name comes with
+it but not when it is mentioned alone. New terms use opaque random
 `PRIVATE_…` aliases rather than revealing whether a value is a person or company.
 Immediately before either provider receives a request, a shared fail-closed boundary
 checks the completely assembled prompt for unresolved identifiers and saved originals.
