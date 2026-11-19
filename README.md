@@ -89,13 +89,38 @@ Notes on paths:
 1. Enter the meeting title and date
 2. Paste or upload one or two transcripts. Use **Add second transcript** or the optional extended upload for another recording of the same meeting (for example, Teams plus Voice Memos). Uploads accept `.txt` and `.md` files.
 3. Select the target folder in your vault (right panel)
-4. Optionally select **Also generate a follow-up email** and choose its audience and tone. This adds the email to the same Claude request, separates it from the meeting note, and saves it automatically under `Follow Up Emails`.
+4. Optionally select **Also generate a follow-up email** and choose its audience and tone. Set **Draft it** to *Only when the meeting calls for one* to let the meeting decide: a follow-up is written when you took on an action, owners and dates were agreed, or a question was left for you, and skipped otherwise. This adds the email to the same Claude request, separates it from the meeting note, and saves it automatically under `Follow Up Emails`.
 5. Click **Generate Meeting Notes**
 6. Review the preview, then click **Save to Obsidian**
 
 You can also draft or redraft a follow-up after generating notes and save it manually. The `Follow Up Emails` folder is created automatically, and the follow-up uses the same title as the meeting summary. Repeated saves use unique filenames instead of overwriting earlier drafts.
 
 The file is saved as `YYYY-MM-DD - Meeting Title.md` in your chosen folder.
+
+### Replies to email and Teams threads
+
+Every email and Teams note ends its summary with a **Response needed** verdict. With
+**Draft a reply when this thread needs one** on (the default, on the Email and Teams tabs), a
+"Yes" also produces a **Reply Draft** under the note:
+
+- It is written from the thread, the note just generated, your CSM context, and a digest of the
+  six most recent notes in the account folder (summary, decisions, open questions, action
+  items, and next steps), so the reply reflects what was already agreed and what is still open.
+- It follows the same customer-success practices as the meeting follow-up: answer first, name
+  owners and dates, never promise pricing, roadmap, or delivery dates the sources do not state,
+  keep internal commentary out of customer-facing text, and end with one clear next step.
+- Anything the sources do not answer is left as a bracketed placeholder such as
+  `[CSM to confirm: renewal date]`, and a **Before You Send** list names what to check.
+  **Copy Reply** copies the message only, without that list.
+- Choose the audience and tone, add an instruction, and **Redraft Reply** to revise it.
+  **Save to Obsidian** files it under `Follow Up Emails`. Nothing is ever sent for you.
+
+Email replies start as customer-facing and Teams replies as internal. When the verdict is
+"No", the card still offers **Draft Reply** in case you want one anyway.
+
+The account digest goes through Privacy Review with the thread, so the first run for an
+account may ask about names from its earlier notes. Turn the checkbox off to leave account
+notes out entirely.
 
 ### Slides shown in the meeting
 

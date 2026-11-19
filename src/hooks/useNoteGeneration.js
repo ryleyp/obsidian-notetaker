@@ -178,7 +178,7 @@ export function useNoteGeneration({ settings, model, meeting }) {
         if (payload.followUp?.enabled) {
           await saveFollowUpDraft(separated.followUpDraft);
         }
-      } else if (payload.followUp?.enabled) {
+      } else if (payload.followUp?.enabled && !payload.followUp.whenNeeded) {
         setFollowUpSaveError(`${providerLabel(requestModel)} did not return a separate follow-up draft. You can draft one from the summary screen.`);
       }
 

@@ -27,6 +27,7 @@ import { FAST_MODEL, calcCost, formatCost } from "@/lib/models";
 import { accountForEmailDomains, detectAccount, folderForAccount, matchVaultFolder } from "@/lib/accounts";
 import { closeTodoistTasks, completeTodoistTasks, previewTodoistCompletions, pushTodoistTasks, todoistConfigured, todoistLabelForNote } from "@/lib/todoist";
 import { parseResponseNeeded } from "@/lib/emailFollowUp";
+import { defaultReplyAudience, splitReplyDraft } from "@/lib/replyDraft";
 
 function todayIso() {
   const now = new Date();
@@ -100,6 +101,28 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
   const [cost, setCost] = useState(null);
   // Set when the server swapped leftover email addresses for placeholders.
   const [privacyRepairs, setPrivacyRepairs] = useState(null);
+  // The reply the CSM owes on this thread, drafted from the thread, its note,
+  // and the account's recent notes.
+  const draftReplies = settings.draftReplies !== false;
+  const [replyVerdict, setReplyVerdict] = useState(null);
+  const [replyDraft, setReplyDraft] = useState("");
+  const [replyLoading, setReplyLoading] = useState(false);
+  const [replyError, setReplyError] = useState(null);
+  const [replyCost, setReplyCost] = useState(null);
+  const [replySaving, setReplySaving] = useState(false);
+  const [replySavedPath, setReplySavedPath] = useState("");
+  const [replyCopied, setReplyCopied] = useState(false);
+  const [replyAudience, setReplyAudience] = useState(defaultReplyAudience(variant));
+  const [replyTone, setReplyTone] = useState("warm-professional");
+  const [replyInstructions, setReplyInstructions] = useState("");
+  const [replyContextSources, setReplyContextSources] = useState([]);
+  // The account digest read for this run, and the anonymized inputs the note
+  // was generated from, kept so a redraft sends exactly what was reviewed.
+  const accountContextRef = useRef({ context: "", sources: [] });
+  const replyInputsRef = useRef(null);
+  // Bumped whenever the thread changes, so a draft still in flight for the
+  // previous thread is dropped instead of landing under the new one.
+  const replyRunRef = useRef(0);
 
   const wordCount = emailThread.trim() ? emailThread.trim().split(/\s+/).length : 0;
   const canCreate = emailThread.trim() && !processing && !saving;
@@ -121,7 +144,129 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     }
   }
 
+  function clearReply() {
+    replyRunRef.current += 1;
+    replyInputsRef.current = null;
+    setReplyVerdict(null);
+    setReplyDraft("");
+    setReplyLoading(false);
+    setReplyError(null);
+    setReplyCost(null);
+    setReplySavedPath("");
+    setReplyCopied(false);
+    setReplyContextSources([]);
+  }
+
+  // The folder this thread's note is saved to: an existing thread stays where
+  // it already lives, even when a different folder is selected.
+  function targetFolder() {
+    return updateExisting && existingNote ? existingNote.folder ?? selectedFolder : selectedFolder;
+  }
+
+  // A digest of the account's recent notes for the reply. Best-effort: a reply
+  // drafted from the thread alone is still useful.
+  async function loadAccountContext() {
+    const empty = { context: "", sources: [] };
+    const folder = targetFolder();
+    if (!draftReplies || !settings.vaultPath || !folder) return empty;
+    try {
+      const params = new URLSearchParams({
+        vaultPath: settings.vaultPath,
+        folderPath: folder,
+        threadTitle: applyCorrections(threadTitle, settings.corrections || []).trim(),
+      });
+      const res = await apiFetch(`/api/account-context?${params}`);
+      const data = await res.json();
+      if (!res.ok) return empty;
+      return { context: data.context || "", sources: data.sources || [] };
+    } catch {
+      return empty;
+    }
+  }
+
+  async function requestReply({ reason, instructions = "", previousDraft = "" } = {}) {
+    const inputs = replyInputsRef.current;
+    if (!inputs || replyLoading) return;
+    const run = replyRunRef.current;
+    const { replacements } = inputs;
+    const anonymize = (text) => {
+      const corrected = applyCorrections(String(text || ""), settings.corrections || []);
+      return replacements.length ? applyReplacements(corrected, replacements) : corrected;
+    };
+
+    setReplyLoading(true);
+    setReplyError(null);
+    setReplySavedPath("");
+    setReplyCopied(false);
+    try {
+      const res = await apiFetch("/api/draft-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          thread: inputs.thread,
+          note: inputs.note,
+          context: inputs.context,
+          accountContext: inputs.accountContext,
+          threadTitle: inputs.title,
+          threadKind: variant,
+          ownerNames: inputs.ownerNames,
+          reason: reason ?? inputs.reason,
+          audience: replyAudience,
+          tone: replyTone,
+          instructions: anonymize(instructions),
+          previousDraft: anonymize(previousDraft),
+          apiKey: settings.apiKey || undefined,
+          openaiApiKey: settings.openaiApiKey || undefined,
+          model,
+          privacyTerms: privacyTermsFromReplacements(replacements),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Reply draft failed");
+      if (run !== replyRunRef.current) return;
+      setReplyDraft(replacements.length ? reverseReplacements(data.draft, replacements) : data.draft);
+      setReplyContextSources(inputs.accountContext ? inputs.accountSources : []);
+      if (data.usage) setReplyCost(calcCost(data.usage, data.model || model));
+    } catch (e) {
+      if (run === replyRunRef.current) setReplyError(e.message);
+    } finally {
+      if (run === replyRunRef.current) setReplyLoading(false);
+    }
+  }
+
+  async function saveReply() {
+    if (!replyDraft.trim() || replySaving) return;
+    setReplySaving(true);
+    setReplyError(null);
+    try {
+      const title = applyCorrections(threadTitle, settings.corrections || []).trim() || defaultTitle;
+      const res = await apiFetch("/api/save-follow-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draft: replyDraft,
+          vaultPath: settings.vaultPath,
+          meetingTitle: `${threadDate || todayIso()} - ${kindLabel} Reply - ${title}`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Reply save failed");
+      setReplySavedPath(data.savedPath);
+    } catch (e) {
+      setReplyError(e.message);
+    } finally {
+      setReplySaving(false);
+    }
+  }
+
+  function copyReply() {
+    navigator.clipboard.writeText(splitReplyDraft(replyDraft).reply)
+      .then(() => setReplyCopied(true))
+      .catch(() => {});
+  }
+
   function clearOutput() {
+    clearReply();
     setPendingReview(null);
     setNote("");
     setSavedPath("");
@@ -218,6 +363,9 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
 
   async function runSanitizeDetection() {
     const savedReplacements = settings.replacements || [];
+    // Read before the scan so the account digest is reviewed like every other
+    // input that reaches a model.
+    accountContextRef.current = await loadAccountContext();
     const scanText = buildThreadScanText({
       title: threadTitle,
       thread: emailThread,
@@ -228,6 +376,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       ownerNames: settings.ownerNames || [],
       // The current note is sent as a source when updating, so it is reviewed too.
       existingNote: updateExisting ? existingNote?.content : "",
+      accountContext: accountContextRef.current.context,
       corrections: settings.corrections || [],
       replacements: savedReplacements,
     });
@@ -367,6 +516,7 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setCost(null);
     setError(null);
     setNote("");
+    clearReply();
 
     const correctedTitle = applyCorrections(threadTitle, settings.corrections || []);
     const correctedThread = applyCorrections(emailThread, settings.corrections || []);
@@ -416,13 +566,32 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
 
       const restoredNote = replacements.length ? reverseReplacements(data.note, replacements) : data.note;
       setNote(restoredNote);
+
+      // Everything a reply draft needs, in the anonymized form that was just
+      // reviewed and sent, so drafting and redrafting send nothing new.
+      const verdict = parseResponseNeeded(restoredNote);
+      const accountContext = applyCorrections(accountContextRef.current.context, settings.corrections || []);
+      replyInputsRef.current = {
+        replacements,
+        thread: sanitizedThread,
+        note: data.note,
+        context: sanitizedContext,
+        accountContext: replacements.length ? applyReplacements(accountContext, replacements) : accountContext,
+        accountSources: accountContextRef.current.sources,
+        title: sanitizedTitle || defaultTitle,
+        ownerNames: (settings.ownerNames || []).map((name) => applyReplacements(name, replacements)),
+        reason: parseResponseNeeded(data.note).reason,
+      };
+      setReplyVerdict(verdict);
+      // Drafted alongside the save steps below; it reports its own errors.
+      if (draftReplies && verdict.needed === true) requestReply();
       setPrivacyRepairs(data.privacyRepairs || null);
       if (data.usage) setCost(calcCost(data.usage, data.model || model));
 
       setSaving(true);
       // Updates go to the folder the thread already lives in, even when a
       // different folder is selected, so a thread never splits across folders.
-      const saveFolder = updateExisting && existingNote ? existingNote.folder ?? selectedFolder : selectedFolder;
+      const saveFolder = targetFolder();
       const saveTitle = filenameTitle(threadDate, correctedTitle || defaultTitle, kindLabel);
       const saveRes = await apiFetch("/api/save", {
         method: "POST",
@@ -445,7 +614,6 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       // the note's own verdict says the newest messages leave a reply owed.
       // A missing verdict fails safe and still creates the reminder.
       if (todoistConfigured(settings)) {
-        const verdict = parseResponseNeeded(restoredNote);
         if (verdict.needed === false) {
           // No reply owed anymore — also retire any open "Respond to ..."
           // reminders this thread created earlier.
@@ -604,7 +772,13 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
     setTodoistResult(null);
     setError(null);
     setCost(null);
+    clearReply();
+    setReplyInstructions("");
+    setReplyAudience(defaultReplyAudience(variant));
+    setReplyTone("warm-professional");
   }
+
+  const replyParts = splitReplyDraft(replyDraft);
 
   return (
     <div className="space-y-4">
@@ -791,6 +965,28 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
       )}
 
       {!pendingReview && (
+        <div className="card p-4">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={draftReplies}
+              onChange={(event) => {
+                clearOutput();
+                onSettingsPatch({ draftReplies: event.target.checked });
+              }}
+              className="mt-0.5 w-4 h-4 rounded accent-obsidian-600"
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-800">Draft a reply when this thread needs one</span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                Written from the thread, its note, and the recent notes in the account folder, which go through Privacy Review with the thread.
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
+
+      {!pendingReview && (
         <div className="card p-4 flex items-center justify-between gap-3">
           <ModelPicker model={model} setModel={setModel} />
 
@@ -869,6 +1065,102 @@ export default function EmailThreadNote({ settings, onSettingsPatch, onSettingsC
               )}
             </div>
             {cost && <span className="text-xs text-gray-400 font-mono">{formatCost(cost)}</span>}
+          </div>
+        </div>
+      )}
+
+      {note && replyVerdict && (
+        <div className="card overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="section-header mb-0">Reply Draft</h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {replyVerdict.needed === true
+                  ? `A reply is owed${replyVerdict.reason ? `: ${replyVerdict.reason}` : "."}`
+                  : replyVerdict.needed === false
+                    ? "No reply is owed on this thread. You can still draft one."
+                    : "The note did not say whether a reply is owed. You can draft one."}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {replyCost && <span className="text-xs text-gray-400 font-mono">{formatCost(replyCost)}</span>}
+              {replyDraft && (
+                <>
+                  <button type="button" onClick={copyReply} className="btn-secondary text-xs">{replyCopied ? "Copied" : "Copy Reply"}</button>
+                  <button type="button" onClick={saveReply} disabled={replySaving || !!replySavedPath} className="btn-secondary text-xs">
+                    {replySaving ? "Saving..." : replySavedPath ? "Saved" : "Save to Obsidian"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {replyError && <p className="px-6 py-2 text-xs text-red-700 bg-red-50 border-b border-red-200">{replyError}</p>}
+          {replySavedPath && (
+            <p className="px-6 py-2 text-xs text-green-700 bg-green-50 border-b border-green-200">
+              Saved to <code className="font-mono">{replySavedPath}</code>
+            </p>
+          )}
+
+          {replyLoading && !replyDraft && <p className="px-6 py-4 text-sm text-gray-500">Drafting a reply...</p>}
+
+          {replyDraft && (
+            <div className="p-6 space-y-4">
+              <div className="markdown-preview">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{replyParts.reply}</ReactMarkdown>
+              </div>
+              {replyParts.checks && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                  <p className="font-semibold mb-1">Before You Send</p>
+                  <div className="markdown-preview">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{replyParts.checks}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
+              <p className="text-[11px] text-gray-400">
+                {replyContextSources.length
+                  ? `Account history used: ${replyContextSources.map((name) => name.replace(/\.md$/i, "")).join("; ")}`
+                  : "Drafted from this thread and its note only. No recent account notes were available."}
+              </p>
+            </div>
+          )}
+
+          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 space-y-3">
+            <div className="grid sm:grid-cols-2 gap-3">
+              <label className="text-xs font-medium text-gray-600">
+                Audience
+                <select aria-label="Reply audience" className="input text-xs mt-1" value={replyAudience} onChange={(event) => setReplyAudience(event.target.value)}>
+                  <option value="customer">Customer</option>
+                  <option value="internal">Internal team</option>
+                  <option value="mixed">Customer plus NI owners</option>
+                </select>
+              </label>
+              <label className="text-xs font-medium text-gray-600">
+                Tone
+                <select aria-label="Reply tone" className="input text-xs mt-1" value={replyTone} onChange={(event) => setReplyTone(event.target.value)}>
+                  <option value="warm-professional">Warm professional</option>
+                  <option value="concise-direct">Concise direct</option>
+                  <option value="technical">Technical</option>
+                  <option value="executive">Executive</option>
+                </select>
+              </label>
+            </div>
+            <textarea
+              aria-label="Reply instructions"
+              className="input resize-y text-xs leading-relaxed"
+              rows={2}
+              value={replyInstructions}
+              onChange={(event) => setReplyInstructions(event.target.value)}
+              placeholder="Optional: what the reply should say or change, e.g. offer Tuesday or Thursday for a call, keep it to three sentences."
+            />
+            <button
+              type="button"
+              onClick={() => requestReply({ instructions: replyInstructions, previousDraft: replyInstructions.trim() ? replyParts.reply : "" })}
+              disabled={replyLoading}
+              className="btn-primary text-xs"
+            >
+              {replyLoading ? "Drafting..." : replyDraft ? "Redraft Reply" : "Draft Reply"}
+            </button>
           </div>
         </div>
       )}

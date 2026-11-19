@@ -94,3 +94,69 @@ test("builds an account-isolated health score with optional prior-review inputs"
   expect(synthesisBody.reviewTranscriptFilename).toBe("2026-09-01 - Quarterly Health Review.md");
   expect(synthesisBody.notes).toHaveLength(1);
 });
+
+test("drafts a reply from the thread and recent account notes when one is owed", async ({ page }) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "notetaker-reply-smoke-"));
+  const vault = path.join(root, "Vault");
+  const accountFolder = path.join(vault, "Cardinal");
+  fs.mkdirSync(accountFolder, { recursive: true });
+  fs.writeFileSync(
+    path.join(accountFolder, "2026-10-03 - Cardinal Sync.md"),
+    "# 2026-10-03 - Cardinal Sync\n\n## Next Steps\n\n- Pilot starts in November."
+  );
+
+  let replyBody = null;
+  await page.route("**/api/sanitize", async (route) => {
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ entities: [] }) });
+  });
+  await page.route("**/api/email-thread", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        note: "# 2026-10-06 - License count\n\n## Thread Summary\n\n- The admin asked for the license count. [E1]\n\n**Response needed:** Yes — the admin asked for the license count [E1]\n\n---\n\n## Action Items\n\n- [ ] Send the count — **Owner:** CSM | **Due:** TBD",
+        model: "claude-haiku-4-5",
+      }),
+    });
+  });
+  await page.route("**/api/draft-reply", async (route) => {
+    replyBody = route.request().postDataJSON();
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        draft: "**Subject:** RE: License count\n\nHi there,\n\nThe count is [CSM to confirm: count].\n\n---\n\n## Before You Send\n\n- Fill in the count.",
+        model: "claude-haiku-4-5",
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Obsidian vault path").fill(vault);
+  await page.getByRole("button", { name: "Test Path" }).click();
+  await expect(page.getByText(/Found \d+ folders in vault/)).toBeVisible();
+  await page.getByRole("button", { name: "Save Settings" }).click();
+
+  await page.getByRole("button", { name: "Email", exact: true }).click();
+  await page.getByPlaceholder("e.g. SystemLink license cleanup follow-up").fill("License count");
+  await page.getByPlaceholder(/Paste the thread here/).fill("Can you send over the current license count this week?");
+  await page.getByRole("button", { name: "Cardinal", exact: true }).click();
+  await expect(page.getByRole("checkbox", { name: /Draft a reply when this thread needs one/ })).toBeChecked();
+  await page.getByRole("button", { name: "Create Email Note" }).click();
+
+  await expect(page.getByRole("heading", { name: "Reply Draft" })).toBeVisible();
+  await expect(page.getByText("A reply is owed: the admin asked for the license count")).toBeVisible();
+  await expect(page.getByText("The count is [CSM to confirm: count].")).toBeVisible();
+  await expect(page.getByText("Fill in the count.")).toBeVisible();
+  await expect(page.getByText(/Account history used: 2026-10-03 - Cardinal Sync/)).toBeVisible();
+
+  // The reply was drafted from the thread, its note, and the account's history.
+  expect(replyBody.thread).toContain("current license count");
+  expect(replyBody.accountContext).toContain("Pilot starts in November.");
+  expect(replyBody.reason).toBe("the admin asked for the license count");
+  expect(replyBody.audience).toBe("customer");
+
+  await page.getByRole("button", { name: "Save to Obsidian" }).click();
+  await expect(page.getByText(/Saved to Follow Up Emails/)).toBeVisible();
+  const saved = fs.readdirSync(path.join(vault, "Follow Up Emails"));
+  expect(saved).toHaveLength(1);
+  expect(saved[0]).toMatch(/Email Reply - License count\.md$/);
+});

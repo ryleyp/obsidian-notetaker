@@ -1,3 +1,4 @@
+import { CSM_REPLY_PRACTICES } from "@/lib/replyGuidance";
 import { NextResponse } from "next/server";
 import { createModelClient } from "@/lib/modelClient";
 import { createEmailRestorer, pseudonymizeEmails } from "@/lib/privacyBoundary";
@@ -252,8 +253,10 @@ This transcript has been segmented by speaker — each turn is preceded by a lab
   const followUpOutput = followUp?.enabled
     ? `
 
-FOLLOW-UP EMAIL OUTPUT (required):
-After the complete SFDC Activity Entry, append this exact separator and heading:
+FOLLOW-UP EMAIL OUTPUT (${followUp.whenNeeded ? "only when the meeting calls for one" : "required"}):
+${followUp.whenNeeded ? `Decide first whether this meeting calls for a follow-up email from the CSM: it does when the CSM took on an action or promised to send something, when owners and dates were agreed that attendees should have in writing, or when an open question was left for the CSM to answer. A routine internal sync with nothing owed does not. When no follow-up is called for, end the output after the SFDC Activity Entry and do not write this section at all.
+
+When one is called for, append` : "After the complete SFDC Activity Entry, append"} this exact separator and heading${followUp.whenNeeded ? " after the complete SFDC Activity Entry" : ""}:
 
 ---
 
@@ -264,6 +267,8 @@ Draft a concise email with a subject line for this audience and tone:
 - Tone: ${followUp.tone || "warm-professional"}
 
 Lead with thanks and the meeting outcome. Include only supported follow-ups, asks, owners, due dates, and relevant context. Separate CSM-owned actions from customer-owned actions when both exist. Do not include source citations, internal-only commentary, account strategy, or sentiment analysis. This section will be removed from the meeting note and stored as a separate Obsidian file.
+
+${CSM_REPLY_PRACTICES}
 `
     : "";
 
@@ -395,6 +400,7 @@ export function promptTemplateText() {
     SYSTEM_PROMPT,
     buildPrompt("", ""),
     buildPrompt("", "", [], "", { followUp: { enabled: true } }),
+    buildPrompt("", "", [], "", { followUp: { enabled: true, whenNeeded: true } }),
     buildPrompt("", "", [], "", { sourceBundle: buildSourceBundle({ transcript: labeled, extendedTranscript: "b", rawNotes: "n", existingNote: "o" }) }),
   ].join("\n");
 }
