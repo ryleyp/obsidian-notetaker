@@ -14,6 +14,7 @@ export function buildThreadScanText({
   accountName,
   ownerNames = [],
   existingNote,
+  accountContext,
   corrections = [],
   replacements = [],
 }) {
@@ -29,6 +30,8 @@ export function buildThreadScanText({
     applyReplacements(accountName ?? "", replacements),
     ...(ownerNames || []).map((name) => applyReplacements(name ?? "", replacements)),
     prepare(existingNote),
+    // Recent account notes ride along when a reply will be drafted.
+    prepare(accountContext),
   ]
     .filter((part) => part && part.trim())
     .join("\n\n");

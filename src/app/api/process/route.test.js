@@ -60,6 +60,17 @@ describe("buildPrompt", () => {
     expect(withoutFollowUp).not.toContain("## Follow-Up Email Draft");
   });
 
+  it("can leave the follow-up to the meeting, and holds it to the CSM practices", () => {
+    const whenNeeded = buildPrompt("Jordan discussed the rollout.", "Planning Sync", [], "", {
+      followUp: { enabled: true, whenNeeded: true },
+    });
+
+    expect(whenNeeded).toContain("FOLLOW-UP EMAIL OUTPUT (only when the meeting calls for one)");
+    expect(whenNeeded).toContain("do not write this section at all");
+    expect(whenNeeded).toContain("## Follow-Up Email Draft");
+    expect(whenNeeded).toContain("CSM best practices");
+  });
+
   it("treats an existing note as a secondary migration source", () => {
     const sourceBundle = buildSourceBundle({
       transcript: "Dana confirmed the Dallas rollout.",

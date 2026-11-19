@@ -3,6 +3,7 @@ import { createModelClient } from "@/lib/modelClient";
 import { pseudonymizeEmails, restoreEmails } from "@/lib/privacyBoundary";
 import { assertTrustedRequest } from "@/lib/requestSafety";
 import { formatSourceBundleForPrompt } from "@/lib/sourceBundle";
+import { CSM_REPLY_PRACTICES } from "@/lib/replyGuidance";
 
 const SYSTEM_PROMPT = `You draft concise, customer-ready follow-up emails for an NI Customer Success Manager.
 
@@ -33,6 +34,8 @@ Rules:
 - Separate CSM-owned actions from customer-owned actions when both exist.
 - Do not include source citation markers in the email.
 - Avoid internal-only commentary, account strategy, raw sentiment analysis, or anything that should not be customer-visible.
+
+${CSM_REPLY_PRACTICES}
 
 ${sourceBlock ? `Source blocks for verification:\n${sourceBlock}\n\n` : ""}Generated meeting note:
 ${notes}`;

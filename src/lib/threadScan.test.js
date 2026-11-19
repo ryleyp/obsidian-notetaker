@@ -45,4 +45,12 @@ describe("buildThreadScanText", () => {
   it("tolerates missing optional fields", () => {
     expect(buildThreadScanText({ title: "T", thread: "x" })).toBe("T\n\nx");
   });
+
+  // A reply draft reads recent account notes. They reach a model, so they are
+  // reviewed with the thread.
+  it("includes the account digest a reply draft will send", () => {
+    const text = buildThreadScanText({ ...base, accountContext: "### 2026-10-03 - Sync\nMarlo owns the pilot." });
+    expect(text).toContain("Marlo owns the pilot.");
+    expect(buildThreadScanText(base)).not.toContain("pilot");
+  });
 });

@@ -62,6 +62,7 @@ export default function Home() {
   const [includeFollowUp, setIncludeFollowUp] = useState(false);
   const [followUpAudience, setFollowUpAudience] = useState("customer");
   const [followUpTone, setFollowUpTone] = useState("warm-professional");
+  const [followUpWhenNeeded, setFollowUpWhenNeeded] = useState(false);
 
   const meeting = {
     transcript,
@@ -75,6 +76,7 @@ export default function Home() {
       enabled: includeFollowUp,
       audience: followUpAudience,
       tone: followUpTone,
+      whenNeeded: followUpWhenNeeded,
     },
   };
 
@@ -176,6 +178,7 @@ export default function Home() {
     setIncludeFollowUp(false);
     setFollowUpAudience("customer");
     setFollowUpTone("warm-professional");
+    setFollowUpWhenNeeded(false);
     setUpdateExisting(false);
     setExistingNote(null);
     generation.reset();
@@ -477,7 +480,19 @@ export default function Home() {
                     </label>
 
                     {includeFollowUp && (
-                      <div className="grid sm:grid-cols-2 gap-3 mt-3 pl-7">
+                      <div className="grid sm:grid-cols-3 gap-3 mt-3 pl-7">
+                        <label className="text-xs font-medium text-gray-600">
+                          Draft it
+                          <select
+                            aria-label="Follow-up timing"
+                            className="input text-xs mt-1"
+                            value={followUpWhenNeeded ? "when-needed" : "always"}
+                            onChange={(event) => setFollowUpWhenNeeded(event.target.value === "when-needed")}
+                          >
+                            <option value="always">Every time</option>
+                            <option value="when-needed">Only when the meeting calls for one</option>
+                          </select>
+                        </label>
                         <label className="text-xs font-medium text-gray-600">
                           Audience
                           <select
